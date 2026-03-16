@@ -1,0 +1,539 @@
+================================================================================
+        AGILE SCRUM PROJECT PLAN
+        AUTOMATED DIGITAL LIVE CENSUS SYSTEM (ADLCS) — TANZANIA
+        Version 1.1 | Year 2026
+================================================================================
+
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+
+Project Name      : Automated Digital Live Census System (ADLCS)
+Client / Owner    : Government of Tanzania / Academic Dissertation
+Methodology       : Agile Scrum
+Duration          : 16 Weeks
+Platforms         : Mobile (Android & iOS) + Web Dashboard
+
+Technology Stack:
+  - Frontend      : Flutter (Dart) — Mobile & Web
+  - Backend       : Node.js with Express.js
+  - Database      : PostgreSQL
+  - Cache / Sync  : Redis
+  - API           : REST API + WebSockets
+  - Security      : RBAC + SSL/TLS
+  - Mapping       : GIS Integration
+  - Offline Mode  : SQLite for data collection in rural areas
+  - Version Control: Git
+
+
+--------------------------------------------------------------------------------
+2. SCRUM ROLES
+--------------------------------------------------------------------------------
+
+  Role                  Responsibility
+  ---------------       -------------------------------------------------------
+  Product Owner         Researcher / Dissertation Supervisor.
+                        Defines priorities and accepts deliverables.
+
+  Scrum Master          Developer (Student Researcher).
+                        Facilitates sprints and removes blockers.
+
+  Development Team      Developer(s) responsible for Flutter app,
+                        Node.js backend, PostgreSQL database, Redis, and WebSockets.
+
+  Stakeholders          RITA, NIDA, NBS, Immigration Department,
+                        Local Government Authorities, Citizens.
+
+
+--------------------------------------------------------------------------------
+3. PRODUCT BACKLOG
+--------------------------------------------------------------------------------
+
+Each user story follows the format:
+"As a [role], I want to [action] so that [benefit]."
+
+Story points scale: 1 (trivial), 3 (small), 5 (medium), 8 (large)
+
+------------------------------------------------------------
+EPIC 1 — REQUIREMENTS & SYSTEM DESIGN
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-01   As a researcher, I want to gather functional and
+        non-functional requirements via interviews and
+        questionnaires.                                             High        3
+
+US-02   As a system architect, I want to design UML diagrams
+        including Use Case, Class, Sequence, and ER diagrams.      High        5
+
+US-03   As a developer, I want to define REST API contracts
+        and WebSocket events before implementation begins.         High        3
+
+US-04   As a designer, I want to create wireframes for officer
+        and citizen mobile apps and web dashboards.                Medium      5
+
+
+------------------------------------------------------------
+EPIC 2 — AUTHENTICATION & ROLE MANAGEMENT
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-05   As an admin, I want to register and manage system users
+        with defined RBAC roles (Admin, Officer, Supervisor, Viewer). High    5
+
+US-06   As a user, I want to log in securely using JWT
+        authentication over SSL/TLS encrypted connections.         High        5
+
+
+------------------------------------------------------------
+EPIC 3 — CITIZEN & HOUSEHOLD REGISTRATION
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-07   As a data entry officer, I want to register new citizens
+        with complete demographic information.                      High        8
+
+US-08   As a data entry officer, I want to register households
+        and link members.                                          High        8
+
+US-09   As a system, I want to auto-generate a unique National ID
+        for every newly registered citizen.                        High        5
+
+US-10   As a data entry officer, I want the mobile app to work
+        offline and synchronize when connectivity returns.         High        8
+
+
+------------------------------------------------------------
+EPIC 4 — VITAL EVENTS (BIRTHS, DEATHS, MIGRATION)
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-11   As a health officer, I want to record birth events
+        and link newborns to parents and household.               High        8
+
+US-12   As a civil registrar, I want to record death events
+        and auto-update population counts.                          High        8
+
+US-13   As an immigration officer, I want to record internal
+        migration between regions/districts.                       High        5
+
+US-14   As an immigration officer, I want to record cross-border
+        immigration and emigration events.                         High        5
+
+US-15   As a system, I want to recalculate population statistics
+        automatically after every vital event.                     High        8
+
+
+------------------------------------------------------------
+EPIC 5 — REAL-TIME SYNCHRONIZATION & NOTIFICATIONS
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-16   As a system, I want to use Redis for high-speed caching
+        and real-time data sync across institutions.              High        8
+
+US-17   As a system, I want to push live population updates to
+        all dashboards via WebSockets.                              High        8
+
+US-18   As an admin, I want to receive notifications when
+        demographic thresholds are exceeded.                        Medium      5
+
+
+------------------------------------------------------------
+EPIC 6 — WEB DASHBOARD & DATA VISUALIZATION
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-19   As a government officer, I want a web dashboard
+        displaying live population statistics.                     High        8
+
+US-20   As a planner, I want to filter population data by
+        region, district, age, gender.                             High        5
+
+US-21   As an analyst, I want interactive charts showing birth,
+        death, and migration trends over time.                     High        8
+
+US-22   As an admin, I want a GIS-based map showing population
+        distribution across all regions.                           Medium      8
+
+
+------------------------------------------------------------
+EPIC 7 — REPORTS & DATA EXPORT
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-23   As a supervisor, I want to generate demographic reports
+        filtered by region, district, and time period.             High        5
+
+US-24   As an analyst, I want to export reports in PDF and Excel.   Medium      5
+
+US-25   As a researcher, I want to view population projections
+        based on current trends.                                    Medium      5
+
+
+------------------------------------------------------------
+EPIC 8 — TESTING & VALIDATION
+------------------------------------------------------------
+
+ID      User Story                                                  Priority  Points
+------  ----------------------------------------------------------  --------  ------
+US-26   As a developer, I want to write unit tests for all
+        backend API endpoints.                                       High        5
+
+US-27   As a tester, I want to perform integration testing
+        across mobile apps, backend, and database.                  High        5
+
+US-28   As a stakeholder, I want to conduct User Acceptance
+        Testing (UAT) to validate the system meets requirements.   High        8
+
+US-29   As a researcher, I want to document all test cases,
+        test results, and issues.                                   High        3
+
+
+--------------------------------------------------------------------------------
+4. SPRINT PLAN
+--------------------------------------------------------------------------------
+
+Sprint Duration   : 2 Weeks per Sprint
+Total Sprints     : 9 (Sprint 0 to Sprint 8)
+Total Duration    : 16 Weeks
+
+
+====================================================
+SPRINT 0 — PROJECT SETUP & REQUIREMENTS
+Weeks: 1 – 2 | Story Points: 15
+====================================================
+
+Sprint Goal:
+  Establish project foundation, gather all requirements, and
+  set up development environments.
+
+Tasks:
+  [ ] Conduct stakeholder interviews and distribute questionnaires
+  [ ] Create Product Backlog with prioritized user stories
+  [ ] Set up Git repository and branching strategy
+  [ ] Initialize Flutter project (mobile + web)
+  [ ] Set up Node.js + Express.js backend
+  [ ] Configure PostgreSQL and Redis locally
+  [ ] Design initial Use Case Diagram
+
+User Stories Covered: US-01
+
+Deliverables:
+  - Requirements Document
+  - Completed Product Backlog
+  - Development Environment Ready
+  - Git Repository Initialized
+
+
+====================================================
+SPRINT 1 — SYSTEM DESIGN
+Weeks: 3 – 4 | Story Points: 26
+====================================================
+
+Sprint Goal:
+  Complete system architecture, database design, and wireframes.
+
+Tasks:
+  [ ] Design overall system architecture diagram
+  [ ] Design ER Diagram and PostgreSQL schema
+  [ ] Document REST API endpoints
+  [ ] Define WebSocket event contracts
+  [ ] Design UML Class & Sequence Diagrams
+  [ ] Create Flutter mobile app wireframes
+  [ ] Create web dashboard wireframes
+
+User Stories Covered: US-02, US-03, US-04
+
+Deliverables:
+  - System Architecture Diagram
+  - ER Diagram and Database Schema
+  - REST API Documentation
+  - UML Diagrams
+  - Mobile & Web Wireframes
+
+
+====================================================
+SPRINT 2 — AUTHENTICATION & USER MANAGEMENT
+Weeks: 5 – 6 | Story Points: 24
+====================================================
+
+Sprint Goal:
+  Deliver a secure authentication system with role-based access control.
+
+Tasks:
+  [ ] Implement JWT authentication
+  [ ] Configure SSL/TLS
+  [ ] Implement RBAC middleware
+  [ ] Build Flutter login screen (mobile + web)
+  [ ] Build user registration panel (Admin)
+  [ ] Connect Flutter auth to Node.js API
+  [ ] Write unit tests for authentication
+
+User Stories Covered: US-05, US-06
+
+Deliverables:
+  - Secure Login System
+  - RBAC Module
+  - Admin User Management Panel
+
+
+====================================================
+SPRINT 3 — CITIZEN & HOUSEHOLD REGISTRATION
+Weeks: 7 – 8 | Story Points: 39
+====================================================
+
+Sprint Goal:
+  Officers can register citizens & households, offline & online.
+
+Tasks:
+  [ ] Build citizen registration form in Flutter
+  [ ] Build household registration & member linking form
+  [ ] Implement CRUD APIs for citizens & households
+  [ ] Create PostgreSQL tables
+  [ ] Implement unique National ID logic
+  [ ] Implement offline SQLite mode & background sync
+  [ ] Write unit tests
+
+User Stories Covered: US-07, US-08, US-09, US-10
+
+Deliverables:
+  - Citizen & Household Registration Modules
+  - Offline Data Entry & Auto-Sync
+
+
+====================================================
+SPRINT 4 — VITAL EVENTS MODULE
+Weeks: 9 – 10 | Story Points: 39
+====================================================
+
+Sprint Goal:
+  Record births, deaths, migration; auto-update population stats.
+
+Tasks:
+  [ ] Build birth registration form & backend API
+  [ ] Build death registration form & backend API
+  [ ] Build internal migration & cross-border forms & APIs
+  [ ] Auto-update population statistics
+  [ ] Link all vital events to citizen/household records
+  [ ] Write unit & integration tests
+
+User Stories Covered: US-11, US-12, US-13, US-14, US-15
+
+Deliverables:
+  - Birth, Death, Migration Modules
+  - Automated Population Count Updates
+
+
+====================================================
+SPRINT 5 — REAL-TIME SYNCHRONIZATION & WEBSOCKETS
+Weeks: 10 – 11 | Story Points: 34
+====================================================
+
+Sprint Goal:
+  Live data updates propagated instantly via Redis & WebSockets.
+
+Tasks:
+  [ ] Integrate Redis caching & Pub/Sub
+  [ ] Implement Node.js WebSocket server
+  [ ] Implement Flutter WebSocket client (mobile & web)
+  [ ] Build real-time population counter widget
+  [ ] Implement threshold notifications
+  [ ] Load test concurrent WebSocket connections
+
+User Stories Covered: US-16, US-17, US-18
+
+Deliverables:
+  - Redis & WebSocket Integration
+  - Live Population Counter
+  - Threshold Notification System
+
+
+====================================================
+SPRINT 6 — WEB DASHBOARD & DATA VISUALIZATION
+Weeks: 11 – 12 | Story Points: 34
+====================================================
+
+Sprint Goal:
+  Officers view live demographic data with charts & GIS maps.
+
+Tasks:
+  [ ] Build Flutter web dashboard layout & navigation
+  [ ] Build population overview widgets
+  [ ] Integrate charts for birth, death, migration trends
+  [ ] Implement filters (region, district, age, gender)
+  [ ] Integrate GIS map
+  [ ] Connect dashboard to WebSocket live feed
+
+User Stories Covered: US-19, US-20, US-21, US-22
+
+Deliverables:
+  - Live Web Dashboard
+  - Interactive Charts & GIS Map
+  - Data Filters Module
+
+
+====================================================
+SPRINT 7 — REPORTS & DATA EXPORT
+Weeks: 13 – 14 | Story Points: 23
+====================================================
+
+Sprint Goal:
+  Users generate, view, and export reports in PDF/Excel.
+
+Tasks:
+  [ ] Build report generation screens
+  [ ] Implement backend report APIs
+  [ ] Implement PDF/Excel export
+  [ ] Build population projection statistics module
+  [ ] Implement audit logs
+  [ ] Write report tests
+
+User Stories Covered: US-23, US-24, US-25
+
+Deliverables:
+  - Report Generation Module
+  - PDF/Excel Export
+  - Population Projection & Audit Logs
+
+
+====================================================
+SPRINT 8 — TESTING, VALIDATION & DOCUMENTATION
+Weeks: 14 – 16 | Story Points: 34
+====================================================
+
+Sprint Goal:
+  System is tested, validated, all bugs resolved, and dissertation completed.
+
+Tasks:
+  [ ] Execute unit tests for backend APIs
+  [ ] Execute integration tests (mobile, backend, database)
+  [ ] Perform load/performance testing
+  [ ] Conduct UAT with stakeholders
+  [ ] Collect feedback & fix issues
+  [ ] Conduct usability evaluation
+  [ ] Document test cases/results
+  [ ] Finalize dissertation chapters
+  [ ] Deploy final system
+
+User Stories Covered: US-26, US-27, US-28, US-29
+
+Deliverables:
+  - Unit & Integration Test Reports
+  - Performance Test Report
+  - UAT Report
+  - Final Deployed System
+  - Completed Dissertation Document
+
+
+--------------------------------------------------------------------------------
+5. SPRINT SUMMARY TABLE
+--------------------------------------------------------------------------------
+
+  Sprint    Focus Area                        Weeks       Story Points
+  --------  --------------------------------  ----------  ------------
+  Sprint 0  Project Setup & Requirements      Weeks 1-2       15
+  Sprint 1  System Design                     Weeks 3-4       26
+  Sprint 2  Authentication & RBAC             Weeks 5-6       24
+  Sprint 3  Citizen & Household Registration  Weeks 7-8       39
+  Sprint 4  Vital Events Module               Weeks 9-10      39
+  Sprint 5  Real-Time Sync & WebSockets       Weeks 10-11     34
+  Sprint 6  Web Dashboard & Visualization     Weeks 11-12     34
+  Sprint 7  Reports & Data Export             Weeks 13-14     23
+  Sprint 8  Testing, Validation & Docs        Weeks 14-16     34
+  --------  --------------------------------  ----------  ------------
+  TOTAL                                       16 Weeks       268
+
+
+--------------------------------------------------------------------------------
+6. DEFINITION OF DONE (DoD)
+--------------------------------------------------------------------------------
+
+A Sprint item is considered DONE when ALL of the following are true:
+
+  [1] Code is written and follows project coding standards
+  [2] Unit tests are written and pass successfully
+  [3] Feature is integrated and works end-to-end
+  [4] Code is reviewed and merged to main branch
+  [5] Feature tested on mobile and web platforms
+  [6] Relevant section is documented in dissertation
+
+
+--------------------------------------------------------------------------------
+7. KEY RISKS & MITIGATION STRATEGIES
+--------------------------------------------------------------------------------
+
+  Risk                              Impact  Mitigation Strategy
+  --------------------------------  ------  ----------------------------------
+  Poor internet connectivity in     High    Implement offline-first Flutter app
+  rural areas                               with local SQLite sync queue
+
+  Limited interoperability with     High    Use standard REST API with JSON
+  RITA, NIDA, and NBS systems               data format for integration
+
+  Data privacy and security         High    Enforce RBAC, SSL/TLS, and
+  breaches                                  encrypted database fields
+
+  Scope creep during development    Medium  Maintain strict sprint backlog
+                                            control and freeze scope per sprint
+
+  Redis/WebSocket integration       Medium  Build and test prototype in
+  complexity                                Sprint 5 before full rollout
+
+  Stakeholder availability for UAT  Medium  Schedule UAT early and
+                                            provide test scripts in advance
+
+
+--------------------------------------------------------------------------------
+8. ALIGNMENT WITH SPECIFIC OBJECTIVES
+--------------------------------------------------------------------------------
+
+  Objective                                     Sprint(s) Addressing It
+  --------------------------------------------  --------------------------
+  Identify and gather user & system             Sprint 0, Sprint 1
+  requirements
+
+  Design system architecture and database       Sprint 1
+  structure
+
+  Implement the system using mobile and         Sprint 2, 3, 4, 5, 6, 7
+  web technologies
+
+  Test and validate performance and             Sprint 8
+  usability
+
+
+--------------------------------------------------------------------------------
+9. TOOLS & TECHNOLOGIES REFERENCE
+--------------------------------------------------------------------------------
+
+  Category              Tool / Technology
+  --------------------  ----------------------------------------
+  Mobile & Web Frontend Flutter (Dart)
+  Backend Framework     Node.js + Express.js
+  Primary Database      PostgreSQL
+  Caching & Real-Time   Redis
+  API Style             REST API + WebSockets
+  Security              JWT + RBAC + SSL/TLS
+  GIS Mapping           GIS Integration (Flutter Map / Mapbox)
+  Version Control       Git (GitHub / GitLab)
+  Design & Wireframes   Figma
+  UML Modeling          Draw.io / Lucidchart
+  Database Design       pgAdmin / DBeaver
+  Testing               Postman, Flutter Test, Jest
+  IDE                   Visual Studio Code
+
+
+================================================================================
+END OF AGILE SCRUM PROJECT PLAN
+Document: ADLCS_Agile_Scrum_Project_Plan.txt
+Project : Automated Digital Live Census System — Tanzania
+Year    : 2026
+================================================================================
