@@ -1,0 +1,475 @@
+ARDHI UNIVERSITY 
+ 
+
+SCHOOL OF EARTH SCIENCES, REAL ESTATES, BUSINESS AND INFORMATICS
+DEPARTMENT OF COMPUTER SYSTEMS AND MATHEMATICS
+PROPOSAL REPORT 2025/2026 ACADEMIC YEAR
+
+COURSE CODE/NAME:	CN 394 RESEARCH METHODS AND DISSERTATION WRITING
+DISSERTATION TITLE:	AUTOMATED DIGITAL LIVE CENSUS SYSTEM FOR TANZANIA
+
+STUDENT’S PARTICULARS 
+FULL NAME	REG. NUMBER	DEG. PROGRAM	SIGNATURE
+KIHEGA, ALPHA DENISS	31635/T.2023	BSc. CSN	
+KISHOSHA, SINA NGUSA	32137/T.2023	BSc. CSN	
+
+
+SUPERVISOR(S) NAME
+	SIGNATURE	DATE
+Mr. MOREKA ALEXANDER
+	-----------------------------.	…………………….
+Mr. BENITHO CHENGULA	……………………...	…………………….
+
+
+1.0 INTRODUCTION
+1.1 General Introduction
+Population data plays a fundamental role in national development, governance, and socio-economic planning. Accurate demographic information regarding births, deaths, migration, and household composition enables governments to allocate resources effectively, design public services, and formulate evidence-based policies. In Tanzania, population data is primarily collected through national censuses conducted at long intervals. Although recent census exercises have incorporated digital tools to improve data accuracy, the overall approach remains periodic rather than continuous, limiting the availability of real-time demographic information.
+Scholars emphasize that effective population management in the digital era requires integrated and real-time systems capable of continuously tracking demographic events.(Mwombeki et al., 2025) argue that efficient population monitoring depends on the integration of birth registration, death records, immigration, emigration, and population updates within interoperable digital platforms. However, they note that fragmented systems and limited coordination among government institutions weaken demographic data management. Studies on digital governance in Tanzania further indicate that although various sectors have adopted digital platforms, many operate independently without centralized integration, reducing their effectiveness in national data coordination.
+Despite ongoing digital transformation initiatives, Tanzania lacks a centralized Digital Live Census System capable of continuously capturing, updating, and synchronizing demographic data across administrative levels. Existing systems are largely designed for periodic reporting rather than real-time population tracking. This creates a technological and knowledge gap in demographic data management. Therefore, this study proposes the design and development of an Automated Digital Live Census System that integrates mobile and web technologies to enable continuous data collection, storage, processing, and visualization of population information in real time.
+
+
+1.2 Statement of the Problem
+Tanzania depends largely on decennial census exercises to obtain comprehensive population statistics. While such censuses provide valuable national demographic insights, they do not capture ongoing daily changes such as births, deaths, internal migration, and cross-border movements in real time. Consequently, planners and policymakers frequently rely on outdated population estimates when making decisions related to infrastructure development, health services, education planning, and resource allocation.
+Furthermore, digital systems associated with civil registration and population management are distributed across multiple institutions with limited interoperability (Mwombeki et al., 2025). This fragmentation results in delayed updates, inconsistencies in records, and inefficiencies in data sharing. The absence of a unified, integrated, and automated digital platform capable of real-time population tracking represents a significant system and knowledge gap in Tanzania’s demographic management framework.
+Without a centralized live census mechanism, the country faces challenges in achieving timely, reliable, and coordinated demographic data management. Therefore, there is a need to design and develop an Automated Digital Live Census System that integrates population data sources and supports continuous real-time tracking of demographic dynamics.
+
+1.3 Objectives
+1.3.1 General Objective
+The general objective of this dissertation is to design and develop an Automated Digital Live Census System that enhances real-time capturing, storing, processing, and visualization of population data in Tanzania.
+
+
+
+1.3.2 Specific Objectives
+i.	To identify and gather users’ and system requirements for the Automated Digital Live Census System.
+ii.	To design the system architecture and database structure of the Automated Digital Live Census System.
+iii.	To implement the Automated Digital Live Census System using mobile and web technologies.
+iv.	To test and validate the performance and usability of the Automated Digital Live Census System.
+
+1.4 Research Questions
+In this study, the following research questions will be answered:
+i.	What users’ and system requirements are necessary for developing an Automated Digital Live Census System for Tanzania?
+ii.	How can the system architecture and database structure be effectively designed to support real-time population tracking?
+iii.	How can mobile and web technologies be implemented to enable continuous population data capture and synchronization?
+iv.	How effective, reliable, and usable is the developed Automated Digital Live Census System?
+
+
+
+
+
+1.5 Significance of the Study
+i.	The study contributes to the body of knowledge in digital governance and population data management by proposing a real-time digital census framework.
+ii.	The proposed system will support policymakers, planners, and government institutions by providing accurate and up-to-date demographic data for informed decision-making.
+iii.	The research promotes digital transformation in public administration through the development of an integrated and centralized population tracking platform.
+iv.	The system may reduce operational costs associated with traditional census exercises while improving efficiency, coordination, and data reliability in demographic management.
+
+
+
+
+
+
+
+
+
+
+
+
+
+2.0 LITERATURE REVIEW
+2.1 Introduction
+According to (Sajeevanie, 2021) A literature review is a critical analysis of previous studies related to a research topic. It provides an overview of existing knowledge, identifies major contributions from other researchers, and highlights gaps that justify the current study. In system development research, a literature review helps to understand existing technological solutions, methodologies used, and limitations observed in related works. This section reviews previous studies on digital census systems, civil registration systems, e-governance platforms, and real-time population tracking technologies. The purpose is to map existing approaches and identify gaps that the proposed Automated Digital Live Census System intends to address.
+
+2.2 Related Works
+Kweka, n.d., in Mapping of Migration Data Sources in Tanzania, examined how migration data is collected and managed by different institutions in Tanzania. The study found that institutions such as Immigration Department, NIDA, NBS, and TRA collect migration-related data using paper forms, Excel sheets, and separate digital databases. Although some systems are computerized, data sharing between institutions is mostly manual and not integrated. The study showed weak interoperability and lack of centralized coordination. Migration statistics are mainly used for reporting purposes and not for real-time population monitoring. This study highlights the need for an integrated digital platform that connects all institutions and supports real-time migration tracking.
+Mwombeki et al., (2025) in the article published in the African Journal of Empirical Research, proposed a digital model for tracking human population dynamics in Tanzania. The study emphasized collaboration between institutions such as RITA, NIDA, Immigration, health facilities, and local government authorities. It highlighted the importance of integrating Civil Registration and Vital Statistics (CRVS) systems, digital identity systems, and health information systems like GoTHoMIS. The study proposed a multi-actor interaction framework to improve coordination and data sharing. However, the study mainly presented a conceptual framework and did not implement a fully automated real-time census system that integrates births, deaths, migration, and household information in one centralized platform.
+Amiruddin et al., (2024) in Redefining Citizenship in the Digital Age: Understanding Smart Digital Census, published in the International Journal on Recent and Innovation Trends in Computing and Communication, discussed how digital technologies can modernize census operations. The study explained the use of mobile devices, cloud computing, digital forms, and real-time validation tools to improve census accuracy and efficiency. The Smart Digital Census approach reduces operational costs and improves data processing speed compared to traditional paper-based census methods. However, the study mainly focused on improving periodic census exercises rather than developing a continuous live census system that updates demographic changes automatically.
+Regions, (2018) The United Republic of Tanzania in the Electronic Population Registration System (EPRS) Assessment Report, evaluated the implementation of digital village population registration systems. The report showed that the ePRS improved data collection by replacing paper-based village registers with mobile and web-based systems. However, the report identified challenges such as limited internet connectivity, delays in synchronization, and weak integration with other national systems. The system mainly supports registration activities and reporting but does not provide a centralized live population tracking system that updates automatically across all administrative levels.
+Matemba & Mwandosya, (2023) investigated the impacts of Information and Communication Technology (ICT) systems in conducting the population census in Tanzania, focusing on the National Bureau of Statistics (NBS). The study used a quantitative research approach and applied statistical analysis using SPSS to evaluate the performance of ICT in census operations. The findings revealed a positive and significant relationship between ICT usage and census performance, particularly in socio-demographic data collection, data development and dissemination, and monitoring and evaluation processes. The study concluded that ICT systems improve efficiency, reduce manual errors, and enhance the speed of data processing. However, the research mainly evaluated ICT effectiveness during periodic census exercises and did not propose a centralized automated system capable of continuously capturing and synchronizing demographic events such as births, deaths, and migration in real time. This highlights the need
+for an integrated live digital census system.
+Ebere et al., (2020) in Automated Census Population Projection and Data Management System, developed a computerized system to improve census data management and population projection. The system automated data storage, retrieval, and statistical report generation using database technologies and projection formulas. The study showed that automation improves efficiency compared to manual record keeping. However, the system focused mainly on managing collected census data and generating projections, rather than supporting real-time updates of population events from multiple institutions.
+Jain & Kaur, (2021), in Digital Census and Application of Advanced Technologies in Census, discussed how modern technologies such as mobile data collection, cloud platforms, GIS tools, and online census management systems can improve national census operations. The study highlighted improved data validation, faster processing, and better monitoring of census activities. However, the approach is mainly designed for scheduled census exercises and does not address continuous real-time synchronization of demographic data across different government institutions.
+Ulugbek & Xamidovich, n.d. designed and developed an automated information system for population registration at the national level in Uzbekistan. The study focused on building a digital census application using Android Studio, where census questionnaires were completed electronically and transmitted to a central database for processing. The system was designed to work both online and offline, ensuring data collection even in areas with limited internet connectivity. The researchers used UML modeling tools such as ArgoUML to design system architecture, including use case diagrams and class diagrams for database structure. Their study demonstrated that mobile-based digital census systems improve data organization, storage, and reporting efficiency compared to manual systems. However, the system mainly supported periodic census exercises and did not fully integrate real-time demographic event tracking such as live migration updates or automated population synchronization across institutions. 
+
+
+Sonurlekar et al., (2022) in the study Automated Electronic System for Census Process, proposed a biometric-based electronic census system to replace traditional door-to-door paper-based census methods. The system uses Raspberry Pi, a fingerprint sensor for citizen authentication, a GSM module for sending confirmation messages, and a digital database for storing responses. The proposed framework allows authenticated citizens to answer survey questions digitally, and the collected data is stored directly on a server for easier processing and analysis. The study showed that biometric authentication improves data authenticity and reduces duplication compared to manual methods. However, the system is mainly designed as an electronic survey platform for periodic census data collection and does not provide centralized national live census system that continuously updates demographic events such as births, deaths, migration, and household relationships across multiple government institutions in real time.
+2.3 Summary of literature review
+The proposed system will use Flutter (Dart) to develop both the mobile application for citizens and the web dashboards for government officers. Using a single frontend framework ensures consistency in user interface design, reduces development complexity, and improves maintainability. Flutter supports cross-platform deployment including Android, iOS, and Web, making it suitable for a national-level system. The backend will be developed using NodeJS with ExpressJS, while PostgreSQL will manage structured population data and Redis will support real-time synchronization and high-speed data access.
+
+Table 2.1: Technology Comparison of Reviewed Studies and Proposed System
+
+S/N	Authors & Year	Flutter (Dart)	NodeJS	ExpressJS	PostgreSQL	Redis	REST API	WebSockets	Cloud	RBAC	SSL/TLS	GIS
+1	Kweka (n.d.)	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗
+2	Mwombeki et al. (2025)	✗	✗	✗	✗	✗	✗	✗	✓	✗	✗	✗
+3	Amiruddin et al. (2024)	✗	✗	✗	✗	✗	✗	✗	✓	✗	✗	✓
+4	Regions (2018)	✗	✗	✗	✗	✗	✗	✗	✓	✓	✗	✗
+5	Matemba & Mwandosya (2023)	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗
+6	Ebere et al. (2020)	✗	✗	✗	✓	✗	✗	✗	✗	✗	✗	✗
+7	Jain & Kaur (2021)	✗	✗	✗	✗	✗	✗	✗	✓	✗	✗	✓
+8	Ulugbek & Xamidovich (n.d.)	✗	✗	✗	✓	✗	✗	✗	✗	✗	✗	✗
+9	Sonurlekar et al. (2022)	✗	✗	✗	✓	✗	✗	✗	✗	✓	✗	✗
+10	Proposed Automated Digital Live Census (2026)	✓	✓	✓	✓	✓	✓	✓	✓	✓	✓	✓
+
+
+
+
+
+
+
+
+
+
+
+
+3.0 METHODOLOGY
+Methodology refers to the systematic approach that will be used to conduct the study and develop the proposed system (Snyder, 2019). It explains the procedures, techniques, and tools that will be employed to achieve the research objectives(Sajeevanie, 2021). Since this study involves the design and development of an Automated Digital Live Census System with real-time capabilities, an iterative and flexible software development approach is required to accommodate evolving requirements and continuous improvement. Therefore, this study will adopt the Agile Software Development Methodology.
+
+3.1 General Methodology
+This study will employ the Agile Software Development Methodology, specifically the Scrum framework. Agile is an iterative and incremental approach in which the system is developed in small functional units known as sprints, with each sprint delivering a working component that can be reviewed, tested, and improved. The methodology has been selected because it allows continuous feedback from users and stakeholders, supports incremental development of both mobile and web components, enables early testing and validation of system features, accommodates changes in requirements during development, and reduces risks by identifying and correcting errors early through iterative testing.
+The Agile process in this study will involve requirement gathering and creation of a product backlog, followed by sprint planning, iterative system design and development, testing and review after each sprint, and final system validation. Each sprint will focus on implementing specific modules of the Automated Digital Live Census System, including user registration, demographic data entry, real-time data synchronization, reporting dashboards, and data visualization features, ensuring progressive development toward a fully functional integrated system.
+
+
+
+3.2 Methodology Table
+Table 3.2: Summary of Research Methodology and System Development Approach
+SN	SPECIFIC OBJECTIVE	METHODOLOGY	TOOLS	DELIVERABLE
+1.	To identify and gather users’ and system requirements for the Automated Digital Live Census System
+	Interviews, Questionnaires, Stakeholder meetings, Requirement backlog creation	Google Forms / Printed questionnaires, Interview guide, Notebook	Product Backlog, User Requirement Specification Document
+2	To design the system architecture and database structure of the Automated Digital Live Census System.	Iterative system modeling using UML and database design	Draw.io / Lucidchart, MySQL Workbench, ER modeling tools	System Architecture Diagram,ER Diagram, Database Schema
+3	To implement the Automated Digital Live Census System using mobile and web technologies.	Agile iterative development (Sprint-based coding and integration)	Flutter/React/HTML,
+CSS, JavaScript, Node.js /Django, MySQL/
+PostgreSQL, VS Code, Git	Working Mobile Application, Web Dashboard, Integrated Database System
+4	To test and validate the performance and usability of the Automated Digital Live Census System.	Continuous testing (Unit testing, Integration testing, User Acceptance	Test cases documentation, Browser developer tools, Debugging tools	Testing Report, User Acceptance Report, Improved Final System
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+4.0 SCHEDULE OF ACTIVITIES
+This research study will be completed within three months, equivalent to 12 weeks. The schedule includes requirement gathering, system design, implementation, testing, and documentation. 
+
+ 
+Figure 4.1: Project Schedule of Activities (16weeks)
+
+
+REFERENCES
+Amiruddin, I., haerunnisaa, N. I., Harakan, A., Tahir, N., & Muhammad, A. (2024). Redefining Citizenship in the Digital Age : Understanding Smart Digital Census for Citizen ’ s Population Data Collection and Analysis . (January), 1–9.
+Ebere, I. G., Helen, O. M., & Emmanuel, E. U. (2020). Automated Census Population Projection and Data Management System. 3307, 244–254.
+Jain, A., & Kaur, V. (2021). Digital census and application of advanced technologies in census. https://doi.org/10.4324/9781003433194-3
+Kweka, O. (n.d.). Mapping of migration data sources in Tanzania.
+Matemba, J. D., & Mwandosya, G. I. (2023). Investigating the Impacts of Information and Communication Technology Systems in Conducting Population Census in Tanzania : A Case of National Bureau of Statistics. https://doi.org/10.59324/ejtas.2023.1)
+Mwombeki, J., Kihoza, P. D., & Daudi, M. (2025). Toward a digital model for tracking human population dynamics in Tanzania : A multi-actor interaction mechanism. 6, 1157–1172.
+Regions, S. (2018). Assessment report.
+Sajeevanie, T. L. (2021). Literature Review and Academic Research. 9(1), 2713–2720.
+Sonurlekar, A., Kerkar, A. S., Sharma, A., Pires, J., & Dessai, A. (2022). Automated Electronic System for Census Process. (6), 48–52. https://doi.org/10.46647/ijetms.2022.v06i05.007
+Ulugbek, M., & Xamidovich, X. M. (n.d.). DESIGN AND CREATION OF THE AUTOMATED INFORMATION SYSTEM " REPUBLIC OF POPULATION REGISTRATION ". 45–51.
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    ARDHI UNIVERSITY 
+
+SCHOOL OF EARTH SCIENCES, REAL ESTATES, BUSINESS AND INFORMATICS
+
+DEPARTMENT OF COMPUTER SYSTEMS AND MATHEMATICS
+
+PROPOSAL REPORT 2025/2026 ACADEMIC YEAR
+
+
+
+COURSE CODE/NAME:	CN 394 RESEARCH METHODS AND DISSERTATION WRITING
+
+DISSERTATION TITLE:	AUTOMATED DIGITAL LIVE CENSUS SYSTEM FOR TANZANIA
+
+
+
+                    STUDENT’S PARTICULARS 
+
+FULL NAME	REG. NUMBER	DEG. PROGRAM	SIGNATURE
+
+KIHEGA, ALPHA DENISS	31635/T.2023	BSc. CSN	
+
+KISHOSHA, SINA NGUSA	32137/T.2023	BSc. CSN	
+
+
+
+
+
+                      SUPERVISOR(S) NAME
+
+	SIGNATURE	DATE
+
+Mr. MOREKA ALEXANDER-------------------.	…………………….
+
+Mr. BENITHO CHENGULA	……………………...	…………………….
+
+
+
+
+
+1.0 INTRODUCTION
+
+1.1 General Introduction
+
+Population data plays a fundamental role in national development, governance, and socio-economic planning. Accurate demographic information regarding births, deaths, migration, and household composition enables governments to allocate resources effectively, design public services, and formulate evidence-based policies. In Tanzania, population data is primarily collected through national censuses conducted at long intervals. Although recent census exercises have incorporated digital tools to improve data accuracy, the overall approach remains periodic rather than continuous, limiting the availability of real-time demographic information.
+
+Scholars emphasize that effective population management in the digital era requires integrated and real-time systems capable of continuously tracking demographic events.(Mwombeki et al., 2025) argue that efficient population monitoring depends on the integration of birth registration, death records, immigration, emigration, and population updates within interoperable digital platforms. However, they note that fragmented systems and limited coordination among government institutions weaken demographic data management. Studies on digital governance in Tanzania further indicate that although various sectors have adopted digital platforms, many operate independently without centralized integration, reducing their effectiveness in national data coordination.
+
+Despite ongoing digital transformation initiatives, Tanzania lacks a centralized Digital Live Census System capable of continuously capturing, updating, and synchronizing demographic data across administrative levels. Existing systems are largely designed for periodic reporting rather than real-time population tracking. This creates a technological and knowledge gap in demographic data management. Therefore, this study proposes the design and development of an Automated Digital Live Census System that integrates mobile and web technologies to enable continuous data collection, storage, processing, and visualization of population information in real time.
+
+
+
+
+
+1.2 Statement of the Problem
+
+Tanzania depends largely on decennial census exercises to obtain comprehensive population statistics. While such censuses provide valuable national demographic insights, they do not capture ongoing daily changes such as births, deaths, internal migration, and cross-border movements in real time. Consequently, planners and policymakers frequently rely on outdated population estimates when making decisions related to infrastructure development, health services, education planning, and resource allocation.
+
+Furthermore, digital systems associated with civil registration and population management are distributed across multiple institutions with limited interoperability (Mwombeki et al., 2025). This fragmentation results in delayed updates, inconsistencies in records, and inefficiencies in data sharing. The absence of a unified, integrated, and automated digital platform capable of real-time population tracking represents a significant system and knowledge gap in Tanzania’s demographic management framework.
+
+Without a centralized live census mechanism, the country faces challenges in achieving timely, reliable, and coordinated demographic data management. Therefore, there is a need to design and develop an Automated Digital Live Census System that integrates population data sources and supports continuous real-time tracking of demographic dynamics.
+
+
+
+1.3 Objectives
+
+1.3.1 General Objective
+
+The general objective of this dissertation is to design and develop an Automated Digital Live Census System that enhances real-time capturing, storing, processing, and visualization of population data in Tanzania.
+
+
+
+
+
+
+
+1.3.2 Specific Objectives
+
+i.	To identify and gather users’ and system requirements for the Automated Digital Live Census System.
+
+ii.	To design the system architecture and database structure of the Automated Digital Live Census System.
+
+iii.	To implement the Automated Digital Live Census System using mobile and web technologies.
+
+iv.	To test and validate the performance and usability of the Automated Digital Live Census System.
+
+
+
+1.4 Research Questions
+
+In this study, the following research questions will be answered:
+
+i.	What users’ and system requirements are necessary for developing an Automated Digital Live Census System for Tanzania?
+
+ii.	How can the system architecture and database structure be effectively designed to support real-time population tracking?
+
+iii.	How can mobile and web technologies be implemented to enable continuous population data capture and synchronization?
+
+iv.	How effective, reliable, and usable is the developed Automated Digital Live Census System?
+
+
+
+1.5 Significance of the Study
+
+i.	The study contributes to the body of knowledge in digital governance and population data management by proposing a real-time digital census framework.
+
+ii.	The proposed system will support policymakers, planners, and government institutions by providing accurate and up-to-date demographic data for informed decision-making.
+
+iii.	The research promotes digital transformation in public administration through the development of an integrated and centralized population tracking platform.
+
+iv.	The system may reduce operational costs associated with traditional census exercises while improving efficiency, coordination, and data reliability in demographic management.
+
+
+
+
+
+2.0 LITERATURE REVIEW
+
+2.1 Introduction
+
+According to (Sajeevanie, 2021) A literature review is a critical analysis of previous studies related to a research topic. It provides an overview of existing knowledge, identifies major contributions from other researchers, and highlights gaps that justify the current study. In system development research, a literature review helps to understand existing technological solutions, methodologies used, and limitations observed in related works. This section reviews previous studies on digital census systems, civil registration systems, e-governance platforms, and real-time population tracking technologies. The purpose is to map existing approaches and identify gaps that the proposed Automated Digital Live Census System intends to address.
+
+
+
+2.2 Related Works
+
+Kweka, n.d., in Mapping of Migration Data Sources in Tanzania, examined how migration data is collected and managed by different institutions in Tanzania. The study found that institutions such as Immigration Department, NIDA, NBS, and TRA collect migration-related data using paper forms, Excel sheets, and separate digital databases. Although some systems are computerized, data sharing between institutions is mostly manual and not integrated. The study showed weak interoperability and lack of centralized coordination. Migration statistics are mainly used for reporting purposes and not for real-time population monitoring. This study highlights the need for an integrated digital platform that connects all institutions and supports real-time migration tracking.
+
+Mwombeki et al., (2025) in the article published in the African Journal of Empirical Research, proposed a digital model for tracking human population dynamics in Tanzania. The study emphasized collaboration between institutions such as RITA, NIDA, Immigration, health facilities, and local government authorities. It highlighted the importance of integrating Civil Registration and Vital Statistics (CRVS) systems, digital identity systems, and health information systems like GoTHoMIS. The study proposed a multi-actor interaction framework to improve coordination and data sharing. However, the study mainly presented a conceptual framework and did not implement a fully automated real-time census system that integrates births, deaths, migration, and household information in one centralized platform.
+
+Amiruddin et al., (2024) in Redefining Citizenship in the Digital Age: Understanding Smart Digital Census, published in the International Journal on Recent and Innovation Trends in Computing and Communication, discussed how digital technologies can modernize census operations. The study explained the use of mobile devices, cloud computing, digital forms, and real-time validation tools to improve census accuracy and efficiency. The Smart Digital Census approach reduces operational costs and improves data processing speed compared to traditional paper-based census methods. However, the study mainly focused on improving periodic census exercises rather than developing a continuous live census system that updates demographic changes automatically.
+
+Regions, (2018) The United Republic of Tanzania in the Electronic Population Registration System (EPRS) Assessment Report, evaluated the implementation of digital village population registration systems. The report showed that the ePRS improved data collection by replacing paper-based village registers with mobile and web-based systems. However, the report identified challenges such as limited internet connectivity, delays in synchronization, and weak integration with other national systems. The system mainly supports registration activities and reporting but does not provide a centralized live population tracking system that updates automatically across all administrative levels.
+
+Matemba & Mwandosya, (2023) investigated the impacts of Information and Communication Technology (ICT) systems in conducting the population census in Tanzania, focusing on the National Bureau of Statistics (NBS). The study used a quantitative research approach and applied statistical analysis using SPSS to evaluate the performance of ICT in census operations. The findings revealed a positive and significant relationship between ICT usage and census performance, particularly in socio-demographic data collection, data development and dissemination, and monitoring and evaluation processes. The study concluded that ICT systems improve efficiency, reduce manual errors, and enhance the speed of data processing. However, the research mainly evaluated ICT effectiveness during periodic census exercises and did not propose a centralized automated system capable of continuously capturing and synchronizing demographic events such as births, deaths, and migration in real time. This highlights the need
+
+for an integrated live digital census system.
+
+Ebere et al., (2020) in Automated Census Population Projection and Data Management System, developed a computerized system to improve census data management and population projection. The system automated data storage, retrieval, and statistical report generation using database technologies and projection formulas. The study showed that automation improves efficiency compared to manual record keeping. However, the system focused mainly on managing collected census data and generating projections, rather than supporting real-time updates of population events from multiple institutions.
+
+Jain & Kaur, (2021), in Digital Census and Application of Advanced Technologies in Census, discussed how modern technologies such as mobile data collection, cloud platforms, GIS tools, and online census management systems can improve national census operations. The study highlighted improved data validation, faster processing, and better monitoring of census activities. However, the approach is mainly designed for scheduled census exercises and does not address continuous real-time synchronization of demographic data across different government institutions.
+
+Ulugbek & Xamidovich, n.d. designed and developed an automated information system for population registration at the national level in Uzbekistan. The study focused on building a digital census application using Android Studio, where census questionnaires were completed electronically and transmitted to a central database for processing. The system was designed to work both online and offline, ensuring data collection even in areas with limited internet connectivity. The researchers used UML modeling tools such as ArgoUML to design system architecture, including use case diagrams and class diagrams for database structure. Their study demonstrated that mobile-based digital census systems improve data organization, storage, and reporting efficiency compared to manual systems. However, the system mainly supported periodic census exercises and did not fully integrate real-time demographic event tracking such as live migration updates or automated population synchronization across institutions. 
+
+
+
+
+
+Sonurlekar et al., (2022) in the study Automated Electronic System for Census Process, proposed a biometric-based electronic census system to replace traditional door-to-door paper-based census methods. The system uses Raspberry Pi, a fingerprint sensor for citizen authentication, a GSM module for sending confirmation messages, and a digital database for storing responses. The proposed framework allows authenticated citizens to answer survey questions digitally, and the collected data is stored directly on a server for easier processing and analysis. The study showed that biometric authentication improves data authenticity and reduces duplication compared to manual methods. However, the system is mainly designed as an electronic survey platform for periodic census data collection and does not provide centralized national live census system that continuously updates demographic events such as births, deaths, migration, and household relationships across multiple government institutions in real time.
+
+2.3 Summary of literature review
+
+The proposed system will use Flutter (Dart) to develop both the mobile application for citizens and the web dashboards for government officers. Using a single frontend framework ensures consistency in user interface design, reduces development complexity, and improves maintainability. Flutter supports cross-platform deployment including Android, iOS, and Web, making it suitable for a national-level system. The backend will be developed using NodeJS with ExpressJS, while PostgreSQL will manage structured population data and Redis will support real-time synchronization and high-speed data access.
+
+
+
+Table 2.1: Technology Comparison of Reviewed Studies and Proposed System
+
+
+
+S/N	Authors & Year	Flutter (Dart)	NodeJS	ExpressJS	PostgreSQL	Redis	REST API	WebSockets	Cloud	RBAC	SSL/TLS	GIS
+
+1	Kweka (n.d.)	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗
+
+2	Mwombeki et al. (2025)	✗	✗	✗	✗	✗	✗	✗	✓	✗	✗	✗
+
+3	Amiruddin et al. (2024)	✗	✗	✗	✗	✗	✗	✗	✓	✗	✗	✓
+
+4	Regions (2018)	✗	✗	✗	✗	✗	✗	✗	✓	✓	✗	✗
+
+5	Matemba & Mwandosya (2023)	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗	✗
+
+6	Ebere et al. (2020)	✗	✗	✗	✓	✗	✗	✗	✗	✗	✗	✗
+
+7	Jain & Kaur (2021)	✗	✗	✗	✗	✗	✗	✗	✓	✗	✗	✓
+
+8	Ulugbek & Xamidovich (n.d.)	✗	✗	✗	✓	✗	✗	✗	✗	✗	✗	✗
+
+9	Sonurlekar et al. (2022)	✗	✗	✗	✓	✗	✗	✗	✗	✓	✗	✗
+
+10	Proposed Automated Digital Live Census (2026)	✓	✓	✓	✓	✓	✓	✓	✓	✓	✓	✓
+
+
+
+3.0 METHODOLOGY
+
+Methodology refers to the systematic approach that will be used to conduct the study and develop the proposed system (Snyder, 2019). It explains the procedures, techniques, and tools that will be employed to achieve the research objectives(Sajeevanie, 2021). Since this study involves the design and development of an Automated Digital Live Census System with real-time capabilities, an iterative and flexible software development approach is required to accommodate evolving requirements and continuous improvement. Therefore, this study will adopt the Agile Software Development Methodology.
+
+
+
+3.1 General Methodology
+
+This study will employ the Agile Software Development Methodology, specifically the Scrum framework. Agile is an iterative and incremental approach in which the system is developed in small functional units known as sprints, with each sprint delivering a working component that can be reviewed, tested, and improved. The methodology has been selected because it allows continuous feedback from users and stakeholders, supports incremental development of both mobile and web components, enables early testing and validation of system features, accommodates changes in requirements during development, and reduces risks by identifying and correcting errors early through iterative testing.
+
+The Agile process in this study will involve requirement gathering and creation of a product backlog, followed by sprint planning, iterative system design and development, testing and review after each sprint, and final system validation. Each sprint will focus on implementing specific modules of the Automated Digital Live Census System, including user registration, demographic data entry, real-time data synchronization, reporting dashboards, and data visualization features, ensuring progressive development toward a fully functional integrated system.
+
+
+
+3.2 Methodology Table
+
+Table 3.2: Summary of Research Methodology and System Development Approach
+
+SN	SPECIFIC OBJECTIVE	METHODOLOGY	TOOLS	DELIVERABLE
+
+1.	To identify and gather users’ and system requirements for the Automated Digital Live Census System
+
+	Interviews, Questionnaires, Stakeholder meetings, Requirement backlog creation	Google Forms / Printed questionnaires, Interview guide, Notebook	Product Backlog, User Requirement Specification Document
+
+2	To design the system architecture and database structure of the Automated Digital Live Census System.	Iterative system modeling using UML and database design	Draw.io / Lucidchart, MySQL Workbench, ER modeling tools	System Architecture Diagram,ER Diagram, Database Schema
+
+3	To implement the Automated Digital Live Census System using mobile and web technologies.	Agile iterative development (Sprint-based coding and integration)	Flutter/React/HTML,
+
+CSS, JavaScript, Node.js /Django, MySQL/
+
+PostgreSQL, VS Code, Git	Working Mobile Application, Web Dashboard, Integrated Database System
+
+4	To test and validate the performance and usability of the Automated Digital Live Census System.	Continuous testing (Unit testing, Integration testing, User Acceptance	Test cases documentation, Browser developer tools, Debugging tools	Testing Report, User Acceptance Report, Improved Final System
+
+
+
+
+
+4.0 SCHEDULE OF ACTIVITIES
+
+This research study will be completed within three months, equivalent to 12 weeks. The schedule includes requirement gathering, system design, implementation, testing, and documentation. 
+
+
+
+ 
+
+Figure 4.1: Project Schedule of Activities (16weeks)
+
+
+
+
+
+REFERENCES
+
+Amiruddin, I., haerunnisaa, N. I., Harakan, A., Tahir, N., & Muhammad, A. (2024). Redefining Citizenship in the Digital Age : Understanding Smart Digital Census for Citizen ’ s Population Data Collection and Analysis . (January), 1–9.
+
+Ebere, I. G., Helen, O. M., & Emmanuel, E. U. (2020). Automated Census Population Projection and Data Management System. 3307, 244–254.
+
+Jain, A., & Kaur, V. (2021). Digital census and application of advanced technologies in census. https://doi.org/10.4324/9781003433194-3
+
+Kweka, O. (n.d.). Mapping of migration data sources in Tanzania.
+
+Matemba, J. D., & Mwandosya, G. I. (2023). Investigating the Impacts of Information and Communication Technology Systems in Conducting Population Census in Tanzania : A Case of National Bureau of Statistics. https://doi.org/10.59324/ejtas.2023.1)
+
+Mwombeki, J., Kihoza, P. D., & Daudi, M. (2025
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
