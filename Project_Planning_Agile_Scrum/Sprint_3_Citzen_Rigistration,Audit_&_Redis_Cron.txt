@@ -1,0 +1,421 @@
+================================================================================
+  AUTOMATED DIGITAL LIVE CENSUS FOR TANZANIA
+  SPRINT 3 — CITIZEN REGISTRATION, AUDIT & REAL-TIME CRON
+  Duration: Week 7 – Week 8  |  Points Target: 29
+================================================================================
+
+  SPRINT GOAL:
+  Enable Village Officers to register citizens through the mobile app including
+  biometric capture and NIDA auto-fetch. Implement the audit logging system,
+  field-level encryption for sensitive data, and the 15-minute Redis cron job
+  that powers the real-time analytics dashboard.
+
+  PREREQUISITE: Sprint 2 must be fully complete. Geo-fence working correctly.
+
+================================================================================
+  STORIES IN THIS SPRINT
+================================================================================
+
+  ┌───────────┬────────────────────────────────────────────────────┬────────┐
+  │  STORY ID │  TITLE                                             │  PTS   │
+  ├───────────┼────────────────────────────────────────────────────┼────────┤
+  │  NBS-023  │  Public user self-registration (email / Google)    │  3     │
+  │  NBS-024  │  Citizen NID entry + NIDA auto-fetch               │  5     │
+  │  NBS-025  │  Age validation (18+ only)                         │  2     │
+  │  NBS-026  │  Biometric capture: photo, fingerprint, signature  │  5     │
+  │  NBS-027  │  Disability status recording                       │  3     │
+  │  NBS-028  │  Extended citizen details (education, occupation..)│  3     │
+  │  NBS-029  │  Optional supplementary fields                     │  2     │
+  │  NBS-031  │  Field-level encryption for sensitive data         │  3     │
+  │  NBS-052  │  15-minute Redis cron job for population stats     │  5     │
+  │  NBS-057  │  Audit log middleware for all write operations      │  5     │
+  └───────────┴────────────────────────────────────────────────────┴────────┘
+  TOTAL: 36 points  (split NBS-026 or NBS-057 to Sprint 4 if needed)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-023 | PUBLIC USER SELF-REGISTRATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — citizen app)
+  Points : 3
+
+  USER STORY:
+  As a member of the public, I can register on the citizen mobile app using
+  my email and password, or via Google sign-in, to access live census data.
+
+  ACCEPTANCE CRITERIA:
+  Given I open the public citizen mobile app
+  When I tap "Create Account"
+  Then I can register with: email + password (min 8 chars)
+  Or I can sign in with Google (OAuth 2.0)
+  And on success I receive a JWT and am taken to the home dashboard
+  And no personal identifying information is required for registration
+  And the citizen app shows ONLY aggregated/anonymized census statistics
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/auth/register { email, password } → insert public_user
+  [ ] Create POST /api/auth/google { googleToken } → verify with Google OAuth
+      → upsert public_user (auth_provider=google)
+  [ ] Create POST /api/auth/login for public users (separate from admin login)
+  [ ] Return JWT access token (role=public_user, 7d TTL for citizen app)
+  [ ] Write Jest tests
+
+  TASKS — MOBILE (Citizen App):
+  [ ] Create Register screen: email input + password input + confirm password
+  [ ] Create Login screen: email + password
+  [ ] Add "Sign in with Google" button using expo-auth-session
+  [ ] Store JWT in expo-secure-store
+  [ ] On success: navigate to Census Home screen
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-024 | CITIZEN NATIONAL ID ENTRY + NIDA AUTO-FETCH
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — officer app)
+  Points : 5
+
+  USER STORY:
+  As a Village Officer, I enter a citizen's National ID in the mobile app and
+  the system automatically fetches their bio data from the NIDA API.
+
+  ACCEPTANCE CRITERIA:
+  Given I am in the "Register Citizen" screen in the officer app
+  When I enter a valid National ID number
+  Then the system calls NIDA API and auto-fills:
+       first name, middle name, surname, gender, date of birth, photo
+  And if the National ID already exists in our system, I am shown the
+  existing record and asked if I want to update (renewal flow)
+  And if NIDA returns a disability flag = true, I am shown a disability
+  status confirmation screen
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/citizens/lookup { nationalId }
+      → check if citizen exists in DB → return existing record or NIDA data
+  [ ] Add duplicate NID check: if exists and status=active → return 409 with
+      existing citizen summary
+  [ ] Return nida_data + disability_flag from NIDA response
+  [ ] Write Jest tests with mock NIDA responses
+
+  TASKS — MOBILE (Officer App):
+  [ ] Create "Register Citizen" entry screen with NID text input
+  [ ] Show loading spinner during NIDA API call
+  [ ] On success: show auto-filled preview card
+      (name, DOB, gender, photo thumbnail)
+  [ ] Show "Already registered" screen with update option if NID exists
+  [ ] Navigate to disability check screen if disability_flag = true
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-025 | AGE VALIDATION (18+ ONLY)
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 2
+
+  ACCEPTANCE CRITERIA:
+  Given a National ID is looked up via NIDA
+  When the citizen's date of birth is retrieved
+  Then the system calculates age = today - DOB
+  And if age < 18: return 400 { error: "Citizen must be 18 or older" }
+  And the mobile app shows a clear rejection message
+  And the officer cannot proceed with registration for underage citizens
+
+  TASKS:
+  [ ] Add age calculation in POST /api/citizens/lookup
+  [ ] If age < 18 → return 400 with clear message
+  [ ] Mobile: display error screen with "Cannot register citizens under 18"
+  [ ] Add client-side age check as first line of defense (DOB from NIDA)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-026 | BIOMETRIC CAPTURE: PHOTO, FINGERPRINT, SIGNATURE
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile)
+  Points : 5
+
+  USER STORY:
+  As a Village Officer, I can capture a citizen's live photo, fingerprint
+  (if device supports it), and digital signature during registration.
+
+  ACCEPTANCE CRITERIA:
+  Given I am on the biometric capture screen in the officer app
+  When I tap "Take Photo"
+  Then the device camera opens and I can capture a photo (front camera)
+  And the photo is cropped to a portrait aspect ratio
+  When I tap "Capture Signature"
+  Then a signature pad appears for the citizen to draw their signature
+  When I tap "Capture Fingerprint"
+  Then if device supports biometric input, fingerprint is captured
+  Or if not supported, officer selects "Manual — not available on this device"
+  And all captured items are uploaded to Cloudinary before proceeding
+  And the returned URLs are stored in the citizen registration form state
+
+  TASKS — MOBILE:
+  [ ] Install expo-camera → create PhotoCaptureScreen
+      (front camera, auto-focus, portrait crop, retake option)
+  [ ] Upload photo to Cloudinary via /api/upload/photo endpoint
+  [ ] Create SignaturePad component using react-native-signature-canvas
+  [ ] On signature complete → save as PNG → upload to Cloudinary
+  [ ] Fingerprint: use expo-local-authentication to check if biometric
+      hardware is available → if yes, capture + encrypt + store
+      → if no, flag fingerprint_template = null (officer notes unavailability)
+  [ ] Show upload progress indicators for each biometric item
+  [ ] Do not proceed to next screen until photo + signature are confirmed
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/upload/photo (multipart → Cloudinary → return URL)
+  [ ] Create POST /api/upload/signature (same flow)
+  [ ] AES-256 encrypt fingerprint template before storing in DB (NBS-031)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-027 | DISABILITY STATUS RECORDING
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile) + Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As a Village Officer, I can record a citizen's disability status, type(s),
+  and cause, including updating a pre-existing disability flag from NIDA.
+
+  ACCEPTANCE CRITERIA:
+  Given NIDA returned disability_flag = true for this citizen
+  When the disability screen is shown
+  Then I am asked: "Is the citizen still disabled?" (Yes / Cured)
+  And if Yes: I can select disability type(s) from multi-select:
+      Hearing | Sight | Physical (limbs) | Cognitive | Other
+  And I can select the cause: Born with | Road accident |
+      Illness | Workplace accident | Other (free text)
+  And if multiple disabilities exist, I can select which ones are cured
+  Given NIDA returned disability_flag = false
+  When disability screen is shown
+  Then I am asked: "Does citizen have a disability?" (Yes / No)
+  And if Yes, same type and cause selection as above
+
+  TASKS — MOBILE:
+  [ ] Create DisabilityScreen with conditional logic based on NIDA flag
+  [ ] Multi-select disability type checkboxes
+  [ ] Dropdown for disability cause + free text "other" option
+  [ ] For multiple: show each disability with "Active / Cured" toggle
+  [ ] Store disability_status, disability_types[], disability_cause in form state
+
+  TASKS — BACKEND:
+  [ ] Validate disability_types as array (max 5 items, known values only)
+  [ ] Store as JSONB in citizens.disability_types
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-028 | EXTENDED CITIZEN DETAILS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile) + Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As a Village Officer, I complete the citizen's profile by recording their
+  education level, street address, marital status, children, and occupation.
+
+  ACCEPTANCE CRITERIA:
+  Given I am on the "Personal Details" screen
+  When I complete all required fields
+  Then I can select education level from: None / Primary / O-Level /
+       A-Level / Certificate / Diploma / Bachelor's / Master's / PhD / Other
+  And I can enter the village street name and house registration number
+  And I can set marital status (Single / Married / Widowed / Divorced)
+  And if Married: the app recommends marriage registration (optional, skippable)
+  And I can add children by entering their National IDs (add multiple)
+  And I can enter primary occupation + additional economic activities
+  And all fields pass validation before proceeding
+
+  TASKS — MOBILE:
+  [ ] Create PersonalDetailsScreen with form sections:
+      Education dropdown | Street text input | House number input
+      Marital status radio | Children NID list (add/remove)
+      Occupation dropdown + "Add another occupation" button
+  [ ] Marriage recommendation modal (skippable)
+  [ ] Children NID validation: each NID must exist in citizens table
+
+  TASKS — BACKEND:
+  [ ] Validate children NIDs in POST /api/citizens (check they exist in DB)
+  [ ] After citizen created → insert rows in citizen_children for each child
+  [ ] Store occupations as JSONB array
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-029 | OPTIONAL SUPPLEMENTARY FIELDS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile) + Member 1 (Backend)
+  Points : 2
+
+  ACCEPTANCE CRITERIA:
+  Given I am on the "Additional Info (Optional)" screen
+  When I choose to fill optional fields
+  Then I can enter land ownership in acres (numeric, optional)
+  And I can select animal keeping categories (multi-select):
+      Livestock (cows, goats, pigs) | Birds (hens) | Other (dogs, donkeys)
+  And I can select health insurance providers (multi-select):
+      NHIF | BIMA YA AFYA | Private | Other
+  And I can select communication devices (multi-select):
+      Basic phone (kitochi) | Smartphone | Computer | Radio | Television
+  And I can select social fund memberships (multi-select):
+      NSSF | TASAF | Other
+  And if I skip this screen, all optional fields are stored as null
+
+  TASKS — MOBILE:
+  [ ] Create SupplementaryInfoScreen with collapsible sections
+  [ ] All fields optional — show "Skip" button prominently
+  [ ] Multi-select components for all category fields
+
+  TASKS — BACKEND:
+  [ ] Accept all optional fields as nullable JSONB in POST /api/citizens
+  [ ] No validation errors for missing optional fields
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-031 | FIELD-LEVEL ENCRYPTION FOR SENSITIVE DATA
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As the system, all sensitive fields must be encrypted before storage
+  so that even a database breach exposes no usable data.
+
+  ACCEPTANCE CRITERIA:
+  Given a citizen record is being saved
+  When the data is written to PostgreSQL
+  Then the following fields are AES-256-GCM encrypted before INSERT:
+       nida_number (in all officer/admin tables)
+       fingerprint_template (in citizens table)
+       mfa_secret (in all admin tables)
+  And the encryption key is read from ENCRYPTION_KEY environment variable
+  And decryption happens in the service layer before returning data to API
+  And encrypted values are stored as: iv:authTag:ciphertext (base64 encoded)
+
+  TASKS:
+  [ ] Create backend/src/lib/encryption.js:
+      encrypt(plaintext): returns "iv:authTag:ciphertext" string (base64)
+      decrypt(ciphertext): returns original plaintext
+      Uses: crypto.createCipheriv('aes-256-gcm', key, iv)
+  [ ] Apply encrypt() before saving: nida_number, fingerprint_template, mfa_secret
+  [ ] Apply decrypt() when reading these fields in service layer
+  [ ] Write Jest test: encrypt → decrypt → matches original
+  [ ] Add ENCRYPTION_KEY (32 random bytes, hex encoded) to all env files
+  [ ] Verify encrypted values in Prisma Studio look unreadable
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-052 | 15-MINUTE REDIS CRON FOR POPULATION STATS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 5
+
+  USER STORY:
+  As the system, I run a background job every 15 minutes that aggregates
+  population statistics and writes them to Redis so the citizen app can
+  read live data with minimal latency.
+
+  ACCEPTANCE CRITERIA:
+  Given the cron job runs every 15 minutes
+  When it executes
+  Then it queries PostgreSQL for:
+       Total alive population (national, per region, per district, per ward, per village)
+       Male count and female count at each level
+       Age distribution in bands (0-4, 5-9, 10-14, ..., 75-79, 80+)
+       Total buildings and infrastructure count per level
+  And writes results to Redis with key: stats:{level}:{scopeId}
+  And sets TTL = 900 seconds (15 min)
+  And writes a snapshot row to population_snapshots table (daily archive)
+  And GET /api/analytics/national reads from Redis (cache hit) or PostgreSQL (miss)
+  And the cron job logs start time, duration, and record count on each run
+
+  TASKS:
+  [ ] Install node-cron: npm install node-cron
+  [ ] Create backend/src/jobs/population-refresh.job.js
+  [ ] Write aggregation queries using Prisma raw SQL:
+      SELECT region_id, COUNT(*) as total,
+             SUM(CASE WHEN gender='male' THEN 1 ELSE 0 END) as male,
+             SUM(CASE WHEN gender='female' THEN 1 ELSE 0 END) as female
+      FROM citizens WHERE vital_status='alive' GROUP BY region_id;
+  [ ] Write age distribution query (CASE WHEN age BETWEEN 0 AND 4 THEN ...)
+  [ ] For each geo level → SET Redis key with JSON payload + TTL 900s
+  [ ] Also upsert population_snapshots row (once per day per scope)
+  [ ] Create API routes:
+      GET /api/analytics/national
+      GET /api/analytics/region/:regionId
+      GET /api/analytics/district/:districtId
+      GET /api/analytics/ward/:wardId
+      GET /api/analytics/village/:villageId
+  [ ] Each route: check Redis → if hit return cached JSON → if miss query DB
+  [ ] Schedule: cron.schedule('*/15 * * * *', populationRefreshJob)
+  [ ] Write Jest test: mock Redis + Prisma → verify cron output format
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-057 | AUDIT LOG MIDDLEWARE
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 5
+
+  USER STORY:
+  As the system, every write operation (POST, PUT, PATCH, DELETE) must be
+  recorded in the audit_logs table with full actor, action, and data context.
+
+  ACCEPTANCE CRITERIA:
+  Given any authenticated user performs a write operation
+  When the operation completes successfully
+  Then a row is inserted in audit_logs with:
+       actor_id, actor_role, action (e.g. CREATE_CITIZEN), target_table,
+       target_id, old_data (null for creates), new_data, ip_address,
+       gps_coordinates (for mobile officers), timestamp
+  And audit_logs has no UPDATE or DELETE permissions (append-only)
+  And audit_log inserts never block or slow the main request (async)
+  And Super Admin can query audit logs via GET /api/audit?actor=&action=&from=&to=
+
+  TASKS:
+  [ ] Create backend/src/middleware/audit.middleware.js
+  [ ] Capture: req.user (actor_id, actor_role), route → action name mapping,
+      req.ip, req.body.gpsLat + req.body.gpsLng, response body (target_id)
+  [ ] Insert to audit_logs asynchronously (do not await in request chain)
+  [ ] Create audit action constants:
+      CREATE_CITIZEN, UPDATE_CITIZEN, CREATE_BIRTH, REGISTER_DEATH,
+      CREATE_MARRIAGE, DISSOLVE_MARRIAGE, INITIATE_MIGRATION,
+      CONFIRM_MIGRATION, REGISTER_BUILDING, ADMIN_LOGIN, ADMIN_CREATED, etc.
+  [ ] Apply audit middleware to all write routes (POST, PUT, PATCH, DELETE)
+  [ ] Grant INSERT-only on audit_logs in DB (enforce via Prisma middleware)
+  [ ] Create GET /api/audit (super_admin only) with pagination + filters
+  [ ] Write Jest tests
+
+
+================================================================================
+  SPRINT 3 — DONE CHECKLIST
+================================================================================
+
+  [ ] Public users can register / login on citizen app (email + Google)
+  [ ] Village officer can enter NID → NIDA auto-fills citizen bio
+  [ ] Under-18 citizens are rejected with clear error message
+  [ ] Photo capture via Expo Camera works and uploads to Cloudinary
+  [ ] Signature pad works and signature uploads to Cloudinary
+  [ ] Disability status screen handles NIDA flag and manual entry
+  [ ] Education, occupation, marital, children, street fields all save correctly
+  [ ] Optional supplementary fields save as null if skipped
+  [ ] NIDA number, fingerprint, MFA secrets are encrypted in DB
+  [ ] Cron job runs every 15 min and Redis is populated with stats
+  [ ] GET /api/analytics/* routes return data from Redis or fallback to DB
+  [ ] All write operations produce audit_log entries
+  [ ] Citizen app shows basic census stats (national level — Sprint 6 polishes UI)
+  [ ] All CI pipelines remain green
+  [ ] Sprint Review demo completed
+  [ ] Sprint Retrospective done + action items recorded
+
+================================================================================
+  END OF SPRINT 3
+================================================================================
