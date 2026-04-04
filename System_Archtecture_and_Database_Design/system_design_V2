@@ -210,7 +210,7 @@
           │  • Confirm password
           │  • Upload or capture profile photo
           │  • Valid mobile number
-          │  • Department
+          │  • Department within NBS
           ▼
   STEP 6: Account Activated
           │  • Token invalidated immediately after use
@@ -295,7 +295,7 @@
           ▼
   STEP 5: Profile Setup
           │  • New password + confirm
-          │  • Profile photo (take with camera)
+          │  • Profile photo (take with camera or upload)
           │  • Valid mobile number
           │  • Ward name
           │  • Village name
@@ -321,7 +321,7 @@
           ▼
   STEP 5: Profile Setup (Hospital variant)
           │  • New password + confirm
-          │  • Profile photo
+          │  • Profile photo(upload or capture)
           │  • Valid mobile number
           │  • Facility Registration Number
           │    → System calls MoHCDGEC API to fetch all facility info
@@ -361,7 +361,7 @@
           │  • Disability cause: Road accident / Born with / etc.
           │  • Education level (select one):
           │    None / Primary / O-Level / A-Level / Certificate /
-          │    Diploma / Bachelor's / Master's / PhD / Other
+          │    Diploma / Bachelor's / Master's / PhD / Other(VETA,online )
           │  • Village street name
           │  • House registration number
           │  • Marital status (Yes/No)
@@ -375,7 +375,7 @@
           │    Livestock (cows/goats/pigs) / Birds (hens) / Other (dogs/donkeys)
           │  • Health insurance provider(s) (multi-select)
           │  • Communication devices (multi-select):
-          │    Mobile (kitochi / smartphone) / Computer / Radio / Television
+          │    Mobile (kitochi / smartphone) , Computer ,Radio ,Television
           │  • Social Mutual Fund memberships (multi-select):
           │    NSSF / TASAF / etc.
           ▼
@@ -389,7 +389,7 @@
           │  • ID card print payload generated
           │  • Card expiry = date of issue + 10 years
           │  • After 10 years: citizen must return to update photo,
-          │    fingerprints, and signature for renewal
+          │    fingerprints, and signature for renewal if status will be alive.
           ▼
   [Citizen Record Created in Database]
 
@@ -403,7 +403,7 @@
           ▼
   STEP 1: Enter Birth Details
           │  • Child first name, middle name, surname
-          │  • Gender (Male / Female)
+          │  • Gender (Male / Female/)
           │  • Date of birth
           ▼
   STEP 2: Link Parents
@@ -411,7 +411,7 @@
           │  • Mother National ID → validate in system
           │  • System links child to parent lineage records
           ▼
-  STEP 3: Link Facility & Officer
+  STEP 3: Link Facility & Officer to child infos
           │  • Facility ID auto-attached (from officer profile)
           │  • Officer (doctor/nurse) National ID linked
           ▼
@@ -443,7 +443,7 @@
   • Citizen status updated to: DECEASED
   • Age counter frozen at last recorded age
   • Death certificate generated (PDF + QR)
-  • Pushed to RITA
+  • Pushed to RITA(individual get copy of it)
 
 
   CASE B — Death INSIDE hospital (Hospital Officer registers):
@@ -456,7 +456,7 @@
   │     • Enter mother National ID
   │     • Date of death
   │     • Cause/reason (if applicable)
-  │     • Certificate generated → pushed to RITA
+  │     • Certificate generated → pushed to RITA(useful for tracking infant mortality rate)
   │
   └─► If ADULT:
         • Enter citizen National ID → fetch all info
@@ -464,7 +464,7 @@
         • Enter date of death
         • Link duty officer (doctor/nurse) National ID
         • Citizen status → DECEASED
-        • Certificate generated → pushed to RITA
+        • Certificate generated → pushed to RITA(indivudual get a copy of it)
 
 
 ────────────────────────────────────────────────────────────────────────────────
@@ -480,11 +480,11 @@
           │  FEMALE: Can have only ONE husband at a time.
           │          Exception: allowed to register new marriage if
           │          last husband's vital_status = DECEASED
-          │          or last marriage status = UNREGISTERED
+          │          or last marriage status = UNREGISTERED 
           ▼
   STEP 3: Generate Marriage Certificate
           │  • System assigns unique marriage_id
-          │  • Certificate PDF generated (template TBD)
+          │  • Certificate PDF generated (Pushed to RITA, While individual get a copy)
           │  • Marriage status set to: ACTIVE
           │  • Pushed to RITA
           ▼
@@ -494,9 +494,10 @@
   UNREGISTER MARRIAGE FLOW:
   ──────────────────────────
   • Officer enters marriage_id
+  . Couple provide vivid reasons for marriage dissolution or breakup
   • Submits unregister request
-  • Request sent to authorized institution for verification
-  • Institution provides vivid reason for dissolution
+  • Request sent to authorized institution( RITA) for verification
+  • Institution checks the reasons  for dissolution , if vivid approve otherwise reject
   • On approval:
     - Marriage status → DISSOLVED or UNREGISTERED
     - dissolution_date, dissolution_reason, dissolution_authority recorded
@@ -539,7 +540,7 @@
           │
           ├─► REJECTED:
           │     • Migration status → CANCELLED
-          │     • Reason recorded
+          │     • Reason recorded 
           │
           └─► NO ACTION within 30 days:
                 • System auto-cancels request
@@ -1233,7 +1234,7 @@
 
   MOBILE APPS (Officer + Citizen)
   ──────────────────────────────────────────────────────────────
-  Framework        React Native (Expo) or Flutter
+  Framework        React Native (Expo) 
   Offline          SQLite (WatermelonDB) with background sync
   Maps/Geo         React Native Maps + PostGIS queries
   Biometrics       Expo Camera, fingerprint SDK
