@@ -113,7 +113,7 @@
   SECTION 3 — GIT BRANCHING STRATEGY
 ████████████████████████████████████████████████████████████████████████████████
 
-  REPOSITORY: github.com/<org>/tanzania-census
+  REPOSITORY: github.com/Kihega/Final_Dissertation
   MODEL: GitHub Flow (adapted for 2-person team)
 
   PERMANENT BRANCHES:
