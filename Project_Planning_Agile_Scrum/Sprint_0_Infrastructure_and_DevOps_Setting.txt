@@ -1,0 +1,389 @@
+================================================================================
+  AUTOMATED DIGITAL LIVE CENSUS FOR TANZANIA
+  SPRINT 0 — INFRASTRUCTURE & DEVOPS SETUP
+  Duration: Week 1 – Week 2  |  Points Target: 17
+================================================================================
+
+  SPRINT GOAL:
+  Set up the complete project infrastructure, repositories, CI/CD pipelines,
+  and hosting environments so the team can begin feature development in
+  Sprint 1 with zero environment blockers.
+
+  SPRINT 0 RULE:
+  No feature code. Infrastructure and configuration only.
+  Sprint is complete when all pipelines are green and all environments
+  respond to health checks.
+
+================================================================================
+  STORIES IN THIS SPRINT
+================================================================================
+
+  ┌───────────┬────────────────────────────────────────────────────┬────────┐
+  │  STORY ID │  TITLE                                             │  PTS   │
+  ├───────────┼────────────────────────────────────────────────────┼────────┤
+  │  NBS-001  │  Create monorepo with backend/web/mobile workspaces│  2     │
+  │  NBS-002  │  Configure GitHub repo with branch protection rules│  1     │
+  │  NBS-003  │  Create GitHub Actions CI pipelines (3 pipelines)  │  3     │
+  │  NBS-004  │  Deploy backend skeleton to Render with /health    │  2     │
+  │  NBS-005  │  Deploy React skeleton to Vercel with placeholder  │  1     │
+  │  NBS-006  │  Set up PostgreSQL on Render + enable PostGIS      │  2     │
+  │  NBS-007  │  Configure Upstash Redis + connect to backend      │  1     │
+  │  NBS-008  │  Set up Prisma schema + initial migration          │  3     │
+  │  NBS-009  │  Configure UptimeRobot to keep Render alive        │  1     │
+  │  NBS-010  │  Configure Cloudinary + test file upload           │  1     │
+  └───────────┴────────────────────────────────────────────────────┴────────┘
+  TOTAL: 17 points
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-001 | MONOREPO SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend together)
+  Points : 2
+
+  ACCEPTANCE CRITERIA:
+  Given a fresh GitHub repository
+  When the team runs the initial setup
+  Then the repo must have three workspace folders: /backend, /web, /mobile
+  And each folder has its own package.json with correct dependencies
+  And a root README.md describes the project and setup steps
+  And .gitignore excludes node_modules, .env, dist, build, *.apk
+
+  TASKS:
+  [ ] Initialize GitHub repository: tanzania-census (public or private)
+  [ ] Create /backend folder → npm init → install core deps:
+      express, prisma, @prisma/client, jsonwebtoken, bcryptjs,
+      dotenv, cors, helmet, morgan, express-rate-limit,
+      ioredis, node-cron, nodemailer, axios, pdf-lib, qrcode, zod
+  [ ] Create /web folder → npm create vite@latest → React + TypeScript
+      Install: tailwindcss, axios, react-query, zustand, recharts,
+      react-router-dom, react-hook-form, zod
+  [ ] Create /mobile folder → npx create-expo-app
+      Install: expo-camera, expo-location, expo-secure-store,
+      expo-notifications, @react-navigation/native, axios,
+      @nozbe/watermelondb, zustand, react-hook-form
+  [ ] Create root README.md with setup instructions
+  [ ] Create .env.example in each workspace
+  [ ] Add .gitignore at root level
+  [ ] Commit and push to dev branch
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-002 | GITHUB BRANCH PROTECTION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Scrum Master)
+  Points : 1
+
+  ACCEPTANCE CRITERIA:
+  Given the repository is created
+  When the team configures branch protection
+  Then main branch requires PR review from 1 other member before merge
+  And main branch requires all CI checks to pass before merge
+  And direct pushes to main are blocked
+  And dev branch requires CI checks to pass before merge
+
+  TASKS:
+  [ ] Go to GitHub repo → Settings → Branches → Add branch ruleset
+  [ ] For main: require PR review (1 approver), require status checks,
+      block direct pushes, require linear history
+  [ ] For dev: require status checks to pass before merge
+  [ ] Create GitHub Projects board with columns:
+      Backlog | Ready | In Progress | In Review | Done
+  [ ] Add all NBS-XXX stories as Issues in the project board
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-003 | GITHUB ACTIONS CI PIPELINES
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) leads backend pipeline
+           Member 2 (Frontend) leads web + mobile pipelines
+  Points : 3
+
+  ACCEPTANCE CRITERIA:
+  Given code is pushed to dev or a PR is opened to main
+  When GitHub Actions runs
+  Then backend pipeline runs: lint → test → build → deploy-staging
+  And web pipeline runs: lint → test → build → deploy-preview
+  And mobile pipeline runs: lint → test → expo-check
+  And all pipelines show green status before any merge is allowed
+
+  TASKS:
+  [ ] Create .github/workflows/backend-ci.yml:
+      ---
+      name: Backend CI
+      on:
+        push:
+          branches: [dev]
+          paths: ['backend/**']
+        pull_request:
+          branches: [main]
+      jobs:
+        lint-and-test:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with: { node-version: '20' }
+            - run: npm ci
+              working-directory: backend
+            - run: npm run lint
+              working-directory: backend
+            - run: npm test -- --coverage
+              working-directory: backend
+              env:
+                DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+                REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
+                JWT_ACCESS_SECRET: test-secret
+        build:
+          needs: lint-and-test
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with: { node-version: '20' }
+            - run: npm ci && npm run build
+              working-directory: backend
+        deploy-staging:
+          needs: build
+          if: github.ref == 'refs/heads/dev'
+          runs-on: ubuntu-latest
+          steps:
+            - run: curl -X POST ${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}
+      ---
+
+  [ ] Create .github/workflows/web-ci.yml (similar structure for web/)
+  [ ] Create .github/workflows/mobile-ci.yml (lint + expo-doctor only)
+  [ ] Add all required secrets to GitHub repository:
+      - TEST_DATABASE_URL (use Render staging DB)
+      - TEST_REDIS_URL (use Upstash)
+      - RENDER_STAGING_DEPLOY_HOOK_URL
+      - RENDER_BACKEND_DEPLOY_HOOK_URL
+      - VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+      - EXPO_TOKEN
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-004 | BACKEND SKELETON ON RENDER
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 2
+
+  ACCEPTANCE CRITERIA:
+  Given the backend is deployed to Render
+  When a GET request is made to /api/health
+  Then the response is: { "status": "ok", "timestamp": "<ISO date>" }
+  And the response status code is 200
+  And CORS is configured to allow web and mobile origins
+
+  TASKS:
+  [ ] Create backend/src/index.js (Express app entry)
+  [ ] Create backend/src/routes/health.js → GET /api/health
+  [ ] Add Helmet.js middleware for security headers
+  [ ] Add CORS middleware (restrict to Vercel URL + localhost)
+  [ ] Add Morgan for request logging
+  [ ] Add dotenv config loading
+  [ ] Create render.yaml at repo root:
+      ---
+      services:
+        - type: web
+          name: census-backend
+          env: node
+          plan: free
+          buildCommand: cd backend && npm install && npm run build
+          startCommand: cd backend && node dist/index.js
+          envVars:
+            - key: NODE_ENV
+              value: production
+      ---
+  [ ] Deploy to Render → set all env vars in Render dashboard
+  [ ] Verify GET /api/health returns 200 from Render URL
+  [ ] Set up Render auto-deploy from main branch
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-005 | WEB SKELETON ON VERCEL
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Frontend)
+  Points : 1
+
+  ACCEPTANCE CRITERIA:
+  Given the React web app is deployed to Vercel
+  When the Vercel URL is opened
+  Then a placeholder page shows "NBS Census System — Coming Soon"
+  And the page loads within 3 seconds
+  And the Vercel preview URL is shared in the team channel
+
+  TASKS:
+  [ ] Connect GitHub repo to Vercel project (root: /web)
+  [ ] Configure Vercel: framework=Vite, build=npm run build, output=dist
+  [ ] Set VITE_API_BASE_URL in Vercel environment variables
+  [ ] Create web/src/App.tsx with placeholder landing page
+  [ ] Push to dev → verify Vercel preview deploys automatically
+  [ ] Configure production deploy from main branch
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-006 | POSTGRESQL + POSTGIS ON RENDER
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 2
+
+  ACCEPTANCE CRITERIA:
+  Given a PostgreSQL database is created on Render
+  When the Prisma migration runs
+  Then the PostGIS extension is enabled (SELECT PostGIS_Version() returns a value)
+  And the DATABASE_URL is connected to the backend successfully
+  And the backend logs confirm database connection on startup
+
+  TASKS:
+  [ ] Create PostgreSQL 16 database on Render (free tier)
+  [ ] Copy DATABASE_URL from Render → add to backend .env + Render env vars
+  [ ] Create backend/prisma/schema.prisma with datasource block:
+      ---
+      datasource db {
+        provider = "postgresql"
+        url      = env("DATABASE_URL")
+      }
+      generator client {
+        provider = "prisma-client-js"
+      }
+      ---
+  [ ] Create first migration that enables PostGIS:
+      Create backend/prisma/migrations/0001_enable_postgis/migration.sql:
+      CREATE EXTENSION IF NOT EXISTS postgis;
+  [ ] Run: npx prisma migrate dev --name enable_postgis
+  [ ] Add Prisma client initialization to backend/src/lib/prisma.js
+  [ ] Test connection: query SELECT PostGIS_Version() and log result
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-007 | UPSTASH REDIS SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 1
+
+  ACCEPTANCE CRITERIA:
+  Given Upstash Redis is configured
+  When the backend starts
+  Then the Redis client connects successfully and logs confirmation
+  And a test SET/GET operation succeeds on startup
+  And the REDIS_URL is stored securely in environment variables
+
+  TASKS:
+  [ ] Create Upstash account → create Redis database (free)
+  [ ] Copy REDIS_URL → add to backend .env + Render env vars + GitHub Secrets
+  [ ] Install ioredis: npm install ioredis
+  [ ] Create backend/src/lib/redis.js with connection and ping test
+  [ ] Add Redis connection status to /api/health response:
+      { "status": "ok", "redis": "connected", "db": "connected" }
+  [ ] Test locally and on Render staging
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-008 | PRISMA SCHEMA + INITIAL MIGRATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  ACCEPTANCE CRITERIA:
+  Given Prisma is configured with PostgreSQL + PostGIS
+  When the initial migration runs
+  Then all tables defined in the system architecture are created in the DB
+  And the Prisma client generates correct TypeScript types for all models
+  And npx prisma studio shows all tables in the browser
+
+  TASKS:
+  [ ] Write full backend/prisma/schema.prisma with ALL models:
+      - SuperAdmin, DistrictAdmin, VillageOfficer, HospitalOfficer
+      - PublicUser
+      - Region, District, Ward, Village
+      - Citizen, CitizenChildren
+      - Birth, Death, Marriage, Migration
+      - Building, PublicInfrastructure, HealthFacility
+      - PopulationSnapshot, AuditLog
+  [ ] Add @map and @@map for snake_case table names
+  [ ] Add all ENUM types (VitalStatus, MaritalStatus, EducationLevel, etc.)
+  [ ] Run: npx prisma migrate dev --name initial_schema
+  [ ] Run: npx prisma generate
+  [ ] Verify with: npx prisma studio
+  [ ] Seed script: create backend/prisma/seed.js with:
+      - 5 sample regions (Dar es Salaam, Dodoma, Arusha, Mwanza, Zanzibar)
+      - First super admin with a temporary password
+  [ ] Run: npx prisma db seed
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-009 | UPTIMEROBOT KEEP-ALIVE
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Scrum Master)
+  Points : 1
+
+  ACCEPTANCE CRITERIA:
+  Given Render free tier sleeps after 15 minutes of inactivity
+  When UptimeRobot is configured
+  Then it pings GET /api/health every 10 minutes
+  And Render backend stays awake with no cold starts after initial setup
+
+  TASKS:
+  [ ] Create UptimeRobot account (free)
+  [ ] Add monitor: HTTP(S) → URL: https://<render-url>/api/health
+  [ ] Set check interval: 10 minutes
+  [ ] Set alert email for downtime notifications
+  [ ] Verify monitor shows "Up" status after first check
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-010 | CLOUDINARY SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 1
+
+  ACCEPTANCE CRITERIA:
+  Given Cloudinary is configured in the backend
+  When a test image is uploaded from the backend
+  Then the image is stored in Cloudinary and a secure URL is returned
+  And the URL is accessible from a browser
+  And credentials are stored in environment variables only
+
+  TASKS:
+  [ ] Create Cloudinary account (free tier)
+  [ ] Install cloudinary npm package: npm install cloudinary
+  [ ] Create backend/src/lib/cloudinary.js with upload helper function
+  [ ] Create upload presets: census_photos, census_signatures, census_pdfs
+  [ ] Add env vars: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+  [ ] Write and run a test upload script to verify configuration
+  [ ] Add Cloudinary env vars to Render dashboard and GitHub Secrets
+
+
+================================================================================
+  SPRINT 0 — CHECKLIST BEFORE DECLARING COMPLETE
+================================================================================
+
+  [ ] GitHub repo exists with /backend, /web, /mobile folders
+  [ ] Branch protection is active on main and dev
+  [ ] All 3 CI pipelines run and are GREEN on dev branch
+  [ ] Backend responds to GET /api/health on Render URL (status 200)
+  [ ] React web app loads on Vercel URL
+  [ ] PostgreSQL connected + PostGIS extension active
+  [ ] Redis connected + ping test passes
+  [ ] All Prisma tables created (npx prisma studio shows all tables)
+  [ ] Seed data present (5 regions + 1 super admin)
+  [ ] UptimeRobot monitor is active and showing "Up"
+  [ ] Cloudinary test upload succeeds
+  [ ] All environment variables documented in each .env.example
+  [ ] All secrets added to GitHub Secrets and Render dashboard
+  [ ] Sprint 0 retro done → action items recorded
+
+================================================================================
+  END OF SPRINT 0
+================================================================================
