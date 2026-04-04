@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.npm
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Expo / React Native
+.expo/
+*.apk
+*.aab
+*.ipa
+
+# Prisma
+code/backend/prisma/generated/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Test coverage
+coverage/
