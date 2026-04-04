@@ -1,0 +1,232 @@
+================================================================================
+  AUTOMATED DIGITAL LIVE CENSUS FOR TANZANIA
+  SPRINT 2 — OFFICER MOBILE ONBOARDING & GEO-FENCE
+  Duration: Week 5 – Week 6  |  Points Target: 23
+================================================================================
+
+  SPRINT GOAL:
+  Enable District Admins to register Village Officers and Hospital Officers
+  through the mobile apps. Implement device binding and GPS geo-fence
+  enforcement so that officers can only operate within their assigned
+  village or facility boundary.
+
+  PREREQUISITE: Sprint 1 must be fully complete with all auth flows working.
+
+================================================================================
+  STORIES IN THIS SPRINT
+================================================================================
+
+  ┌───────────┬────────────────────────────────────────────────────┬────────┐
+  │  STORY ID │  TITLE                                             │  PTS   │
+  ├───────────┼────────────────────────────────────────────────────┼────────┤
+  │  NBS-017  │  District Admin creates Village Officer            │  5     │
+  │  NBS-018  │  Mobile device binding + GPS geo-fence setup       │  8     │
+  │  NBS-019  │  Geo-fence enforcement on every officer session    │  5     │
+  │  NBS-020  │  District Admin creates Hospital Officer           │  5     │
+  └───────────┴────────────────────────────────────────────────────┴────────┘
+  TOTAL: 23 points
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-017 | DISTRICT ADMIN CREATES VILLAGE OFFICER
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend — District Admin web)
+  Points : 5
+
+  USER STORY:
+  As a District Admin, I can register a new Village Officer by entering their
+  Employee ID, NIDA number, and email so they receive an onboarding email
+  with the mobile app link and activation token.
+
+  ACCEPTANCE CRITERIA:
+  Given I am logged in as a District Admin
+  When I enter a valid Employee ID, NIDA number, and email for a new officer
+  Then the system calls NIDA API to auto-fetch the officer's bio data
+  And a village_officer record is created with status=pending
+  And the officer is pre-assigned to a ward and village I select
+  And a one-time login token email is sent with the Expo app download link
+  And I can see the new officer in my officer list with status "Pending"
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/officers/village with auth guard (district_admin only)
+  [ ] Validate: district_admin can only create officers in their own district
+  [ ] NIDA fetch → insert village_officer (status=pending)
+  [ ] Add ward_id and village_id selection to request body
+  [ ] Fetch village geo_fence_polygon from villages table → store in officer record
+  [ ] Generate one-time token → send onboarding email (officer template)
+  [ ] Create GET /api/officers/village (district-scoped) → list officers + status
+  [ ] Write Jest tests
+
+  TASKS — FRONTEND (District Admin web):
+  [ ] Create "Register Village Officer" form:
+      Fields: employee_id, nida_number, email
+      Dropdowns: Ward (filtered by admin's district) → Village (filtered by ward)
+  [ ] Show NIDA preview card on fetch
+  [ ] Show officer list table: name, village, status (Pending/Active/Offline/Suspended)
+  [ ] Add Suspend / Reactivate buttons with confirm modal
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-018 | MOBILE DEVICE BINDING + GPS GEO-FENCE SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile — React Native/Expo)
+  Points : 8  (largest story of the sprint — 2 members pair where possible)
+
+  USER STORY:
+  As a new Village Officer, when I enter my one-time token in the mobile app,
+  the app silently binds to my device and records my GPS location to establish
+  my village geo-fence, so I am permanently tied to one device and one location.
+
+  ACCEPTANCE CRITERIA:
+  Given I open the officer mobile app for the first time and enter my token
+  When the token is validated by the backend
+  Then the app shows a progress screen ("Setting up your device...")
+  And in the background:
+    a) Device fingerprint is computed: HMAC-SHA256(deviceId + OS + hardwareId)
+    b) GPS coordinates are captured (expo-location)
+    c) Both are sent to the backend
+    d) Backend verifies GPS is within the pre-assigned village boundary
+    e) Backend stores device fingerprint + marks officer as device-bound
+  And when setup is complete, the app navigates to the profile setup page
+  And if GPS is outside the village boundary, setup fails with an error message
+  And if the device is already bound to another officer, setup is rejected
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/officers/village/bind-device
+      { token, deviceFingerprint, gpsLat, gpsLng }
+  [ ] Verify token (hash match + not expired + not yet bound)
+  [ ] Compute: ST_Within(ST_Point(gpsLng, gpsLat), village geo_fence_polygon)
+      → if false, return 400 { error: "GPS outside assigned village boundary" }
+  [ ] If unique device fingerprint and inside boundary:
+      → update village_officer: device_fingerprint, device_bound_at
+      → invalidate token (single use)
+      → return 200 { message: "Device bound successfully" }
+  [ ] Write Jest test with mock PostGIS geometry queries
+
+  TASKS — MOBILE (React Native + Expo):
+  [ ] Create /welcome screen with token text input
+  [ ] On token submit → show "Setting up your device..." loading screen
+  [ ] Import expo-location → request foreground location permission
+      → if denied → show error "Location permission required" + exit
+  [ ] Import expo-device → get device type, OS, and deviceId
+  [ ] Compute fingerprint: sha256(deviceId + OS + modelName) using crypto-js
+  [ ] Call POST /api/officers/village/bind-device with fingerprint + GPS
+  [ ] Handle responses:
+      - 200: navigate to /profile-setup
+      - 400 GPS outside boundary: "You are outside your assigned village area"
+      - 400 already bound: "This device is already registered to another officer"
+      - 401 invalid token: "Invalid or expired activation token"
+  [ ] Store deviceFingerprint in expo-secure-store for future session checks
+  [ ] Create WatermelonDB local schema for offline data sync (setup only)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-019 | GEO-FENCE ENFORCEMENT ON EVERY SESSION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile) + Member 1 (Backend middleware)
+  Points : 5
+
+  USER STORY:
+  As the system, every time an officer opens the app or starts a new session,
+  I verify their GPS location and device fingerprint to ensure they are inside
+  their assigned boundary and on their bound device.
+
+  ACCEPTANCE CRITERIA:
+  Given I am a bound Village Officer opening the app
+  When I attempt to log in
+  Then the app captures my current GPS and device fingerprint
+  And sends them to the backend with my login credentials
+  And if GPS is inside my village boundary AND device matches: login succeeds
+  And if GPS is outside boundary: "You are not in your assigned village area"
+  And if device fingerprint doesn't match: "Unauthorized device detected"
+  And the geo-fence polygon is cached in expo-secure-store for offline checks
+
+  TASKS — BACKEND:
+  [ ] Modify POST /api/auth/login (for officer role) to accept:
+      { email, password, deviceFingerprint, gpsLat, gpsLng }
+  [ ] After password validation → check deviceFingerprint matches stored hash
+  [ ] Run ST_Within check against stored geo_fence_polygon
+  [ ] If both pass → issue JWT (role=village_officer, scope=village_id)
+  [ ] Return geo_fence_polygon in login response (for offline caching)
+  [ ] Log GPS coordinates in audit_logs for every officer login
+
+  TASKS — MOBILE:
+  [ ] On app open → retrieve stored deviceFingerprint from expo-secure-store
+  [ ] Capture current GPS via expo-location
+  [ ] Include fingerprint + GPS in all login API calls
+  [ ] On login success → cache geo_fence_polygon GeoJSON in expo-secure-store
+  [ ] For offline mode: check GPS against cached polygon using
+      @turf/boolean-point-in-polygon (client-side geo-fence check)
+  [ ] Show persistent location status bar in app: "Inside village ✓" or "⚠ Outside area"
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-020 | DISTRICT ADMIN CREATES HOSPITAL OFFICER
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend + Mobile)
+  Points : 5
+
+  USER STORY:
+  As a District Admin, I can register a Hospital Officer by entering their
+  Employee ID, NIDA number, email, and Facility Registration Number. The
+  system auto-fetches facility details and geo-fence from MoHCDGEC API.
+
+  ACCEPTANCE CRITERIA:
+  Given I am a District Admin
+  When I enter Employee ID + NIDA + email + Facility Registration Number
+  Then the system fetches the officer's bio from NIDA
+  And fetches the facility's name, type, location, and GPS boundary from MoHCDGEC
+  And a hospital_officer record is created with the facility geo-fence stored
+  And an onboarding email is sent with the mobile app link
+  And the facility geo-fence is used for device binding (same flow as NBS-018)
+  But the app shows "Hospital Officer" branding and only hospital-related features
+
+  TASKS — BACKEND:
+  [ ] Create mock MoHCDGEC service at /api/mock/facility/:reg_no for dev
+  [ ] Create POST /api/officers/hospital (district_admin auth guard)
+  [ ] NIDA fetch → MoHCDGEC fetch (facility name, type, geo polygon)
+  [ ] Insert hospital_officer record with facility_id and geo_fence_polygon
+  [ ] Generate token → send onboarding email
+  [ ] Create POST /api/officers/hospital/bind-device (same as village but for facility)
+  [ ] Write Jest tests
+
+  TASKS — FRONTEND (District Admin web):
+  [ ] Create "Register Hospital Officer" form:
+      Fields: employee_id, nida_number, email, facility_reg_number
+  [ ] Show facility preview card after MoHCDGEC fetch (name, type, location)
+  [ ] Show hospital officer list with status
+
+  TASKS — MOBILE:
+  [ ] Reuse device binding flow (NBS-018) — same screen, same logic
+  [ ] Distinguish officer type from token payload (village_officer vs hospital_officer)
+  [ ] After binding, profile setup adds: Facility Registration Number field
+  [ ] After login, hospital officer sees only: Births / Deaths menu items
+
+
+================================================================================
+  SPRINT 2 — DONE CHECKLIST
+================================================================================
+
+  [ ] District Admin can register Village Officers from web dashboard
+  [ ] District Admin can register Hospital Officers from web dashboard
+  [ ] Village Officer receives onboarding email with app link + token
+  [ ] Hospital Officer receives onboarding email with app link + token
+  [ ] Officer mobile app token entry triggers background device binding
+  [ ] Device fingerprint is computed and stored on first activation
+  [ ] GPS is verified against village/facility geo-fence on first setup
+  [ ] Officers outside boundary cannot complete setup (error shown)
+  [ ] On every login, GPS + device fingerprint are re-validated
+  [ ] Geo-fence polygon is cached locally for offline enforcement
+  [ ] Hospital officer app shows only birth/death features
+  [ ] Officer list in District Admin dashboard shows correct statuses
+  [ ] All CI pipelines remain green
+  [ ] Sprint Review demo completed (geo-fence blocking shown live)
+  [ ] Sprint Retrospective done + action items recorded
+
+================================================================================
+  END OF SPRINT 2
+================================================================================
