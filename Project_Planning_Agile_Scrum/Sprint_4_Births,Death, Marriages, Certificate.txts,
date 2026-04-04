@@ -1,0 +1,307 @@
+================================================================================
+  AUTOMATED DIGITAL LIVE CENSUS FOR TANZANIA
+  SPRINT 4 — BIRTHS, DEATHS, MARRIAGES & CERTIFICATES
+  Duration: Week 9 – Week 10  |  Points Target: 34
+================================================================================
+
+  SPRINT GOAL:
+  Implement all civil registry events: birth registration by hospital officers,
+  death registration by both hospital and village officers, marriage registration
+  and rule enforcement, and PDF certificate generation with QR codes pushed to RITA.
+
+  PREREQUISITE: Sprint 3 must be fully complete. Citizen registration working.
+
+================================================================================
+  STORIES IN THIS SPRINT
+================================================================================
+
+  ┌───────────┬────────────────────────────────────────────────────┬────────┐
+  │  STORY ID │  TITLE                                             │  PTS   │
+  ├───────────┼────────────────────────────────────────────────────┼────────┤
+  │  NBS-030  │  National ID card PDF generation (10-year expiry)  │  5     │
+  │  NBS-032  │  Hospital officer: register newborn birth          │  5     │
+  │  NBS-033  │  System auto-generates National ID for newborn     │  3     │
+  │  NBS-034  │  Birth certificate PDF + QR + RITA push            │  5     │
+  │  NBS-036  │  Village officer: register death outside hospital  │  3     │
+  │  NBS-037  │  Hospital officer: register in-hospital death      │  5     │
+  │  NBS-038  │  Death: update status, freeze age, cert, RITA push │  5     │
+  │  NBS-039  │  Village officer: register marriage (enter NIDs)   │  3     │
+  │  NBS-040  │  Marriage rule enforcement (female single-marriage)│  5     │
+  │  NBS-041  │  Male multi-marriage allowed                       │  2     │
+  │  NBS-042  │  Marriage certificate PDF + QR + RITA push         │  3     │
+  └───────────┴────────────────────────────────────────────────────┴────────┘
+  TOTAL: 44 points  (split NBS-030 + NBS-042 to Sprint 5 if velocity requires)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-030 | NATIONAL ID CARD PDF GENERATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — print trigger)
+  Points : 5
+
+  USER STORY:
+  As a Village Officer, after completing citizen registration I can generate
+  a National ID card as a PDF that the citizen can print, valid for 10 years.
+
+  ACCEPTANCE CRITERIA:
+  Given a citizen registration is completed successfully
+  When the officer taps "Generate National ID Card"
+  Then a PDF is generated with: citizen photo, full name, NID number,
+       date of birth, gender, issue date, expiry date (issued + 10 years)
+       and a signed QR code linking to the national registry
+  And the PDF is stored in Cloudinary and the URL returned to the officer
+  And the citizen record is updated: national_id_issued + national_id_expires
+  And the PDF is viewable on the mobile device and shareable
+
+  TASKS — BACKEND:
+  [ ] Install pdf-lib and qrcode: npm install pdf-lib qrcode
+  [ ] Create backend/src/services/id-card.service.js
+  [ ] Load NBS ID card template (design a basic A4 PDF layout using pdf-lib)
+  [ ] Fill fields: photo (embed as JPEG), NID, full name, DOB, gender,
+      issue date, expiry date (issued + 10 years)
+  [ ] Generate QR code: qrcode.toBuffer({ data: nidNumber, signature: sign(nidNumber) })
+  [ ] Embed QR code in PDF
+  [ ] Upload PDF to Cloudinary (census_pdfs folder)
+  [ ] Update citizen: national_id_issued = today, national_id_expires = today+10yr
+  [ ] Create POST /api/citizens/:citizenId/generate-id-card
+  [ ] Write Jest test with mock pdf-lib and Cloudinary
+
+  TASKS — MOBILE (Officer App):
+  [ ] Add "Generate ID Card" button on registration success screen
+  [ ] Show loading indicator while PDF is generated server-side
+  [ ] On success: display PDF viewer (expo-pdf-viewer or WebView)
+  [ ] Share button: allow officer to share PDF via WhatsApp / print
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-032 + NBS-033 | BIRTH REGISTRATION + NATIONAL ID GENERATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — hospital officer app)
+  Points : 8  (NBS-032: 5pts + NBS-033: 3pts)
+
+  USER STORY:
+  As a Hospital Officer, I can register a newborn's birth with their details
+  and parent National IDs so the system creates a citizen record and issues
+  a unique National ID for the child.
+
+  ACCEPTANCE CRITERIA:
+  Given I am a Hospital Officer inside my facility geo-fence
+  When I navigate to "Register Birth"
+  Then I can enter: child first name, middle name, surname, gender, date of birth
+  And I enter Father National ID → system verifies father exists in DB
+  And I enter Mother National ID → system verifies mother exists in DB
+  And my facility_id is auto-attached from my officer profile
+  And my officer ID is linked as the delivery officer
+  And on submit: the system generates a unique National ID for the newborn
+  And a citizen record is created with vital_status=ALIVE, age tracking starts
+  And a birth record is created in the births table
+  And the citizen_children table is updated for both parents
+
+  NATIONAL ID GENERATION RULES:
+  Format: TZ-YYYY-XXXXXXXX (year of birth + 8-digit padded sequence number)
+  Must be globally unique — use DB sequence or UUID-to-numeric conversion
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/births with auth guard (hospital_officer only)
+  [ ] Validate: facility_id matches officer's facility
+  [ ] Look up father NID + mother NID in citizens table
+  [ ] Generate unique NID: TZ-{birthYear}-{padStart(sequence, 8, '0')}
+      Use PostgreSQL sequence: CREATE SEQUENCE nid_seq START 10000000
+  [ ] Insert citizen record (child) with:
+      national_id = generated, vital_status=ALIVE, father/mother links
+  [ ] Insert birth record (facility_id, officer_id, father/mother citizen_ids)
+  [ ] Insert citizen_children rows for father and mother
+  [ ] Return birth_id and generated national_id
+  [ ] Write Jest tests
+
+  TASKS — MOBILE (Hospital Officer App):
+  [ ] Create BirthRegistrationScreen:
+      Fields: first_name, middle_name, surname, gender radio, date_of_birth (date picker)
+      Father NID input + verify button → show father name on verify
+      Mother NID input + verify button → show mother name on verify
+  [ ] Submit → show success screen with generated NID
+  [ ] "Generate Birth Certificate" button → triggers NBS-034
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-034 | BIRTH CERTIFICATE PDF + QR + RITA PUSH
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 5
+
+  USER STORY:
+  As the system, after a birth is registered I generate a birth certificate
+  PDF with a signed QR code and push the certificate data to RITA API.
+
+  ACCEPTANCE CRITERIA:
+  Given a birth record has been successfully created
+  When the officer requests the birth certificate
+  Then a PDF birth certificate is generated with:
+       Child full name, NID number, date of birth, gender
+       Father full name + NID, Mother full name + NID
+       Facility name and registration number
+       Delivery officer name and NID
+       Issue date, certificate number, signed QR code
+  And the QR code payload is: { certNo, childNid, dob, issueDate, signature }
+  And the PDF is stored in Cloudinary and the URL saved in births table
+  And the birth data is pushed to RITA API (mock in dev)
+  And rita_synced = true on success, rita_synced = false + retry queue on failure
+
+  TASKS:
+  [ ] Create backend/src/services/birth-cert.service.js using pdf-lib
+  [ ] Design birth certificate layout (NBS certificate style — TBD by client)
+  [ ] Sign QR payload with HMAC-SHA256(secretKey, JSON.stringify(payload))
+  [ ] Create mock RITA API at /api/mock/rita/births for dev environment
+  [ ] Push to RITA: POST {rita_url}/births with certificate data
+  [ ] On RITA push success: update births.rita_synced = true
+  [ ] On RITA push fail: log error, add to retry queue (node-cron retry every 1hr)
+  [ ] Create POST /api/births/:birthId/certificate route
+  [ ] Write Jest tests
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-036 + NBS-037 + NBS-038 | DEATH REGISTRATION (ALL CASES)
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — both officer apps)
+  Points : 13  (NBS-036: 3, NBS-037: 5, NBS-038: 5)
+
+  USER STORY A (NBS-036) — Village Officer:
+  As a Village Officer, I can register a death that occurred outside a
+  hospital by entering the citizen's National ID, date of death, and cause.
+
+  USER STORY B (NBS-037) — Hospital Officer:
+  As a Hospital Officer, I can register an in-hospital death for either
+  an adult citizen or an infant (using parent NIDs).
+
+  USER STORY C (NBS-038) — System actions on death:
+  As the system, when a death is registered I update the citizen's status,
+  freeze their age, generate a death certificate, and push to RITA.
+
+  ACCEPTANCE CRITERIA (Combined):
+  OUTSIDE HOSPITAL (Village Officer):
+  → Enter citizen NID → fetch citizen info → confirm details
+  → Enter date of death, cause of death
+  → On submit: citizen vital_status = DECEASED, age frozen
+  → Death certificate generated, RITA push attempted
+
+  INSIDE HOSPITAL — ADULT (Hospital Officer):
+  → Enter citizen NID → fetch citizen info
+  → Enter cause of death, date of death
+  → Enter duty doctor/nurse NID (linked to officer record)
+  → On submit: citizen vital_status = DECEASED, age frozen
+  → Certificate generated, RITA push
+
+  INSIDE HOSPITAL — INFANT (Hospital Officer):
+  → Select "Infant" category
+  → Enter mother NID + father NID (verify both exist)
+  → Enter date of death, cause if applicable
+  → No citizen record to update (infant never had full registration)
+  → Certificate generated (infant death cert), RITA push
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/deaths with auth (village_officer OR hospital_officer)
+  [ ] Body: { citizenNid?, category, locationType, causeOfDeath, dateOfDeath,
+              dutyOfficerNid?, infantFatherNid?, infantMotherNid?, facilityId? }
+  [ ] Validation: hospital_officer cannot register outside-hospital deaths
+  [ ] Validation: village_officer cannot register in-hospital deaths
+  [ ] On adult/outside death: UPDATE citizens SET vital_status=DECEASED
+      (do NOT change age — leave as current value, frozen)
+  [ ] Generate death certificate PDF (similar to birth cert service)
+  [ ] Push to RITA mock API
+  [ ] Set rita_synced flag
+  [ ] Write Jest tests for all three cases
+
+  TASKS — MOBILE (Village Officer App):
+  [ ] Add "Register Death" menu item in village officer app
+  [ ] NID entry → citizen preview card → date picker + cause text input
+  [ ] Submit → show death certificate download option
+
+  TASKS — MOBILE (Hospital Officer App):
+  [ ] Add "Register Death" menu item
+  [ ] Category selector: Infant / Adult
+  [ ] Adult: NID entry → cause + date + duty officer NID
+  [ ] Infant: father NID + mother NID + date + cause
+  [ ] Submit → certificate download
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-039 + NBS-040 + NBS-041 + NBS-042 | MARRIAGE REGISTRATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — village officer app)
+  Points : 13  (NBS-039: 3, NBS-040: 5, NBS-041: 2, NBS-042: 3)
+
+  USER STORY:
+  As a Village Officer, I can register a marriage between a husband and wife
+  by verifying both citizens. The system enforces marriage rules and issues
+  a unique marriage certificate.
+
+  ACCEPTANCE CRITERIA:
+  Given I am in the "Register Marriage" screen
+  When I enter Husband NID and Wife NID
+  Then both citizen records are fetched and displayed for confirmation
+  And the system enforces marriage rules:
+      MALE: can have multiple active marriages simultaneously → ALLOWED
+      FEMALE: if has active marriage (status=active AND husband vital_status=alive)
+              → BLOCKED with message: "This citizen already has an active marriage"
+      FEMALE: if last marriage dissolved/unregistered OR husband deceased → ALLOWED
+  And on approval: a unique marriage_id is generated by the system
+  And marriage status = ACTIVE
+  And a marriage certificate PDF is generated with both citizen details
+  And the certificate is pushed to RITA API
+  And the marriage is linked to both citizens' records
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/marriages with auth guard (village_officer only)
+  [ ] Validate Husband NID → fetch citizen (must be ALIVE + gender=male)
+  [ ] Validate Wife NID → fetch citizen (must be ALIVE + gender=female)
+  [ ] Marriage rule check for wife:
+      SELECT * FROM marriages WHERE wife_id = ? AND status = 'active'
+      JOIN citizens ON citizens.citizen_id = marriages.husband_id
+      WHERE citizens.vital_status = 'alive'
+      → if record found → return 409 Conflict with message
+  [ ] Generate marriage_cert_no: MARR-{year}-{sequence}
+  [ ] Insert marriages record (status=active)
+  [ ] Generate marriage certificate PDF (pdf-lib)
+  [ ] Push to RITA mock API
+  [ ] Write Jest tests: valid marriage / female already married / male multi-marriage
+
+  TASKS — MOBILE (Village Officer App):
+  [ ] Add "Register Marriage" menu item
+  [ ] Husband NID input + verify → show husband name, DOB, status
+  [ ] Wife NID input + verify → show wife name, DOB, check active marriage
+  [ ] Show "Blocked" screen if wife has active marriage (with explanation)
+  [ ] Confirmation screen showing both citizens' details
+  [ ] Submit → show generated marriage_id + certificate download option
+
+
+================================================================================
+  SPRINT 4 — DONE CHECKLIST
+================================================================================
+
+  [ ] National ID card PDF is generated after citizen registration
+  [ ] Birth registration works in hospital officer app
+  [ ] Newborn gets a unique National ID (TZ-YYYY-XXXXXXXX format)
+  [ ] Birth certificate PDF is generated with signed QR code
+  [ ] Birth data is pushed to RITA mock API (rita_synced = true)
+  [ ] Village officer can register outside-hospital deaths
+  [ ] Hospital officer can register adult in-hospital deaths
+  [ ] Hospital officer can register infant deaths with parent NIDs
+  [ ] On death: citizen status = DECEASED, age frozen
+  [ ] Death certificate PDF generated + RITA push
+  [ ] Marriage registration works: husband + wife NID verification
+  [ ] Female multi-marriage rule enforced (blocked when active marriage exists)
+  [ ] Male multi-marriage allowed
+  [ ] Marriage certificate PDF generated + RITA push
+  [ ] All certificate PDFs viewable and shareable from mobile app
+  [ ] All CI pipelines remain green
+  [ ] Sprint Review demo completed
+  [ ] Sprint Retrospective done + action items recorded
+
+================================================================================
+  END OF SPRINT 4
+================================================================================
