@@ -1,0 +1,375 @@
+================================================================================
+  AUTOMATED DIGITAL LIVE CENSUS FOR TANZANIA
+  SPRINT 5 — MIGRATIONS, BUILDINGS & INFRASTRUCTURE
+  Duration: Week 11 – Week 12  |  Points Target: 27
+================================================================================
+
+  SPRINT GOAL:
+  Implement the national migration tracking system including request, approval,
+  and auto-expiry flows. Add building and infrastructure registration. Complete
+  marriage dissolution with institutional verification. Add age auto-increment
+  cron job for all alive citizens.
+
+  PREREQUISITE: Sprint 4 must be fully complete. All civil registry events working.
+
+================================================================================
+  STORIES IN THIS SPRINT
+================================================================================
+
+  ┌───────────┬────────────────────────────────────────────────────┬────────┐
+  │  STORY ID │  TITLE                                             │  PTS   │
+  ├───────────┼────────────────────────────────────────────────────┼────────┤
+  │  NBS-035  │  Age auto-increment cron job (annual, alive only)  │  3     │
+  │  NBS-043  │  Marriage dissolution request + institution verify │  5     │
+  │  NBS-044  │  Village officer: initiate migration request       │  3     │
+  │  NBS-045  │  Target officer: receive + confirm/reject migration│  5     │
+  │  NBS-046  │  Auto-expire migration after 30 days (cron)        │  3     │
+  │  NBS-047  │  On migration: update residence + invalidate cache │  3     │
+  │  NBS-048  │  Register buildings (all types)                    │  5     │
+  │  NBS-049  │  Register public infrastructure                    │  3     │
+  └───────────┴────────────────────────────────────────────────────┴────────┘
+  TOTAL: 30 points  (move NBS-043 to Sprint 6 backlog if needed)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-035 | AGE AUTO-INCREMENT CRON JOB
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As the system, I automatically increment each citizen's age on their
+  birthday every year so that age is always current without manual updates.
+
+  ACCEPTANCE CRITERIA:
+  Given a daily cron job runs at midnight (Tanzania time, UTC+3)
+  When the job executes
+  Then it finds all citizens where:
+       date_of_birth month = today's month AND date_of_birth day = today's day
+       AND vital_status = ALIVE
+  And increments their age by 1
+  And citizens with vital_status = DECEASED are skipped (age stays frozen)
+  And the cron logs: date, count of citizens updated, duration
+
+  TASKS:
+  [ ] Create backend/src/jobs/age-update.job.js
+  [ ] Query: WHERE EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
+             AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM CURRENT_DATE)
+             AND vital_status = 'alive'
+  [ ] Batch UPDATE: SET age = age + 1 for matching records
+  [ ] Schedule: cron.schedule('0 21 * * *', ageUpdateJob)
+      (21:00 UTC = midnight Tanzania EAT UTC+3)
+  [ ] Log results to console (Render logs)
+  [ ] Write Jest test: mock today's date → verify correct citizens updated
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-043 | MARRIAGE DISSOLUTION REQUEST
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile + Web)
+  Points : 5
+
+  USER STORY:
+  As a Village Officer, I can submit a marriage dissolution request by entering
+  the marriage_id. The request must be verified by an authorized institution
+  before the marriage status changes to DISSOLVED.
+
+  ACCEPTANCE CRITERIA:
+  Given I am a Village Officer
+  When I enter a valid marriage_id
+  Then the system returns the marriage record details (husband, wife, date)
+  And I submit an unregister request with the institution name and reason
+  And the marriage status changes to pending_dissolution
+  And a Super Admin or authorized institution can approve the request via
+  the web dashboard
+  And on approval: status → DISSOLVED, dissolution_date, reason, auth saved
+  And wife's marriage lock is released (can register new marriage)
+
+  NOTE: Full institutional workflow requires integration beyond this sprint.
+        Implement the request/approval flow between Super Admin and Village Officer.
+        External institution integration is deferred to post-MVP.
+
+  TASKS — BACKEND:
+  [ ] Add ENUM value: pending_dissolution to marriages.status
+  [ ] Create POST /api/marriages/:marriageId/dissolve-request
+      { institutionName, reason } (village_officer auth)
+  [ ] Update marriage status → pending_dissolution
+  [ ] Create GET /api/marriages/pending-dissolution (super_admin auth)
+  [ ] Create POST /api/marriages/:marriageId/approve-dissolution (super_admin auth)
+      → update: status=DISSOLVED, dissolution_date, reason, dissolution_auth
+  [ ] Write Jest tests
+
+  TASKS — FRONTEND (Super Admin web):
+  [ ] Add "Pending Marriage Dissolutions" section in Super Admin dashboard
+  [ ] Show list of pending requests with marriage details
+  [ ] Approve / Reject buttons with reason input
+
+  TASKS — MOBILE (Village Officer App):
+  [ ] Add "Unregister Marriage" menu item
+  [ ] Marriage ID input → show marriage preview card
+  [ ] Institution name input + reason text area
+  [ ] Submit → show "Request submitted for institutional verification"
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-044 | VILLAGE OFFICER: INITIATE MIGRATION REQUEST
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — village officer app)
+  Points : 3
+
+  USER STORY:
+  As a Village Officer, I can initiate a migration request for a citizen who
+  is moving to a new village by entering their NID, destination, and reason.
+
+  ACCEPTANCE CRITERIA:
+  Given I am in the "Register Migration" screen
+  When I enter a valid citizen NID
+  Then the system displays the citizen's current residence details
+  And I can select the destination: Region → District → Ward → Village
+  And I can enter the reason for migration from a preset list:
+      Economic activities | New job | Family | Education | Other (free text)
+  And on submit: a migration record is created (status=PENDING)
+  And expiry_date = request_date + 30 days
+  And a push notification is sent to the target village officer
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/migrations with auth guard (village_officer only)
+  [ ] Validate: source officer's village_id matches citizen's current_village_id
+  [ ] Insert migration record (status=PENDING, expiry=+30days)
+  [ ] Send push notification to target village officer (Expo Push Notifications)
+  [ ] Return migration_id to source officer
+  [ ] Write Jest tests
+
+  TASKS — MOBILE (Village Officer App):
+  [ ] Add "Register Migration" menu item
+  [ ] Citizen NID input → show current residence details
+  [ ] Cascading dropdowns: Region → District → Ward → Village (destination)
+  [ ] Reason selector + free text for "Other"
+  [ ] Submit → show migration_id + "Pending confirmation" status screen
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-045 | TARGET OFFICER: CONFIRM OR REJECT MIGRATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — target village officer app)
+  Points : 5
+
+  USER STORY:
+  As a target Village Officer, I receive a push notification for a pending
+  migration request and can confirm or reject it after physically verifying
+  the citizen in my village.
+
+  ACCEPTANCE CRITERIA:
+  Given a migration request has been initiated
+  When I receive a push notification on my officer app
+  Then I can view: citizen name, photo, NID, source village, reason, expiry date
+  And I can tap "Confirm" (citizen is physically present and verified)
+  And on confirm: migration status = CONFIRMED, citizen residence updated
+  And I can tap "Reject" with a required reason
+  And on reject: migration status = CANCELLED, source officer notified
+  And if I have multiple pending migrations, they are shown in a list
+
+  TASKS — BACKEND:
+  [ ] Create GET /api/migrations/pending (village_officer auth)
+      → returns pending migrations where target_officer = req.user
+  [ ] Create POST /api/migrations/:migrationId/confirm (village_officer auth)
+      → validate: requesting officer is the target officer
+      → call migration confirmation service (see NBS-047)
+  [ ] Create POST /api/migrations/:migrationId/reject { reason }
+      → update status=CANCELLED, rejection_reason saved
+      → notify source officer (push notification)
+  [ ] Write Jest tests
+
+  TASKS — MOBILE (Village Officer App):
+  [ ] Add "Pending Migrations" badge on officer home screen
+  [ ] Create PendingMigrationsScreen: list of incoming requests
+  [ ] MigrationDetailScreen: citizen photo, name, source village, reason, days left
+  [ ] Confirm button → success screen
+  [ ] Reject button → reason text input → submit
+
+  EXPO PUSH NOTIFICATIONS SETUP:
+  [ ] Install expo-notifications in mobile project
+  [ ] On officer login: register Expo push token with backend
+      POST /api/officers/push-token { expoPushToken }
+  [ ] Backend stores token in village_officers.expo_push_token column
+      (add column via Prisma migration)
+  [ ] Send notifications using Expo Push API:
+      POST https://exp.host/--/api/v2/push/send
+      { to: expoPushToken, title: "New Migration Request", body: "...", data: {...} }
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-046 | AUTO-EXPIRE MIGRATION AFTER 30 DAYS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As the system, I automatically cancel migration requests that have not been
+  confirmed by the target officer within 30 days of initiation.
+
+  ACCEPTANCE CRITERIA:
+  Given a cron job runs every hour
+  When it finds migration records where:
+       status = PENDING AND expiry_date < NOW()
+  Then it updates those records: status = EXPIRED
+  And sends a push notification to the source officer:
+      "Migration request for [citizen name] has expired"
+  And the citizen remains at their original village
+
+  TASKS:
+  [ ] Add migration-expire.job.js cron: '0 * * * *' (every hour)
+  [ ] Query expired pending migrations → batch UPDATE status=EXPIRED
+  [ ] For each expired migration: send push notification to source_officer
+  [ ] Log count of expired migrations per run
+  [ ] Write Jest test: mock date past expiry → verify status updated
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-047 | ON MIGRATION CONFIRM: UPDATE RESIDENCE + INVALIDATE CACHE
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As the system, when a migration is confirmed I update the citizen's residence
+  and invalidate the Redis population cache for both the source and destination
+  villages so that the analytics reflect the change within 15 minutes.
+
+  ACCEPTANCE CRITERIA:
+  Given a migration request has been confirmed by the target officer
+  When the confirmation is processed
+  Then citizens.current_village_id = to_village_id
+  And migrations.status = CONFIRMED, confirmed_date = NOW()
+  And Redis cache keys for both from_village_id and to_village_id are deleted:
+      DEL stats:village:{from_village_id}
+      DEL stats:village:{to_village_id}
+  And the ward, district, and region cache for both sides are also invalidated
+  And the next cron job run (within 15 min) will rebuild the cache
+
+  TASKS:
+  [ ] Create migration-confirm.service.js:
+      1. UPDATE citizens SET current_village_id = to_village_id WHERE citizen_id = ?
+      2. UPDATE migrations SET status=CONFIRMED, confirmed_date=NOW()
+      3. Collect all cache keys to invalidate:
+         stats:village:{from}, stats:village:{to}
+         stats:ward:{from_ward}, stats:ward:{to_ward}
+         stats:district:{from_dist}, stats:district:{to_dist}
+         stats:region:{from_region}, stats:region:{to_region}
+         stats:national
+      4. Redis.del(...keysToInvalidate)
+  [ ] All above in a single Prisma transaction (atomic)
+  [ ] Write Jest test: verify both DB update and Redis invalidation
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-048 | REGISTER BUILDINGS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — village officer app)
+  Points : 5
+
+  USER STORY:
+  As a Village Officer, I can register buildings in my village with details
+  specific to each building type and receive a system-generated building ID.
+
+  ACCEPTANCE CRITERIA:
+  Given I am in "Register Building" screen
+  When I select a building type
+  Then I see fields appropriate to that type:
+
+  RESIDENTIAL / BUSINESS / FUEL STATION / MARKET / HALL:
+      Street location, Owner(s) National IDs (add multiple), → generate building_id
+
+  HOTEL:
+      Street location, Owner(s) NIDs, Hotel class (1-5 stars / VIP) → building_id
+
+  POLICE / ARMY CAMP / GOVERNMENT OFFICE:
+      Name, street location, Owner = Government (auto-set) → building_id
+
+  SCHOOL / HOSPITAL / COLLEGE / UNIVERSITY / TRAINING CENTRE / INDUSTRY:
+      Name, street location, Owner(s) NIDs or Government,
+      Ownership type (private/public/government),
+      Coverage area (acres), Number of buildings on compound
+      Industry type (if industry): processing / manufacturing / other
+      → building_id
+
+  And all buildings auto-inherit: village, ward, district, region from officer profile
+  And building_id format: BLD-{district_code}-{year}-{sequence}
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/buildings (village_officer auth)
+  [ ] Generate building_id: BLD-{district_id}-{YYYY}-{padded sequence}
+  [ ] Validate owners: each NID must exist in citizens table
+  [ ] Store owners as JSONB array of citizen_ids
+  [ ] Write Jest tests for each building type
+
+  TASKS — MOBILE (Village Officer App):
+  [ ] Create RegisterBuildingScreen with building type selector
+  [ ] Dynamic form: show/hide fields based on selected type
+  [ ] Owner NID list: add/remove multiple owner entries
+  [ ] On submit: show generated building_id
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-049 | REGISTER PUBLIC INFRASTRUCTURE
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Mobile — village officer app)
+  Points : 3
+
+  USER STORY:
+  As a Village Officer, I can register public infrastructure such as roads,
+  railways, stations, ports, and bus stands in my village.
+
+  ACCEPTANCE CRITERIA:
+  Given I am in "Register Infrastructure" screen
+  When I select infrastructure type
+  Then for ROAD: I enter name, road type (Tarmac/Rough), length in km
+       NOTE: For urban areas with many roads, only register main roads
+  For RAILWAY: I enter name, length in km
+  For STATION / PORT / BUS STAND: I enter name, coverage in acres
+  And all infrastructure is auto-linked to officer's village
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/infrastructure (village_officer auth)
+  [ ] Validate road_type only present when infra_type = road
+  [ ] Write Jest tests
+
+  TASKS — MOBILE:
+  [ ] Create RegisterInfrastructureScreen with type selector
+  [ ] Dynamic fields per type
+  [ ] On submit: show success with infra record ID
+
+
+================================================================================
+  SPRINT 5 — DONE CHECKLIST
+================================================================================
+
+  [ ] Age auto-increment runs daily — tested by mocking today's date
+  [ ] Marriage dissolution request can be submitted from officer app
+  [ ] Super Admin can approve/reject dissolution requests from dashboard
+  [ ] On approval: marriage status = DISSOLVED, wife's lock released
+  [ ] Village officer can initiate migration request from mobile app
+  [ ] Cascading geo dropdowns work: Region → District → Ward → Village
+  [ ] Target village officer receives push notification for migration request
+  [ ] Migration detail screen shows citizen info, reason, expiry countdown
+  [ ] Confirm migration updates citizen residence and invalidates Redis cache
+  [ ] Reject migration updates status and notifies source officer
+  [ ] Expired migrations auto-cancelled by hourly cron job
+  [ ] Building registration works for all building types with correct fields
+  [ ] Building IDs are generated in correct format
+  [ ] Infrastructure registration works for all infrastructure types
+  [ ] All CI pipelines remain green
+  [ ] Sprint Review demo completed (migration flow end-to-end shown)
+  [ ] Sprint Retrospective done + action items recorded
+
+================================================================================
+  END OF SPRINT 5
+================================================================================
