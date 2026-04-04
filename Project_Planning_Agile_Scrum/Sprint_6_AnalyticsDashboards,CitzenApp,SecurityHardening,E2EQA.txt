@@ -1,0 +1,428 @@
+================================================================================
+  AUTOMATED DIGITAL LIVE CENSUS FOR TANZANIA
+  SPRINT 6 — ANALYTICS DASHBOARDS, CITIZEN APP, SECURITY & QA
+  Duration: Week 13 – Week 16  (4 Weeks — Final Sprint)  |  Points Target: 35
+================================================================================
+
+  SPRINT GOAL:
+  Complete the public citizen analytics dashboard with full drill-down views,
+  finalize the Super Admin and District Admin dashboards, harden all security
+  layers, and conduct end-to-end testing of all flows before research release.
+
+  NOTE: Sprint 6 is 4 weeks (doubled length) to allow for QA depth.
+  PREREQUISITE: Sprints 1-5 all complete. All P1 features working.
+
+================================================================================
+  STORIES IN THIS SPRINT
+================================================================================
+
+  ┌───────────┬────────────────────────────────────────────────────┬────────┐
+  │  STORY ID │  TITLE                                             │  PTS   │
+  ├───────────┼────────────────────────────────────────────────────┼────────┤
+  │  NBS-050  │  Citizen app: national population dashboard        │  5     │
+  │  NBS-051  │  Citizen app: full drill-down views (5 levels)     │  8     │
+  │  NBS-053  │  Super Admin: system performance metrics view      │  3     │
+  │  NBS-054  │  District Admin: officer status + registration stats│  3    │
+  │  NBS-055  │  API rate limiting (express-rate-limit + Redis)    │  2     │
+  │  NBS-058  │  Final security audit + encryption verification    │  5     │
+  │  NBS-059  │  End-to-end testing + P1 bug fixes + release prep  │  8     │
+  └───────────┴────────────────────────────────────────────────────┴────────┘
+  TOTAL: 34 points
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-050 | CITIZEN APP: NATIONAL POPULATION DASHBOARD
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile — citizen app) + Member 1 (Backend API)
+  Points : 5
+
+  USER STORY:
+  As a public citizen, I can view live national population statistics on the
+  home screen of the citizen app after logging in.
+
+  ACCEPTANCE CRITERIA:
+  Given I am logged in to the citizen mobile app
+  When I am on the home screen
+  Then I see a toggle: Tanzania Mainland / Tanzania Zanzibar
+  And I see: total live population (status=ALIVE only)
+  And I see: gender ratio bar (Male % / Female %)
+  And I see: a population pyramid chart (age bands 0-4, 5-9, ..., 80+)
+  And I see: population trend line (last 12 months from population_snapshots)
+  And I see: total buildings count and total infrastructure count
+  And I see: regional density breakdown (% per region as horizontal bar chart)
+  And all data refreshes from Redis every 15 minutes (auto-poll on app focus)
+  And a "Last updated: X minutes ago" timestamp is shown
+  And a "→ View by Region" button navigates to the Region View screen
+
+  DATA PRIVACY:
+  No individual citizen names, NIDs, photos, or addresses are ever shown.
+  All figures are aggregated totals and percentages only.
+
+  TASKS — BACKEND (already mostly done in NBS-052):
+  [ ] Verify GET /api/analytics/national returns:
+      { total, male, female, ageDistribution, regions[], buildings, infra, lastUpdated }
+  [ ] Add jurisdiction filter: ?jurisdiction=mainland or ?jurisdiction=zanzibar
+  [ ] Add monthly trend: last 12 population_snapshots rows for national level
+
+  TASKS — MOBILE (Citizen App):
+  [ ] Create HomeScreen with:
+      - Mainland/Zanzibar tab toggle
+      - Total population counter (animated number)
+      - Gender ratio horizontal bar (Recharts-style → react-native-chart-kit)
+      - Population pyramid (grouped bar chart, horizontal, 18 age bands)
+      - 12-month trend line chart
+      - Buildings + infrastructure count cards
+      - Regional density list (sorted by population %)
+      - "View by Region →" button
+  [ ] Install react-native-chart-kit (charts library for RN)
+  [ ] Auto-poll GET /api/analytics/national on app focus (AppState API)
+  [ ] Show skeleton loaders while data is fetching
+  [ ] Show "Last updated X min ago" based on lastUpdated timestamp
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-051 | CITIZEN APP: FULL DRILL-DOWN VIEWS (5 LEVELS)
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 2 (Mobile — citizen app) + Member 1 (Backend)
+  Points : 8
+
+  USER STORY:
+  As a public citizen, I can drill down from the national view through region,
+  district, ward, and village levels to see granular population statistics.
+
+  ACCEPTANCE CRITERIA:
+  LEVEL 1 — NATIONAL: (done in NBS-050)
+  LEVEL 2 — REGION:
+      I select a region from a list or tap a region in the density chart
+      I see: region name, total population, gender ratio, pyramid, trend,
+             district density breakdown (% per district), buildings, infra
+      "→ View by District" button
+
+  LEVEL 3 — DISTRICT:
+      I select a district from a list or the density chart
+      I see: district name, total pop, gender ratio, pyramid,
+             ward density breakdown (%), buildings, infra
+      "→ View by Ward" button
+
+  LEVEL 4 — WARD:
+      I select a ward
+      I see: ward name, total pop, gender ratio, pyramid,
+             village density breakdown (%), buildings, infra
+      "→ View by Village" button
+
+  LEVEL 5 — VILLAGE:
+      I select a village
+      I see: village name, total pop, gender ratio, pyramid,
+             street density breakdown (%)
+      buildings and infrastructure count
+      No "drill down further" button (this is the lowest level)
+
+  NOTE: No PII at any level. All data from Redis cache only.
+
+  TASKS — BACKEND:
+  [ ] Verify all analytics endpoints return correct data:
+      GET /api/analytics/region/:regionId → region data + districts[]
+      GET /api/analytics/district/:districtId → district data + wards[]
+      GET /api/analytics/ward/:wardId → ward data + villages[]
+      GET /api/analytics/village/:villageId → village data + streets[]
+  [ ] Create GET /api/geo/regions → list of regions (for dropdown)
+  [ ] Create GET /api/geo/districts?regionId=X → filtered districts
+  [ ] Create GET /api/geo/wards?districtId=X → filtered wards
+  [ ] Create GET /api/geo/villages?wardId=X → filtered villages
+  [ ] Ensure all analytics endpoints respect Redis cache (no raw DB on hit)
+
+  TASKS — MOBILE:
+  [ ] Create RegionScreen with region selector + same chart components
+  [ ] Create DistrictScreen with district selector
+  [ ] Create WardScreen with ward selector
+  [ ] Create VillageScreen with village selector (no further drill-down)
+  [ ] Navigation: React Navigation stack (back arrow at each level)
+  [ ] Reuse chart components from HomeScreen (DRY principle)
+  [ ] Back navigation reloads cached data (no new API call on back)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-053 | SUPER ADMIN: SYSTEM PERFORMANCE METRICS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend — Super Admin web)
+  Points : 3
+
+  USER STORY:
+  As a Super Admin, I can view system performance metrics including live user
+  counts, error rates, and registration activity across the country.
+
+  ACCEPTANCE CRITERIA:
+  Given I am on the Super Admin dashboard
+  When I navigate to "System Metrics"
+  Then I see:
+  • Total registered citizens (alive / deceased)
+  • Total officers (village + hospital) by status (active/offline/suspended)
+  • Total District Admins by status
+  • Total births registered today / this week / this month
+  • Total deaths registered today / this week / this month
+  • Total pending migration requests
+  • Total buildings and infrastructure registered
+  • API health status (Render + Redis + DB response times)
+  • Last 5 audit log entries (latest system actions)
+
+  TASKS — BACKEND:
+  [ ] Create GET /api/admin/metrics (super_admin auth only)
+  [ ] Aggregate counts from relevant tables
+  [ ] Add basic API response time tracking (Morgan custom tokens)
+  [ ] Return Redis + DB connection status in metrics
+
+  TASKS — FRONTEND (Super Admin web):
+  [ ] Create MetricsDashboard page with stat cards
+  [ ] Use Recharts for: births/deaths trend bar chart, officer status pie chart
+  [ ] Auto-refresh metrics every 60 seconds
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-054 | DISTRICT ADMIN: OFFICER STATUS + REGISTRATION STATS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend — District Admin web)
+  Points : 3
+
+  USER STORY:
+  As a District Admin, I can view all officers in my district with their
+  current status and registration activity so I can manage my team.
+
+  ACCEPTANCE CRITERIA:
+  Given I am on the District Admin dashboard
+  When I view the Officers section
+  Then I see a table: officer name, village/facility, status (active/offline),
+       last login time, citizens registered (count), buildings registered (count)
+  And I can filter by status or village
+  And I can click an officer to see their detailed activity log
+  And I can suspend or reactivate officers from this view
+
+  TASKS — BACKEND:
+  [ ] Create GET /api/admin/district/officers (district_admin auth, scoped to district)
+  [ ] Include: last_login, count of citizens registered, buildings registered
+  [ ] Create GET /api/admin/district/officers/:officerId/activity
+  [ ] Create PATCH /api/admin/district/officers/:officerId/status { status }
+
+  TASKS — FRONTEND (District Admin web):
+  [ ] Create OfficerManagement page with sortable table
+  [ ] Status badge: green=active, grey=offline, red=suspended
+  [ ] Officer detail drawer/modal with activity timeline
+  [ ] Suspend/Reactivate button with confirmation modal
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-055 | API RATE LIMITING (GLOBAL + AUTH ROUTES)
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 2
+
+  ACCEPTANCE CRITERIA:
+  Given any client makes API requests
+  When the rate limit is exceeded
+  Then the server returns 429 Too Many Requests with Retry-After header
+  And global limit: 100 requests per 15 minutes per IP
+  And auth routes (/api/auth/*): 10 requests per 15 minutes per IP
+  And admin creation routes: 20 requests per hour per IP
+  And rate limit state is stored in Redis (not memory, works across restarts)
+
+  TASKS:
+  [ ] Install express-rate-limit + rate-limit-redis
+  [ ] Configure global limiter: windowMs=15min, max=100, store=RedisStore
+  [ ] Configure auth limiter: windowMs=15min, max=10
+  [ ] Apply auth limiter to: /api/auth/login, /api/auth/register,
+      /api/auth/verify-token, /api/auth/refresh
+  [ ] Add custom error message in 429 response body
+  [ ] Write Jest test: mock 11 requests to auth route → verify 429 on 11th
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-058 | SECURITY AUDIT + ENCRYPTION VERIFICATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Both Members (pair review)
+  Points : 5
+
+  USER STORY:
+  As the development team, we conduct a full security audit of the system
+  before releasing to ensure no sensitive data is exposed or unencrypted.
+
+  SECURITY AUDIT CHECKLIST:
+  ─────────────────────────────────────────────────────────────────────────
+  AUTHENTICATION:
+  [ ] Verify all protected routes require valid JWT → return 401 if missing
+  [ ] Verify role guards: super_admin routes return 403 for district_admin
+  [ ] Verify district_admin cannot access other districts' data
+  [ ] Verify officer routes enforce village/facility scope
+  [ ] Verify one-time tokens cannot be reused
+  [ ] Verify MFA bypass is not possible
+
+  DATA ENCRYPTION:
+  [ ] Confirm NIDA numbers in DB are encrypted (not readable in Prisma Studio)
+  [ ] Confirm fingerprint_template is encrypted before storage
+  [ ] Confirm MFA secrets are encrypted
+  [ ] Confirm encryption/decryption roundtrip works correctly in tests
+  [ ] Confirm Cloudinary photos are served over HTTPS only
+
+  API SECURITY:
+  [ ] Confirm Helmet.js headers present on all responses (test with curl -I)
+  [ ] Confirm CORS blocks unknown origins (test with curl --header "Origin: evil.com")
+  [ ] Confirm rate limiting triggers on auth routes
+  [ ] Confirm no sensitive data (passwords, tokens, NID) in API error messages
+  [ ] Confirm no stack traces exposed in production error responses
+
+  GEO-FENCE:
+  [ ] Confirm officer outside geo-fence cannot login (test with mocked GPS)
+  [ ] Confirm wrong device fingerprint blocks login
+  [ ] Confirm geo-fence coordinates are not returned to public endpoints
+
+  MOBILE:
+  [ ] Confirm expo-secure-store is used for all sensitive mobile storage
+  [ ] Confirm no tokens stored in AsyncStorage
+  [ ] Confirm certificate pinning or at minimum HTTPS enforced for all API calls
+
+  DATABASE:
+  [ ] Confirm audit_logs table has no UPDATE/DELETE operations possible
+      (test: try UPDATE audit_logs from Prisma Studio — should fail)
+  [ ] Confirm public user endpoints cannot access citizen PII
+  [ ] Confirm analytics endpoints serve only aggregated data
+
+  TASKS:
+  [ ] Run through full security checklist above — document pass/fail for each
+  [ ] Fix all failing items (track as sub-tasks on NBS-058)
+  [ ] Add automated security test for: route protection, role enforcement,
+      CORS rejection, rate limiting
+  [ ] Document any known limitations for future sprints
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-059 | END-TO-END TESTING + P1 BUG FIXES + RELEASE PREP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Both Members
+  Points : 8
+
+  USER STORY:
+  As the development team, we conduct end-to-end testing of all major user
+  flows on real devices and fix all P1 bugs before the research release.
+
+  E2E TEST SCENARIOS TO EXECUTE:
+  ──────────────────────────────────────────────────────────────────────────
+  FLOW 1: SUPER ADMIN ONBOARDING
+  [ ] Bootstrap first super admin → receive email → enter token →
+      set password + photo → login with MFA → view dashboard
+
+  FLOW 2: DISTRICT ADMIN CREATION
+  [ ] Super Admin creates District Admin → email received → token entered →
+      profile setup with region + district → login → view officers list
+
+  FLOW 3: VILLAGE OFFICER ONBOARDING (on real Android device)
+  [ ] District Admin creates Village Officer → email received →
+      Expo Go opens app → token entered → device binding runs →
+      GPS inside village boundary → profile setup → login →
+      app opens correctly to village officer home
+
+  FLOW 4: VILLAGE OFFICER GEO-FENCE TEST
+  [ ] Mock GPS outside village boundary → attempt login → verify blocked
+  [ ] Mock wrong device fingerprint → verify blocked
+
+  FLOW 5: CITIZEN REGISTRATION
+  [ ] Village Officer → Register Citizen → enter NID → NIDA fetch →
+      biometric capture → disability screen → personal details →
+      optional details → submit → ID card PDF generated → viewable
+
+  FLOW 6: BIRTH REGISTRATION
+  [ ] Hospital Officer → Register Birth → child details + parent NIDs →
+      submit → NID generated → birth certificate PDF → RITA mock sync
+
+  FLOW 7: DEATH REGISTRATION
+  [ ] Village Officer → Register Death (outside hospital) → NID → cause →
+      submit → citizen status = DECEASED → death certificate generated
+
+  FLOW 8: MARRIAGE + DISSOLUTION
+  [ ] Village Officer → Register Marriage → husband + wife NIDs →
+      certificate generated → attempt second marriage for wife → blocked →
+      submit dissolution request → Super Admin approves →
+      wife can now register new marriage
+
+  FLOW 9: MIGRATION (end-to-end)
+  [ ] Village Officer A → initiate migration for citizen → target officer B
+      receives push notification → Officer B confirms →
+      citizen residence updated → Redis cache invalidated →
+      citizen appears in new village on analytics within 15 min
+
+  FLOW 10: PUBLIC CITIZEN APP
+  [ ] Register with email → login → view national stats →
+      drill down: region → district → ward → village →
+      verify no PII visible anywhere → charts render correctly
+
+  TASKS:
+  [ ] Execute all 10 flows → log results in test report document
+  [ ] Create bug report for each failed scenario:
+      Severity: P1 (blocking) / P2 (degraded) / P3 (cosmetic)
+  [ ] Fix all P1 bugs (blocking flows must work before release)
+  [ ] Fix P2 bugs if time allows
+  [ ] P3 cosmetic bugs: log as future sprint backlog items
+  [ ] Update README.md with:
+      - Project overview
+      - Setup instructions (Termux + Kali)
+      - Environment variable guide
+      - How to run tests
+      - How to deploy to Render + Vercel + Expo EAS
+  [ ] Tag release: git tag v1.0.0 → push → merge dev → main
+  [ ] Verify production deploy (Render + Vercel) responds correctly
+  [ ] Final demo: record a walkthrough video of all major flows
+
+
+================================================================================
+  SPRINT 6 — FINAL RELEASE CHECKLIST
+================================================================================
+
+  CITIZEN APP:
+  [ ] National dashboard loads with correct live population data
+  [ ] Mainland/Zanzibar toggle works correctly
+  [ ] All 5 drill-down levels load correct data
+  [ ] Charts render correctly (pyramid, trend, density)
+  [ ] "Last updated" timestamp is accurate
+  [ ] No PII visible anywhere in citizen app
+
+  ADMIN DASHBOARDS:
+  [ ] Super Admin system metrics page shows correct counts
+  [ ] District Admin officer table shows correct statuses + stats
+  [ ] Both dashboards protected behind correct role-based access
+
+  SECURITY:
+  [ ] All security audit checklist items PASS
+  [ ] Rate limiting active on auth routes
+  [ ] Helmet headers present on all responses
+  [ ] No sensitive data in error messages or API responses
+
+  PERFORMANCE:
+  [ ] GET /api/analytics/* responds in < 500ms (from Redis)
+  [ ] Render backend stays alive (UptimeRobot active)
+  [ ] Mobile app loads home screen in < 3 seconds
+  [ ] No memory leaks in cron jobs (verified after 24h run)
+
+  QA:
+  [ ] All 10 E2E flows executed and documented
+  [ ] All P1 bugs resolved
+  [ ] Test coverage > 60% on backend (Jest --coverage)
+  [ ] README updated and accurate
+
+  DEPLOYMENT:
+  [ ] Production backend running on Render (all env vars set)
+  [ ] Production web app running on Vercel
+  [ ] Mobile APK built via Expo EAS and installable
+  [ ] GitHub release v1.0.0 tagged and published
+  [ ] All CI pipelines green on main branch
+
+  [ ] Final Sprint Review demo completed
+  [ ] Final Sprint Retrospective done
+  [ ] Project handed over (research model ready)
+
+================================================================================
+  END OF SPRINT 6 — PROJECT COMPLETE (v1.0.0)
+================================================================================
