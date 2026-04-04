@@ -1,0 +1,358 @@
+================================================================================
+  AUTOMATED DIGITAL LIVE CENSUS FOR TANZANIA
+  SPRINT 1 — AUTHENTICATION & ADMIN ONBOARDING
+  Duration: Week 3 – Week 4  |  Points Target: 28
+================================================================================
+
+  SPRINT GOAL:
+  Implement the full authentication system including JWT, MFA, one-time login
+  tokens, and complete Super Admin + District Admin onboarding flows with NIDA
+  API integration and official email dispatch. Security foundations (Helmet,
+  rate limiting, audit logs) are established in this sprint.
+
+  PREREQUISITE: Sprint 0 must be fully complete and all environments healthy.
+
+================================================================================
+  STORIES IN THIS SPRINT
+================================================================================
+
+  ┌───────────┬────────────────────────────────────────────────────┬────────┐
+  │  STORY ID │  TITLE                                             │  PTS   │
+  ├───────────┼────────────────────────────────────────────────────┼────────┤
+  │  NBS-011  │  First Super Admin bootstrap (seed/setup route)    │  3     │
+  │  NBS-012  │  Super Admin creates new Super Admin (NIDA fetch)  │  5     │
+  │  NBS-013  │  Login token email dispatch (Resend API)           │  3     │
+  │  NBS-014  │  Token welcome page + profile setup (Super Admin)  │  3     │
+  │  NBS-015  │  Super Admin creates District Admin (NIDA fetch)   │  5     │
+  │  NBS-016  │  District Admin token + profile setup flow         │  3     │
+  │  NBS-021  │  Login endpoint (JWT + Refresh Token + MFA)        │  5     │
+  │  NBS-022  │  Token refresh + session expiry middleware          │  3     │
+  │  NBS-056  │  Helmet.js security headers + CORS restriction     │  2     │
+  └───────────┴────────────────────────────────────────────────────┴────────┘
+  TOTAL: 32 points  (if velocity is lower, move NBS-016 to Sprint 2)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-011 | FIRST SUPER ADMIN BOOTSTRAP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As the system, the very first Super Admin account must be created at
+  project initialization so that the system is not orphaned with no admin.
+
+  ACCEPTANCE CRITERIA:
+  Given the system is freshly deployed with no super admins
+  When a POST request is made to /api/setup/bootstrap with valid credentials
+  Then a super admin account is created using the provided employee_id, NIDA,
+       and email (NIDA lookup called for bio data)
+  And the route is permanently disabled after the first super admin exists
+  And subsequent calls to /api/setup/bootstrap return 403 Forbidden
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/setup/bootstrap route (no auth required)
+  [ ] Middleware: check if any super_admin row exists → if yes, return 403
+  [ ] Call NIDA mock service (real if available) with NIDA number
+  [ ] Hash password with bcrypt (rounds=12)
+  [ ] Insert super_admin record (status=active, created_by=null)
+  [ ] Return success message (do NOT return password or token in response)
+  [ ] Write Jest test: bootstrap creates admin / returns 403 on second call
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-012 | SUPER ADMIN CREATES NEW SUPER ADMIN
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend)
+  Points : 5
+
+  USER STORY:
+  As a Super Admin, I can create a new Super Admin by entering an Employee ID,
+  NIDA number, and email so that the system can have multiple national-level
+  administrators.
+
+  ACCEPTANCE CRITERIA:
+  Given I am logged in as Super Admin on the web dashboard
+  When I enter a valid Employee ID, NIDA number, and email
+  Then the system calls the NIDA API and auto-fills the new admin's full
+       name, DOB, gender, and profile photo
+  And a new super_admin record is inserted with status=pending
+  And a one-time login token is generated (JWT, 24h TTL)
+  And the SHA-256 hash of the token is stored in login_token_hash
+  And an onboarding email is sent to the new admin's email
+  And I see a success confirmation on the dashboard
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/admins/super with auth guard (super_admin role only)
+  [ ] Validate request body with Zod schema
+  [ ] Call NIDA service: GET /nida/{nida_number} → return bio data
+  [ ] Create mock NIDA service at /api/mock/nida/:id for dev environment
+  [ ] Generate one-time JWT (payload: adminId, type=onboarding, exp=24h)
+  [ ] SHA-256 hash the token → store in super_admins.login_token_hash
+  [ ] Set login_token_expires = now + 24h
+  [ ] Call email service → send onboarding email (see NBS-013)
+  [ ] Insert super_admin record (status=pending)
+  [ ] Return 201 Created (no token in response)
+  [ ] Write Jest tests: creates admin / NIDA fails gracefully / duplicate email
+
+  TASKS — FRONTEND (Super Admin Dashboard):
+  [ ] Create "Create Super Admin" form component (React):
+      Fields: employee_id, nida_number, email
+  [ ] On NIDA fetch success: display preview card with auto-filled bio
+  [ ] Show success toast on admin created
+  [ ] Show error toast on NIDA failure or duplicate email
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-013 | LOGIN TOKEN EMAIL DISPATCH
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  USER STORY:
+  As a new admin or officer, I receive an official email containing my
+  one-time login token and dashboard/app link so I can complete my onboarding.
+
+  ACCEPTANCE CRITERIA:
+  Given a new admin or officer has been created
+  When the system triggers the email dispatch
+  Then an email is sent from noreply@census.go.tz (or configured domain)
+  And the email contains the one-time token in plain text
+  And the email contains the correct dashboard or app download URL
+  And the email is delivered within 60 seconds
+  And if email delivery fails, the error is logged and a retry is queued
+
+  TASKS:
+  [ ] Install and configure Resend SDK: npm install resend
+  [ ] Create backend/src/services/email.service.js
+  [ ] Write sendOnboardingEmail(to, role, token, link) function
+  [ ] Create HTML email template for Super Admin onboarding
+  [ ] Create HTML email template for District Admin onboarding
+  [ ] Create HTML email template for Officer (mobile app) onboarding
+  [ ] Add retry logic: if Resend fails, log error + retry once after 30s
+  [ ] Write Jest test with mocked Resend SDK
+  [ ] Verify email delivery in Resend dashboard (staging mode)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-014 | TOKEN WELCOME PAGE + SUPER ADMIN PROFILE SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend)
+  Points : 3
+
+  USER STORY:
+  As a new Super Admin, I open the dashboard link from my email, enter my
+  one-time token on the welcome page, and complete my profile setup so I
+  can log in with full access.
+
+  ACCEPTANCE CRITERIA:
+  Given I open the dashboard link and enter my one-time token
+  When the token is validated (hash match + not expired + not used)
+  Then I am directed to the profile setup page
+  And I can enter: new password, confirm password, mobile number, department
+  And I can upload a profile photo (stored on Cloudinary)
+  And on save, my password is hashed and stored, token is invalidated
+  And I am redirected to the login page
+  When I try to use the same token again
+  Then I receive a 401 Token already used error
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/auth/verify-token { token, role }
+      → hash token → find matching record → check expiry → return 200 or 401
+  [ ] Create POST /api/admins/super/setup/:adminId { password, mobile,
+      department, photo_url }
+      → validate → hash password → update record → invalidate token
+      → set status=active
+  [ ] Cloudinary upload endpoint: POST /api/upload/photo
+      → accept multipart/form-data → upload to Cloudinary → return URL
+
+  TASKS — FRONTEND:
+  [ ] Create /welcome route with token input form
+  [ ] On valid token: navigate to /setup with adminId in state
+  [ ] Create profile setup form: password + confirm + mobile + department
+  [ ] Photo upload component: drag-drop or camera capture → upload to Cloudinary
+  [ ] On save: call setup API → navigate to /login with success message
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-015 | SUPER ADMIN CREATES DISTRICT ADMIN
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend)
+  Points : 5
+
+  USER STORY:
+  As a Super Admin, I can create a District Admin by entering Employee ID,
+  NIDA number, and email, triggering NIDA auto-fetch and onboarding email.
+
+  ACCEPTANCE CRITERIA:
+  Same as NBS-012 but creates district_admin record (not super_admin)
+  And scopes the new admin to region_id + district_id set at profile setup
+  And onboarding email contains district admin dashboard URL
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/admins/district with auth guard (super_admin only)
+  [ ] NIDA fetch → insert district_admin (status=pending, no region/district yet)
+  [ ] Generate + email one-time token (district admin template)
+  [ ] Write Jest tests
+
+  TASKS — FRONTEND:
+  [ ] Create "Create District Admin" section in Super Admin dashboard
+  [ ] Show list of existing District Admins with status badges
+  [ ] Allow Super Admin to suspend or reactivate a District Admin
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-016 | DISTRICT ADMIN TOKEN + PROFILE SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend)
+  Points : 3
+
+  USER STORY:
+  As a new District Admin, I open my onboarding email, enter the token, and
+  complete my profile by selecting my region, district, setting a password,
+  uploading a photo, and entering my mobile number.
+
+  ACCEPTANCE CRITERIA:
+  Same flow as NBS-014 but profile setup includes:
+  Region dropdown (from regions table) and District dropdown
+  (filtered by selected region, from districts table)
+  On save, district_admin record is updated with region_id + district_id
+
+  TASKS — BACKEND:
+  [ ] Reuse POST /api/auth/verify-token (already built in NBS-014)
+  [ ] Create POST /api/admins/district/setup/:adminId
+      { password, mobile, region_id, district_id, photo_url }
+  [ ] Create GET /api/geo/regions → return all regions
+  [ ] Create GET /api/geo/districts?region_id=X → return filtered districts
+
+  TASKS — FRONTEND:
+  [ ] Reuse /welcome token entry page (redirect to district setup)
+  [ ] Create district admin setup form with cascading Region → District dropdowns
+  [ ] Populate dropdowns from /api/geo/regions and /api/geo/districts
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-021 | LOGIN ENDPOINT + JWT + MFA
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend) + Member 2 (Frontend)
+  Points : 5
+
+  USER STORY:
+  As any admin or public user, I can log in with my email and password and
+  optionally enable MFA for additional security.
+
+  ACCEPTANCE CRITERIA:
+  Given I submit valid email and password
+  When login is processed
+  Then I receive a short-lived access token (15 min) and a refresh token (7 days)
+  And the refresh token is set as an HttpOnly cookie
+  And if MFA is enabled, I am asked for a TOTP code or SMS OTP before access
+  And after 5 failed login attempts my account is locked with exponential backoff
+
+  TASKS — BACKEND:
+  [ ] Create POST /api/auth/login { email, password, role }
+  [ ] Validate email + bcrypt.compare password hash
+  [ ] If mfa_enabled=true → generate SMS OTP (Africa's Talking) or
+      expect TOTP code from authenticator app
+  [ ] If MFA passed → sign JWT access token (RS256, 15m TTL)
+  [ ] Set refresh token as HttpOnly Secure SameSite=Strict cookie (7d TTL)
+  [ ] Track failed attempts in Redis (key: login_fails:email)
+      After 5 fails: lock for 1min, 5min, 15min, 1hr, then require admin reset
+  [ ] Create POST /api/auth/mfa/verify { otp, tempToken }
+  [ ] Create POST /api/auth/mfa/setup → returns TOTP QR code URL
+  [ ] Write Jest tests: valid login / wrong password / MFA / lockout
+
+  TASKS — FRONTEND (Super Admin + District Admin web):
+  [ ] Create /login page with email + password form
+  [ ] If server returns mfa_required: show OTP input step
+  [ ] Store access token in memory (NOT localStorage)
+  [ ] Auto-refresh access token 1 min before expiry using React Query
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-022 | TOKEN REFRESH + SESSION EXPIRY MIDDLEWARE
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 3
+
+  ACCEPTANCE CRITERIA:
+  Given my access token has expired
+  When my app sends a request
+  Then the backend middleware returns 401 Unauthorized
+  And my frontend silently calls POST /api/auth/refresh
+  And receives a new access token using the refresh token cookie
+  And retries the original request transparently
+  And if the refresh token is also expired, I am redirected to login
+
+  TASKS:
+  [ ] Create authenticateJWT middleware:
+      → verify access token → attach user to req.user → call next()
+      → on expiry → return 401 { code: "TOKEN_EXPIRED" }
+  [ ] Create POST /api/auth/refresh:
+      → read refresh token from HttpOnly cookie
+      → verify → issue new access token
+      → rotate refresh token (new cookie)
+  [ ] Create POST /api/auth/logout:
+      → clear refresh token cookie
+      → invalidate refresh token in Redis
+  [ ] Add axios interceptor in web frontend:
+      on 401 TOKEN_EXPIRED → call /auth/refresh → retry original request
+      on refresh failure → redirect to /login
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NBS-056 | HELMET.JS SECURITY HEADERS + CORS
+════════════════════════════════════════════════════════════════════════════════
+
+  Owner  : Member 1 (Backend)
+  Points : 2
+
+  ACCEPTANCE CRITERIA:
+  Given any API request from an unknown origin
+  When CORS middleware is evaluated
+  Then the request is rejected with 403 if origin is not in the allowed list
+  And all responses include Helmet.js security headers:
+  Content-Security-Policy, X-Frame-Options, X-Content-Type-Options,
+  Strict-Transport-Security, X-XSS-Protection
+
+  TASKS:
+  [ ] Configure helmet() in Express app with strict CSP
+  [ ] Configure cors({ origin: [VERCEL_URL, 'http://localhost:5173'],
+      credentials: true }) → reject unknown origins
+  [ ] Add express-rate-limit globally: 100 requests per 15 min per IP
+  [ ] Add stricter rate limit on /api/auth routes: 10 requests per 15 min
+  [ ] Verify headers in browser DevTools Network tab
+  [ ] Write test: unknown origin returns 403
+
+
+================================================================================
+  SPRINT 1 — DONE CHECKLIST
+================================================================================
+
+  [ ] Bootstrap route creates first super admin and locks after first use
+  [ ] Super Admin can create another Super Admin via dashboard
+  [ ] Super Admin can create District Admin via dashboard
+  [ ] Onboarding emails are sent and received (verified in Resend dashboard)
+  [ ] Token welcome page validates tokens and redirects correctly
+  [ ] Super Admin profile setup works (password + photo + department)
+  [ ] District Admin profile setup works (password + region + district + photo)
+  [ ] Login works for Super Admin with JWT + optional MFA
+  [ ] Token refresh works silently in frontend
+  [ ] Logout clears session and redirects
+  [ ] Security headers are present in all API responses
+  [ ] Rate limiting is active on auth routes
+  [ ] All CI pipelines are green
+  [ ] Sprint Review demo completed
+  [ ] Sprint Retrospective done + action items recorded
+
+================================================================================
+  END OF SPRINT 1
+================================================================================
