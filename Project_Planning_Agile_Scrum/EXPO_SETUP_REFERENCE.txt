@@ -1,0 +1,167 @@
+================================================================================
+  EXPO + EAS SETUP PROCEDURE & COMMANDS REFERENCE
+  Tanzania Census Project — kihega
+================================================================================
+
+  Project   : tanzania-census-mobile
+  Expo Acct : kihega
+  Project ID: bc9e125c-f6e4-4cb5-89cb-b10cf48fe757
+  GitHub    : Kihega/Final_Dissertation
+  Src Dir   : code/mobile
+
+================================================================================
+  SECTION 1 — ONE-TIME SETUP (ALREADY DONE)
+================================================================================
+
+  STEP 1: Install EAS CLI globally
+  ---------------------------------
+  npm install -g eas-cli
+  eas --version
+
+  STEP 2: Login to Expo from terminal
+  ------------------------------------
+  eas login
+  eas whoami
+
+  STEP 3: Create Expo project
+  ----------------------------
+  cd ~/Final_Dissertation/code/mobile
+  npx create-expo-app . --template blank
+
+  STEP 4: Initialize EAS in project
+  -----------------------------------
+  eas init
+
+  STEP 5: Connect GitHub to Expo
+  --------------------------------
+  1. expo.dev/accounts/kihega/projects/mobile
+  2. GitHub tab → Connect GitHub account
+  3. github.com/settings/installations
+     → Configure Expo → Select Final_Dissertation
+  4. Source directory: code/mobile → Save
+
+================================================================================
+  SECTION 2 — DAILY DEVELOPMENT COMMANDS
+================================================================================
+
+  START DEV SERVER:
+  npx expo start --tunnel
+
+  START + CLEAR CACHE:
+  npx expo start --tunnel --clear
+
+  CHECK DEPENDENCIES:
+  npx expo-doctor
+
+  FIX DEPENDENCIES:
+  npx expo install --fix
+
+================================================================================
+  SECTION 3 — BUILDING APK
+================================================================================
+
+  PREVIEW APK (testing):
+  eas build --platform android --profile preview
+
+  DEVELOPMENT APK:
+  eas build --platform android --profile development
+
+  PRODUCTION APK:
+  eas build --platform android --profile production
+
+  CHECK BUILD STATUS:
+  eas build:list
+
+  DOWNLOAD: expo.dev/accounts/kihega/projects/mobile/builds
+
+================================================================================
+  SECTION 4 — EXPO GO TESTING
+================================================================================
+
+  1. Install Expo Go from Google Play Store
+  2. Run: npx expo start --tunnel
+  3. Scan QR code with Expo Go
+  4. App loads instantly
+
+  Expo Go    → Daily dev testing (fast)
+  EAS Build  → GPS, Camera, Push Notifications, Device binding
+
+================================================================================
+  SECTION 5 — ENVIRONMENT VARIABLES
+================================================================================
+
+  IN .env FILE:
+  EXPO_PUBLIC_API_BASE_URL=https://your-backend.onrender.com/api
+
+  IN CODE:
+  const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL
+
+  SET EAS SECRET:
+  eas secret:create --scope project --name API_BASE_URL --value https://...
+
+  LIST SECRETS:
+  eas secret:list
+
+================================================================================
+  SECTION 6 — PUSH NOTIFICATIONS
+================================================================================
+
+  GET TOKEN IN CODE:
+  import * as Notifications from 'expo-notifications'
+  const token = await Notifications.getExpoPushTokenAsync({
+    projectId: 'bc9e125c-f6e4-4cb5-89cb-b10cf48fe757'
+  })
+
+  TEST NOTIFICATION:
+  curl -X POST https://exp.host/--/api/v2/push/send \
+    -H "Content-Type: application/json" \
+    -d '{"to":"ExponentPushToken[TOKEN]","title":"Test","body":"Hello"}'
+
+================================================================================
+  SECTION 7 — OTA UPDATES
+================================================================================
+
+  SEND JS UPDATE (no new APK needed):
+  eas update --branch preview --message "Fix description"
+
+================================================================================
+  SECTION 8 — TROUBLESHOOTING
+================================================================================
+
+  ERROR: "Run this command inside a project directory"
+  FIX:   cd ~/Final_Dissertation/code/mobile
+
+  ERROR: QR code not working
+  FIX:   npx expo start --tunnel --clear
+
+  ERROR: punycode deprecation warning
+  FIX:   Safe to ignore
+
+  ERROR: Metro port in use
+  FIX:   pkill -f "expo start"
+
+  ERROR: Build fails on EAS
+  FIX:   eas build:view → check logs
+
+================================================================================
+  QUICK CHEATSHEET
+================================================================================
+
+  npx expo start --tunnel              Start dev server
+  npx expo start --tunnel --clear      Start + clear cache
+  eas build --platform android \
+    --profile preview                  Build preview APK
+  eas build:list                       List builds
+  eas whoami                           Check login
+  eas login / eas logout               Auth commands
+  npx expo-doctor                      Check health
+  npx expo install --fix               Fix versions
+  eas update --branch preview \
+    --message ""                       OTA update
+  eas secret:list                      List secrets
+  eas project:info                     Project info
+
+================================================================================
+  END OF EXPO SETUP REFERENCE
+  Tanzania Automated Digital Live Census — kihega
+================================================================================

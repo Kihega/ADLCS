@@ -1,0 +1,126 @@
+FREE TIER PLATFORMS — QUICK GUIDE
+1. RENDER (Backend + PostgreSQL)
+URL: https://render.com
+Free tier includes:
+  • 1 Web Service (backend) — sleeps after 15min idle
+  • 1 PostgreSQL database — 1GB storage, 90 days FREE
+    then you need to upgrade or recreate
+
+HOW TO SIGN UP:
+  → Go to render.com
+  → Sign up with GitHub account (easiest)
+  → It sees your repos automatically
+
+POSTGRESQL ON RENDER:
+  → Dashboard → New → PostgreSQL
+  → Name: census-db
+  → Region: pick closest (Frankfurt for Tanzania)
+  → Plan: FREE
+  → Click Create
+  → Copy the "External Database URL" → this is your DATABASE_URL
+
+POSTGIS EXTENSION:
+  → Render free PostgreSQL supports PostGIS ✅
+  → We enable it via Prisma migration (done in NBS-008)
+  → No manual action needed
+2. UPSTASH (Redis Cache)
+URL: https://upstash.com
+Free tier includes:
+  • 1 Redis database
+  • 10,000 commands per day
+  • 256MB max data size
+  • No credit card required
+
+HOW TO SIGN UP:
+  → Go to upstash.com
+  → Sign up with GitHub account
+  → Dashboard → Create Database
+  → Name: census-cache
+  → Type: Regional
+  → Region: EU-West (closest to Tanzania)
+  → Click Create
+  → Copy "REDIS_URL" (starts with rediss://)
+3. CLOUDINARY (Photos, PDFs, Signatures)
+URL: https://cloudinary.com
+Free tier includes:
+  • 25 credits/month
+  • 25GB storage
+  • 25GB bandwidth
+  • No credit card required
+
+HOW TO SIGN UP:
+  → Go to cloudinary.com
+  → Sign up with email or GitHub
+  → Dashboard shows:
+    - Cloud Name  ← copy this
+    - API Key     ← copy this
+    - API Secret  ← copy this
+  → These 3 values go in your .env file
+4. VERCEL (React Web Dashboard)
+URL: https://vercel.com
+Free tier includes:
+  • Unlimited deployments
+  • 100GB bandwidth/month
+  • Automatic HTTPS
+  • Preview URLs for every PR
+  • No credit card required
+
+HOW TO SIGN UP:
+  → Go to vercel.com
+  → Sign up with GitHub account
+  → It connects to your repos automatically
+  → We configure it in NBS-005
+5. RESEND (Email Service)
+URL: https://resend.com
+Free tier includes:
+  • 3,000 emails/month
+  • 100 emails/day
+  • No credit card required
+
+HOW TO SIGN UP:
+  → Go to resend.com
+  → Sign up with GitHub or email
+  → Dashboard → API Keys → Create API Key
+  → Copy the key → goes in .env as RESEND_API_KEY
+
+NOTE: For sending from a custom domain (nbs@census.go.tz)
+      you need to verify your domain.
+      For research/testing use their default domain.
+6. EXPO EAS (Mobile Builds)
+URL: https://expo.dev
+Free tier includes:
+  • 30 builds/month (EAS Build)
+  • Expo Go for local testing (unlimited)
+  • No credit card required
+
+HOW TO SIGN UP:
+  → Go to expo.dev
+  → Sign up with email or GitHub
+  → Install EAS CLI: npm install -g eas-cli
+  → Login: eas login
+7. UPTIMEROBOT (Keep Render Alive)
+URL: https://uptimerobot.com
+Free tier includes:
+  • 50 monitors
+  • 5-minute check interval
+  • Email alerts
+  • No credit card required
+
+HOW TO SET UP:
+  → Sign up at uptimerobot.com
+  → New Monitor → HTTP(s)
+  → URL: https://your-render-url/api/health
+  → Interval: every 5 minutes
+  → Done — Render stays awake
+SUMMARY TABLE
+PLATFORM      WHAT FOR          FREE LIMIT        CARD NEEDED
+──────────────────────────────────────────────────────────────
+Render        Backend + DB      1GB DB / 90days   No
+Upstash       Redis Cache       10k cmds/day      No
+Cloudinary    Photos/PDFs       25GB storage      No
+Vercel        Web Dashboard     100GB bandwidth   No
+Resend        Emails            3k emails/month   No
+Expo EAS      Mobile Builds     30 builds/month   No
+UptimeRobot   Keep-alive ping   50 monitors       No
+──────────────────────────────────────────────────────────────
+TOTAL COST: $0 ✅

@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Tanzania Digital Live Census Model",
+    "slug": "tanzania-digital-live-census",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050d1a"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#050d1a"
+      },
+      "package": "tz.go.nbs.census.model"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "tz.go.nbs.census.model"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "bc9e125c-f6e4-4cb5-89cb-b10cf48fe757"
+      }
+    }
+  }
+}
