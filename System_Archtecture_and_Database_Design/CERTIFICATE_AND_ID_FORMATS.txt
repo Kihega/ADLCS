@@ -1,0 +1,437 @@
+================================================================================
+  TANZANIA DIGITAL LIVE CENSUS MODEL
+  CERTIFICATE FORMATS, ID FORMAT & DATABASE FIELD MAPPING
+  National Bureau of Statistics (NBS)
+================================================================================
+
+  Based on:
+  - Births and Deaths Registration Act (Cap 108 R.E. 2002)
+  - Law of Marriage Act 1971
+  - Real Tanzania NIDA Card Format (observed from actual card)
+
+================================================================================
+  SECTION 1 — NATIONAL ID (NIN) FORMAT
+================================================================================
+
+  REAL FORMAT (from actual Tanzania NIDA card):
+  ─────────────────────────────────────────────────────────────────────────
+  YYYYMMDD - LLLLL - SSSSS - CC
+  ─────────────────────────────────────────────────────────────────────────
+
+  SEGMENT BREAKDOWN:
+  ┌──────────┬────────┬─────────────────────────────────────────────────────┐
+  │ SEGMENT  │ LENGTH │ MEANING                                             │
+  ├──────────┼────────┼─────────────────────────────────────────────────────┤
+  │ YYYYMMDD │   8    │ Date of birth                                       │
+  │          │        │ Example: 19880722 = 22nd July 1988                  │
+  ├──────────┼────────┼─────────────────────────────────────────────────────┤
+  │ LLLLL    │   5    │ Location code                                       │
+  │          │        │ Encodes: Region(2) + District(2) + Ward/Village(1)  │
+  │          │        │ Example: 15132                                      │
+  │          │        │   15 = Region code                                  │
+  │          │        │   13 = District code                                │
+  │          │        │    2 = Ward/sub-location code                       │
+  ├──────────┼────────┼─────────────────────────────────────────────────────┤
+  │ SSSSS    │   5    │ Unique sequence number per location+DOB group       │
+  │          │        │ Example: 00001 (first person with that DOB+location)│
+  ├──────────┼────────┼─────────────────────────────────────────────────────┤
+  │ CC       │   2    │ Check digits / gender + sequence suffix             │
+  │          │        │ Example: 21                                         │
+  └──────────┴────────┴─────────────────────────────────────────────────────┘
+
+  TOTAL: 8 + 5 + 5 + 2 = 20 digits + 3 dashes = 23 characters
+
+  EXAMPLES:
+  ─────────────────────────────────────────────────────────────────────────
+  19880722-15132-00001-21   ← DOB 22 Jul 1988, location 15132, seq 00001
+  19850414-35306-00001-24   ← DOB 14 Apr 1985, location 35306, seq 00001
+  20000414-05120-00043-07   ← DOB 14 Apr 2000, location 05120, seq 00043
+  ─────────────────────────────────────────────────────────────────────────
+
+  DATABASE FIELD:
+  national_id  VARCHAR(23) UNIQUE NOT NULL
+  Pattern:     YYYYMMDD-LLLLL-SSSSS-CC
+
+  VALIDATION REGEX:
+  /^\d{8}-\d{5}-\d{5}-\d{2}$/
+
+  GENERATION LOGIC (our system — self-contained):
+  ─────────────────────────────────────────────────────────────────────────
+  function generateNationalId(dob, regionCode, districtCode,
+                               wardCode, uniqueSeq, checkDigits) {
+
+    // Format DOB: YYYYMMDD
+    const datePart = format(dob, 'YYYYMMDD')
+    // 20000414
+
+    // Location code: region(2) + district(2) + ward(1) = 5 digits
+    const rr  = pad(regionCode, 2)     // 05
+    const dd  = pad(districtCode, 2)   // 12
+    const w   = pad(wardCode, 1)       // 0
+    const locationPart = `${rr}${dd}${w}`
+    // 05120
+
+    // Unique sequence: query DB for count of same DOB+location → pad to 5
+    const seqPart = pad(uniqueSeq, 5)
+    // 00043
+
+    // Check digits: auto-generated 2-digit suffix
+    const ccPart = pad(checkDigits, 2)
+    // 07
+
+    return `${datePart}-${locationPart}-${seqPart}-${ccPart}`
+    // 20000414-05120-00043-07
+  }
+  ─────────────────────────────────────────────────────────────────────────
+
+  TANZANIA REGION CODES (for location part):
+  ─────────────────────────────────────────────────────────────────────────
+  01-Dodoma        02-Arusha        03-Kilimanjaro   04-Tanga
+  05-Morogoro      06-Pwani         07-Dar es Salaam 08-Lindi
+  09-Mtwara        10-Ruvuma        11-Iringa        12-Mbeya
+  13-Singida       14-Tabora        15-Rukwa         16-Kigoma
+  17-Shinyanga     18-Kagera        19-Mwanza        20-Mara
+  21-Manyara       22-Njombe        23-Katavi        24-Simiyu
+  25-Geita         26-Songwe
+  27-Zanzibar North   28-Zanzibar South   29-Zanzibar West
+  30-Pemba North      31-Pemba South
+  ─────────────────────────────────────────────────────────────────────────
+
+
+================================================================================
+  SECTION 2 — NATIONAL ID CARD LAYOUT (Physical Card)
+================================================================================
+
+  CARD SIZE: CR80 standard (85.6mm × 54mm)
+
+  FRONT SIDE:
+  ─────────────────────────────────────────────────────────────────────────
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │ [Coat of Arms]  JAMHURI YA MUUNGANO WA TANZANIA      [TZ Flag]       │
+  │                 KITAMBULISHO CHA TAIFA                               │
+  │                 THE UNITED REPUBLIC OF TANZANIA                      │
+  │                 CITIZEN IDENTITY CARD                                │
+  ├────────────────────────────────────────────────────────────────────────┤
+  │                                                                        │
+  │  NIN: 19880722-15132-00001-21                    ┌─────────┐          │
+  │                                                   │         │          │
+  │  JINA / Given Name:                               │  PHOTO  │          │
+  │  JOHN                                             │  3x4cm  │          │
+  │                                                   │         │          │
+  │  JINA LA MWISHO / Last Name:                      └─────────┘          │
+  │  AMSTERDAM                                                             │
+  │                                                                        │
+  │  TAREHE YA KUZALIWA / Date of Birth:                                  │
+  │  22 JUL 1988                                                          │
+  │                                                                        │
+  │  JINSI / Sex:  M                                                      │
+  │                                                                        │
+  │  SAINI / Signature: ________________________                          │
+  │                                                                        │
+  └────────────────────────────────────────────────────────────────────────┘
+
+  BACK SIDE:
+  ─────────────────────────────────────────────────────────────────────────
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │  THE UNITED REPUBLIC OF TANZANIA CITIZEN IDENTITY CARD               │
+  │                                                                        │
+  │  [BARCODE - full width]                                               │
+  │  19850414353060000124                                                 │
+  │                                                                        │
+  │  Kitambulisho hiki ni mali ya Serikali ya Jamhuri ya Muungano wa     │
+  │  Tanzania. Huruhusiwi kukifanyia mabadiliko ya aina yoyote wala      │
+  │  kumpatia mtu ambaye haruhusiwi kukitumia...                         │
+  │                                                                        │
+  │  The Identity Card is the property of the Government of The United   │
+  │  Republic of Tanzania. It should not be tampered with or allowed to  │
+  │  pass into the possession of unauthorised person. If lost or         │
+  │  destroyed the fact and circumstances should immediately be reported  │
+  │  to the Local Police and the nearest NIDA office...                  │
+  │                                                                        │
+  │                    [Director General Signature]                       │
+  │                    DIRECTOR GENERAL                                   │
+  │                    NATIONAL IDENTIFICATION AUTHORITY                  │
+  └────────────────────────────────────────────────────────────────────────┘
+
+  CARD COLORS:
+  ─────────────────────────────────────────────────────────────────────────
+  Background  : Light green gradient (#C8E6C9 to #E8F5E9)
+  NIN Number  : Black bold, large font
+  Header text : Dark purple/navy (#1A237E)
+  "CITIZEN IDENTITY CARD" : Purple bold
+  Coat of Arms: Full color (top left)
+  Tanzania Flag: Full color (top right)
+  Watermark   : Tanzania map outline (light, background)
+  ─────────────────────────────────────────────────────────────────────────
+
+  DATABASE FIELDS (citizens table additions):
+  ─────────────────────────────────────────────────────────────────────────
+  national_id          VARCHAR(23)   UNIQUE  e.g. 19880722-15132-00001-21
+  id_card_issued       DATE                  when card was printed
+  id_card_expires      DATE                  issued + 10 years
+  id_card_pdf_url      TEXT                  Cloudinary printable PDF
+  blood_group          VARCHAR(5)    NULL    A+, B-, O+, AB+ (optional)
+  ─────────────────────────────────────────────────────────────────────────
+
+
+================================================================================
+  SECTION 3 — BIRTH CERTIFICATE FORMAT
+================================================================================
+
+  HEADER:
+  ─────────────────────────────────────────────────────────────────────────
+  [QR Code - top left]
+
+  [Tanzania Coat of Arms - top center]
+
+  THE UNITED REPUBLIC OF TANZANIA
+  CERTIFICATE OF BIRTH
+
+  Certified under the Births and Deaths Registration Act
+  (Cap 108 R.E. 2002) to be a true copy of an entry
+  in the Registrar General's custody.
+  ─────────────────────────────────────────────────────────────────────────
+
+  CERTIFICATE NUMBER FORMAT:
+  {8-digit-sequence} A
+  Example: 35397890 A  (bottom left, like real cert)
+
+  TABLE FIELDS (numbered columns):
+  ┌─────┬──────────────────────────────────────────────────────────────────┐
+  │ (1) │ Entry No.              → auto-generated sequence                │
+  │ (2) │ Where Born             → facility_name, district, region        │
+  │ (3) │ Child's Name           → first + middle + surname               │
+  │ (4) │ Sex                    → MALE / FEMALE                          │
+  │ (5) │ Father's Name          → father full name                       │
+  │ (6) │ Father's Country       → Tanzania / other                       │
+  │ (7) │ Mother's Name          → mother full name                       │
+  │ (8) │ Mother's Country       → Tanzania / other                       │
+  │ (9) │ Birth Date             → DD MONTH YYYY                          │
+  │(10) │ Registration Date      → DD MONTH YYYY                          │
+  │(11) │ Registrar General      → name + signature                       │
+  │(12) │ National ID Number     → YYYYMMDD-LLLLL-SSSSS-CC (ADDED)       │
+  └─────┴──────────────────────────────────────────────────────────────────┘
+
+  FOOTER:
+  ─────────────────────────────────────────────────────────────────────────
+  "This Certificate is not proof of Citizenship"
+
+  Dated this _____ [Registrar General Signature + Stamp]
+
+  [QR Code]  [Security stamp/seal]  [Serial: XXXXXXXX A]
+  ─────────────────────────────────────────────────────────────────────────
+
+  BACKGROUND: Cream/golden ornate border (like real cert)
+  COLOR: #F5F0DC background, golden border
+
+
+================================================================================
+  SECTION 4 — DEATH CERTIFICATE FORMAT
+================================================================================
+
+  HEADER:
+  ─────────────────────────────────────────────────────────────────────────
+  [Tanzania Coat of Arms - top center]
+
+  THE UNITED REPUBLIC OF TANZANIA
+  CERTIFICATE OF DEATH
+
+  Certified under the Births and Deaths Registration Act
+  (Cap 108 R.E. 2002) to be a true copy of an entry
+  in the Registrar General's custody.
+  ─────────────────────────────────────────────────────────────────────────
+
+  TABLE FIELDS (numbered columns):
+  ┌─────┬──────────────────────────────────────────────────────────────────┐
+  │ (1) │ Entry No.              → auto-generated sequence                │
+  │ (2) │ Deceased Name          → full name                              │
+  │ (3) │ Age                    → age at death (frozen)                  │
+  │ (4) │ Sex                    → MALE / FEMALE                          │
+  │ (5) │ Last Known Residence   → village, ward, district, region        │
+  │ (6) │ Occupation             → from citizen record                    │
+  │ (7) │ Nationality            → Tanzania                               │
+  │ (8) │ Date of Death          → DD MONTH YYYY                          │
+  │ (9) │ Place of Death         → facility or village name               │
+  │(10) │ Cause of Death         → as registered                          │
+  │(11) │ Name & Address of      → registering officer name + address     │
+  │     │ Informant              │                                         │
+  │(12) │ Registration Date      → DD MONTH YYYY                          │
+  │(13) │ Registry Number        → serial number                          │
+  │(14) │ National ID Number     → YYYYMMDD-LLLLL-SSSSS-CC (ADDED)       │
+  └─────┴──────────────────────────────────────────────────────────────────┘
+
+  FOOTER:
+  ─────────────────────────────────────────────────────────────────────────
+  Dated this _____ [Registrar General Signature]
+
+  [QR Code left]  [Security seal center]  [Serial: XXXXXXXX A right]
+  ─────────────────────────────────────────────────────────────────────────
+
+  BACKGROUND: White, Tanzania Coat of Arms watermark (light orange)
+
+
+================================================================================
+  SECTION 5 — MARRIAGE CERTIFICATE FORMAT
+================================================================================
+
+  HEADER:
+  ─────────────────────────────────────────────────────────────────────────
+  [Tanzania Coat of Arms - top center]
+
+  JAMHURI YA MUUNGANO WA TANZANIA
+  THE UNITED REPUBLIC OF TANZANIA
+
+  SHAHADA YA NDOA — CERTIFICATE OF MARRIAGE    F  [000000000]
+  Sheria ya Ndoa 1971 — The Law of Marriage Act 1971
+  ─────────────────────────────────────────────────────────────────────────
+
+  CERTIFICATE NUMBER FORMAT:
+  F followed by 9-digit sequence
+  Example: F 000077562
+
+  TOP SECTION:
+  ─────────────────────────────────────────────────────────────────────────
+  Ndoa imefungwa / Marriage Contracted at: [village/town]
+  Mkoa / Region: [region]
+  Nchi / Country: TANZANIA
+  ─────────────────────────────────────────────────────────────────────────
+
+  MAIN TABLE — TWO ROWS (Husband + Wife):
+  ┌──────────────────────┬──────────────────────────────────────────────────┐
+  │ COLUMN               │ CONTENT                                          │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Tarehe ya Ndoa       │ Date of Marriage                                 │
+  │ Date of Marriage     │                                                  │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Majina Kamili        │ HUSBAND: Full Name (row 1)                       │
+  │ Full Names of Parties│ WIFE:    Full Name (row 2)                       │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Umri / Age           │ Husband age (row 1) / Wife age (row 2)           │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Hali / Status        │ HUSBAND: HAJAOA / MJANE / AMEACHIKA              │
+  │ (Marital Status)     │ WIFE:    HAJAOLEWA / MJANE / AMEACHIKA           │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Mahali wanapoishi    │ Husband residence (row 1)                        │
+  │ Residence            │ Wife residence (row 2)                           │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Jina la Baba         │ Husband's Father Name (row 1)                    │
+  │ Father's Name        │ Wife's Mother Name (row 2)  ← modified           │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Aina ya Ndoa         │ * Ndoa ya mke mmoja / Monogamous                 │
+  │ Kind of Marriage     │ * Huenda ikawa ya wake wengi /                   │
+  │                      │   Potentially Polygamous                         │
+  │                      │ * Wake wengi / Polygamous                        │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Nambari ya Kitambul. │ HUSBAND National ID (ADDED)                      │
+  │ National ID Number   │ WIFE National ID (ADDED)                         │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ Picha / Photo        │ HUSBAND Photo (ADDED - 2x2cm thumbnail)          │
+  │                      │ WIFE Photo (ADDED - 2x2cm thumbnail)             │
+  └──────────────────────┴──────────────────────────────────────────────────┘
+
+  BOTTOM SECTION:
+  ─────────────────────────────────────────────────────────────────────────
+  Ndoa imefungwa kwa Madhehebu ya / Religion:
+    [ ] Kiislamu    [ ] Kikristo    [ ] Kimila    [ ] Kiraia
+
+  Baina yetu / Between us:
+    Husband Full Name + Signature: _______________
+    Wife Full Name + Signature:    _______________
+
+  Mashaidi / Witnesses:
+    1. ___________________________  Signature: ________
+    2. ___________________________  Signature: ________
+
+  Mbele yangu / Issued by:  ____________________________
+  Rites:                    ____________________________
+
+  Msajili/Kadhi / Registrar: ___________________________
+  Tarehe / Date: DD / MM / YYYY
+  ─────────────────────────────────────────────────────────────────────────
+
+  FOOTER:
+  ─────────────────────────────────────────────────────────────────────────
+  Tarehe na Msingi wa Maelezo ya Habari /
+  Date and Source of Statement of Particulars: ___________
+
+  * Futa isiyotakiwa / Delete whichever is inapplicable
+
+  [QR Code - bottom left]
+  [Tanzania Coat of Arms Watermark - center]
+  [Registrar Stamp - bottom right]
+  ─────────────────────────────────────────────────────────────────────────
+
+  BACKGROUND: Light mint/cyan (#E8F5F0)
+  BILINGUAL: All labels in Swahili + English
+
+
+================================================================================
+  SECTION 6 — QR CODE PAYLOADS (all certificates)
+================================================================================
+
+  BIRTH QR:
+  {
+    "type": "BIRTH",
+    "cert_no": "35397890 A",
+    "national_id": "20000414-05120-00043-07",
+    "child_name": "DAMIAN DAVIDI KALINGA",
+    "dob": "14TH APRIL 2000",
+    "facility": "MDABULO DISPENSARY MUFINDI IRINGA",
+    "issued": "21ST APRIL 2024",
+    "signature": "HMAC-SHA256-HASH"
+  }
+
+  DEATH QR:
+  {
+    "type": "DEATH",
+    "cert_no": "84092 A",
+    "national_id": "19911023-07031-00015-05",
+    "deceased_name": "GODISON NICHOLAUS MINJA",
+    "age_at_death": 33,
+    "date_of_death": "23RD DECEMBER 2014",
+    "cause": "NATURAL",
+    "issued": "05TH NOVEMBER 2024",
+    "signature": "HMAC-SHA256-HASH"
+  }
+
+  MARRIAGE QR:
+  {
+    "type": "MARRIAGE",
+    "cert_no": "F 000077562",
+    "husband_nid": "19901015-12042-00006-41",
+    "wife_nid": "19930325-12042-00008-27",
+    "marriage_date": "13TH DECEMBER 2021",
+    "kind": "POTENTIALLY_POLYGAMOUS",
+    "place": "CHUNYA MBEYA",
+    "issued": "13TH DECEMBER 2021",
+    "signature": "HMAC-SHA256-HASH"
+  }
+
+
+================================================================================
+  SECTION 7 — CERTIFICATE VERIFICATION ENDPOINT
+================================================================================
+
+  All QR codes link to:
+
+  BIRTH:    GET /api/verify/birth/:cert_no
+  DEATH:    GET /api/verify/death/:cert_no
+  MARRIAGE: GET /api/verify/marriage/:cert_no
+
+  Public response (no auth, no PII):
+  {
+    "valid": true,
+    "type": "BIRTH",
+    "cert_no": "35397890 A",
+    "issued": "21ST APRIL 2024",
+    "summary": "Certificate is authentic and verified",
+    "qr_signature_valid": true
+  }
+
+
+================================================================================
+  END OF DOCUMENT
+  Tanzania Digital Live Census Model
+  Certificate & ID Formats Reference v1.1
+  Updated with real NIDA card format
+================================================================================
