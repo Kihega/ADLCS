@@ -86,15 +86,15 @@
 
   TASKS:
   [ ] Go to GitHub repo → Settings → Branches → Add branch ruleset
-  [ ] For main: require PR review (1 approver), require status checks,
+  [ ] For main: require PR review (0 approver), require status checks,
       block direct pushes, require linear history
   [ ] For dev: require status checks to pass before merge
   [ ] Create GitHub Projects board with columns:
       Backlog | Ready | In Progress | In Review | Done
   [ ] Add all NBS-XXX stories as Issues in the project board
 
-
-════════════════════════════════════════════════════════════════════════════════
+Use the edit icon to pin, add or delete clips.
+══════════════════════════════════════════════Use the edit icon to pin, add or delete clips.══════════════════════════════════
   NBS-003 | GITHUB ACTIONS CI PIPELINES
 ════════════════════════════════════════════════════════════════════════════════
 
@@ -105,34 +105,34 @@
   ACCEPTANCE CRITERIA:
   Given code is pushed to dev or a PR is opened to main
   When GitHub Actions runs
-  Then backend pipeline runs: lint → test → build → deploy-staging
-  And web pipeline runs: lint → test → build → deploy-preview
+  Then backend pipeline runs: lint → test → build → deploy-stagingTouch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.
+  And web pipeline runs: lint → test → build → deploy-previewUse the edit icon to pin, add or delete clips.
   And mobile pipeline runs: lint → test → expo-check
   And all pipelines show green status before any merge is allowed
 
-  TASKS:
-  [ ] Create .github/workflows/backend-ci.yml:
+  TASKS:Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour. 
+  [ ] Crecate .github/workflows/backend-ci.yml:
       ---
-      name: Backend CI
-      on:
+      name: Backend CITouch and hold a clip to pin it. Unpinned clips will be deletedUse the edit icon to pin, add or delete clips.Use the edit icon to pin, add or delete clips. after 1 hour.Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour| .
+      on:Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour .
         push:
           branches: [dev]
           paths: ['backend/**']
-        pull_request:
-          branches: [main]
-      jobs:
-        lint-and-test:
+        pull_request:Welcome to Gboard clipboard, any text that you copy will be saved here.Welcome to Gboard clipboard, any text that you copy will be saved here.git commit -m "feat(NBS-003): add GitHub Actions CI pipelines, Expo mobile setup, eas.json"git commit -m "feat(NBS-003): add GitHub Actions CI pipelines, Expo mobile setup, eas.json"git commit -m "feat(NBS-003): add GitHub Actions CI pipelines, Expo mobile setup, eas.json"
+          branches: [main]Use the edit icon to pin, add or delete clips.Use the edit icon to pin, add or delete clips.Use the edit icon to pin, add or delete clips.Use the edit icon to pin, add or delete clips.
+      jobsgit commit -m "feat(NBS-003): add GitHub Actions CI pipelines, Expo mobile setup, eas.json"Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.:
+        liUse the edit icon to pin, add or delete clips.git commit -m "feat(NBS-003): add GitHub Actions CI pipelines, Expo mobile setup, eas.json"nt-and-testTouch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hourUse the edit icon to pin, add or delete clips..:
           runs-on: ubuntu-latest
-          steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
-              with: { node-version: '20' }
-            - run: npm ci
-              working-directory: backend
-            - run: npm run lint
-              working-directory: backend
+          steps:Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.
+            - uses: actions/checkout@v4Welcome to Gboard clipboard, any text that you copy will be saved here.
+            - uses: actions/setup-node@v4Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.
+              with: { node-version: '20' }Welcome to Gboard clipboard, any text that you copy will be saved here.
+            - run: npm ciWelcome to Gboard clipboard, any text that you copy will be saved here.
+              working-directory: backendUse the edit icon to pin, add or delete clips.
+            - run: npm run lintUse the edit icon to pin, add or delete clips.Use the edit icon to pin, add or delete clips.
+              working-directory: backendWelcome to Gboard clipboard, any text that you copy will be saved here.
             - run: npm test -- --coverage
-              working-directory: backend
+              working-directory: backendTouch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.
               env:
                 DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
                 REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
@@ -140,16 +140,16 @@
         build:
           needs: lint-and-test
           runs-on: ubuntu-latest
-          steps:
+          steps:Welcome to Gboard clipboard, any text that you copy will be saved here.
             - uses: actions/checkout@v4
             - uses: actions/setup-node@v4
-              with: { node-version: '20' }
+              with: { node-version: '20' }Touch and hold a clip to pin it. Unpinned clips will be deleted after 1 hour.
             - run: npm ci && npm run build
               working-directory: backend
         deploy-staging:
           needs: build
           if: github.ref == 'refs/heads/dev'
-          runs-on: ubuntu-latest
+          runs-on: ubuntu-latesWelcome to Gboard clipboard, any text that you copy will be saved here.t
           steps:
             - run: curl -X POST ${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}
       ---
@@ -157,7 +157,7 @@
   [ ] Create .github/workflows/web-ci.yml (similar structure for web/)
   [ ] Create .github/workflows/mobile-ci.yml (lint + expo-doctor only)
   [ ] Add all required secrets to GitHub repository:
-      - TEST_DATABASE_URL (use Render staging DB)
+      - TEST_DATABASE_URL (use RenderWelcome to Gboard clipboard, any text that you copy will be saved here. staging DB)
       - TEST_REDIS_URL (use Upstash)
       - RENDER_STAGING_DEPLOY_HOOK_URL
       - RENDER_BACKEND_DEPLOY_HOOK_URL
