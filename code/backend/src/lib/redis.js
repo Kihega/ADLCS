@@ -3,9 +3,12 @@ const Redis = require('ioredis')
 let redis
 
 function connectRedis() {
+  if (redis) return redis
+
   try {
     redis = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 3,
+      lazyConnect: false,
       retryStrategy(times) {
         if (times > 3) {
           console.error('❌ Redis retry limit reached')
