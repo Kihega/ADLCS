@@ -1,40 +1,40 @@
 const Redis = require('ioredis')
 
-let redis
+let redis = null
 
 function connectRedis() {
-  if (redis) return redis
+  if (redis && redis.status === 'ready') return redis
 
-  try {
-    redis = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: false,
-      retryStrategy(times) {
-        if (times > 3) {
-          console.error('❌ Redis retry limit reached')
-          return null
-        }
-        return Math.min(times * 200, 1000)
-      },
-    })
+  redis = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+    retryStrategy(times) {
+      if (times > 3) {
+        console.error('❌ Redis retry limit reached')
+        return null
+      }
+      return Math.min(times * 500, 2000)
+    },
+  })
 
-    redis.on('connect', () => {
-      console.log('✅ Redis connected successfully')
-    })
+  redis.on('ready', () => {
+    console.log('✅ Redis connected successfully')
+  })
 
-    redis.on('error', (err) => {
-      console.error('❌ Redis error:', err.message)
-    })
+  redis.on('error', (err) => {
+    console.error('❌ Redis error:', err.message)
+  })
 
-    return redis
-  } catch (error) {
-    console.error('❌ Redis connection failed:', error.message)
-  }
+  redis.on('close', () => {
+    console.log('⚠️ Redis connection closed')
+  })
+
+  return redis
 }
 
 function getRedis() {
   if (!redis) {
-    throw new Error('Redis not initialized. Call connectRedis() first.')
+    return connectRedis()
   }
   return redis
 }

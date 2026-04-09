@@ -3,7 +3,6 @@ const router = express.Router()
 const { prisma } = require('../lib/prisma')
 const { getRedis } = require('../lib/redis')
 
-// GET /api/health
 router.get('/', async (req, res) => {
   const health = {
     status: 'ok',
@@ -18,18 +17,26 @@ router.get('/', async (req, res) => {
 
   // Check database
   try {
-    await prisma.$queryRaw`SELECT 1`
+    await prisma.$executeRaw`SELECT 1`
     health.database = 'connected'
   } catch (error) {
-    health.database = `error: ${error.message}`
-    health.status = 'degraded'
+    try {
+      // fallback check
+      await prisma.superAdmin.count()
+      health.database = 'connected'
+    } catch (err) {
+      health.database = `error: ${err.message}`
+      health.status = 'degraded'
+    }
   }
 
   // Check Redis
   try {
     const redis = getRedis()
-    await redis.ping()
-    health.redis = 'connected'
+    const ping = await redis.ping()
+    if (ping === 'PONG') {
+      health.redis = 'connected'
+    }
   } catch (error) {
     health.redis = `error: ${error.message}`
     health.status = 'degraded'
