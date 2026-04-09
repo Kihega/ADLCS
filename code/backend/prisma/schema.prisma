@@ -1,0 +1,698 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL_POOLER")
+  directUrl = env("DATABASE_URL")
+}
+// ─── ENUMS ────────────────────────────────────────────────
+
+enum Jurisdiction {
+  mainland
+  zanzibar
+}
+
+enum AdminStatus {
+  pending
+  active
+  suspended
+}
+
+enum OfficerStatus {
+  pending
+  active
+  offline
+  suspended
+}
+
+enum VitalStatus {
+  alive
+  deceased
+}
+
+enum Gender {
+  male
+  female
+}
+
+enum MaritalStatus {
+  single
+  married
+  widowed
+  divorced
+}
+
+enum EducationLevel {
+  none
+  primary
+  o_level
+  a_level
+  certificate
+  diploma
+  bachelor
+  master
+  phd
+  other
+}
+
+enum MigrationStatus {
+  pending
+  confirmed
+  cancelled
+  expired
+}
+
+enum MarriageStatus {
+  active
+  dissolved
+  pending_dissolution
+  unregistered
+}
+
+enum KindOfMarriage {
+  monogamous
+  potentially_polygamous
+  polygamous
+}
+
+enum MarriageReligion {
+  islamic
+  christian
+  customary
+  civil
+}
+
+enum BuildingType {
+  residential
+  business
+  hotel
+  hospital
+  school
+  college
+  university
+  industry
+  government
+  police
+  military
+  training
+  other
+}
+
+enum OwnershipType {
+  private
+  public
+  government
+}
+
+enum IndustryType {
+  processing
+  manufacturing
+  other
+}
+
+enum InfraType {
+  road
+  railway
+  station
+  port
+  bus_stand
+}
+
+enum RoadType {
+  tarmac
+  rough
+}
+
+enum FacilityType {
+  hospital
+  clinic
+  dispensary
+  health_centre
+}
+
+enum FacilityOwnership {
+  public
+  private
+  mission
+}
+
+enum FacilityGrade {
+  H
+  C
+  D
+  M
+  O
+}
+
+enum DeathCategory {
+  infant
+  adult
+}
+
+enum DeathLocationType {
+  hospital
+  outside
+}
+
+enum AuthProvider {
+  email
+  google
+  apple
+}
+
+enum PublicUserStatus {
+  active
+  suspended
+}
+
+enum AuditActorRole {
+  super_admin
+  district_admin
+  village_officer
+  hospital_officer
+  public_user
+}
+
+enum PopulationLevel {
+  national
+  region
+  district
+  ward
+  village
+}
+
+// ─── GEOGRAPHY ────────────────────────────────────────────
+
+model Region {
+  id           Int          @id @default(autoincrement())
+  name         String       @db.VarChar(80)
+  jurisdiction Jurisdiction
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  districts    District[]
+  citizens     Citizen[]
+  districtAdmins DistrictAdmin[]
+  snapshots    PopulationSnapshot[]
+
+  @@map("regions")
+}
+
+model District {
+  id        Int      @id @default(autoincrement())
+  regionId  Int      @map("region_id")
+  name      String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  region    Region   @relation(fields: [regionId], references: [id])
+  wards     Ward[]
+  districtAdmins DistrictAdmin[]
+  villageOfficers VillageOfficer[]
+  hospitalOfficers HospitalOfficer[]
+  snapshots PopulationSnapshot[]
+
+  @@map("districts")
+}
+
+model Ward {
+  id         Int      @id @default(autoincrement())
+  districtId Int      @map("district_id")
+  name       String   @db.VarChar(80)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  district   District @relation(fields: [districtId], references: [id])
+  villages   Village[]
+  villageOfficers VillageOfficer[]
+  snapshots  PopulationSnapshot[]
+
+  @@map("wards")
+}
+
+model Village {
+  id        Int      @id @default(autoincrement())
+  wardId    Int      @map("ward_id")
+  name      String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ward      Ward     @relation(fields: [wardId], references: [id])
+  officers  VillageOfficer[]
+  citizens  Citizen[]
+  buildings Building[]
+  infrastructure PublicInfrastructure[]
+  migrationsFrom Migration[] @relation("MigrationFrom")
+  migrationsTo   Migration[] @relation("MigrationTo")
+  snapshots PopulationSnapshot[]
+
+  @@map("villages")
+}
+
+// ─── USERS ────────────────────────────────────────────────
+
+model SuperAdmin {
+  id                 String      @id @default(uuid())
+  employeeId         String      @unique @map("employee_id") @db.VarChar(30)
+  nidaNumber         String      @unique @map("nida_number") @db.VarChar(100)
+  fullName           String      @map("full_name") @db.VarChar(120)
+  email              String      @unique @db.VarChar(120)
+  passwordHash       String?     @map("password_hash")
+  mobile             String?     @db.VarChar(15)
+  department         String?     @db.VarChar(80)
+  profilePhotoUrl    String?     @map("profile_photo_url")
+  mfaEnabled         Boolean     @default(false) @map("mfa_enabled")
+  mfaSecret          String?     @map("mfa_secret")
+  status             AdminStatus @default(pending)
+  loginTokenHash     String?     @map("login_token_hash")
+  loginTokenExpires  DateTime?   @map("login_token_expires")
+  createdById        String?     @map("created_by")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  lastLogin          DateTime?   @map("last_login")
+
+  createdBy          SuperAdmin?  @relation("SuperAdminCreatedBy", fields: [createdById], references: [id])
+  createdAdmins      SuperAdmin[] @relation("SuperAdminCreatedBy")
+  createdDistrictAdmins DistrictAdmin[]
+  auditLogs          AuditLog[]
+
+  @@map("super_admins")
+}
+
+model DistrictAdmin {
+  id                String      @id @default(uuid())
+  employeeId        String      @unique @map("employee_id") @db.VarChar(30)
+  nidaNumber        String      @unique @map("nida_number") @db.VarChar(100)
+  fullName          String      @map("full_name") @db.VarChar(120)
+  email             String      @unique @db.VarChar(120)
+  passwordHash      String?     @map("password_hash")
+  mobile            String?     @db.VarChar(15)
+  regionId          Int?        @map("region_id")
+  districtId        Int?        @map("district_id")
+  profilePhotoUrl   String?     @map("profile_photo_url")
+  mfaEnabled        Boolean     @default(false) @map("mfa_enabled")
+  mfaSecret         String?     @map("mfa_secret")
+  status            AdminStatus @default(pending)
+  loginTokenHash    String?     @map("login_token_hash")
+  loginTokenExpires DateTime?   @map("login_token_expires")
+  createdById       String      @map("created_by")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  lastLogin         DateTime?   @map("last_login")
+
+  createdBy         SuperAdmin  @relation(fields: [createdById], references: [id])
+  region            Region?     @relation(fields: [regionId], references: [id])
+  district          District?   @relation(fields: [districtId], references: [id])
+  villageOfficers   VillageOfficer[]
+  hospitalOfficers  HospitalOfficer[]
+  auditLogs         AuditLog[]
+
+  @@map("district_admins")
+}
+
+model VillageOfficer {
+  id                String        @id @default(uuid())
+  employeeId        String        @unique @map("employee_id") @db.VarChar(30)
+  nidaNumber        String        @unique @map("nida_number") @db.VarChar(100)
+  fullName          String        @map("full_name") @db.VarChar(120)
+  email             String        @unique @db.VarChar(120)
+  passwordHash      String?       @map("password_hash")
+  mobile            String?       @db.VarChar(15)
+  villageId         Int?          @map("village_id")
+  wardId            Int?          @map("ward_id")
+  districtId        Int?          @map("district_id")
+  profilePhotoUrl   String?       @map("profile_photo_url")
+  deviceFingerprint String?       @unique @map("device_fingerprint")
+  deviceBoundAt     DateTime?     @map("device_bound_at")
+  expoPushToken     String?       @map("expo_push_token")
+  mfaEnabled        Boolean       @default(false) @map("mfa_enabled")
+  mfaSecret         String?       @map("mfa_secret")
+  status            OfficerStatus @default(pending)
+  loginTokenHash    String?       @map("login_token_hash")
+  loginTokenExpires DateTime?     @map("login_token_expires")
+  createdById       String        @map("created_by")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  lastLogin         DateTime?     @map("last_login")
+
+  createdBy         DistrictAdmin @relation(fields: [createdById], references: [id])
+  village           Village?      @relation(fields: [villageId], references: [id])
+  ward              Ward?         @relation(fields: [wardId], references: [id])
+  district          District?     @relation(fields: [districtId], references: [id])
+  registeredCitizens Citizen[]
+  registeredMarriages Marriage[]
+  registeredBuildings Building[]
+  registeredInfra   PublicInfrastructure[]
+  sourceMigrations  Migration[]   @relation("SourceOfficer")
+  targetMigrations  Migration[]   @relation("TargetOfficer")
+  outsideDeaths     Death[]       @relation("VillageOfficerDeath")
+  auditLogs         AuditLog[]
+
+  @@map("village_officers")
+}
+
+model HospitalOfficer {
+  id                String        @id @default(uuid())
+  employeeId        String        @unique @map("employee_id") @db.VarChar(30)
+  nidaNumber        String        @unique @map("nida_number") @db.VarChar(100)
+  fullName          String        @map("full_name") @db.VarChar(120)
+  email             String        @unique @db.VarChar(120)
+  passwordHash      String?       @map("password_hash")
+  mobile            String?       @db.VarChar(15)
+  facilityId        Int?          @map("facility_id")
+  districtId        Int?          @map("district_id")
+  profilePhotoUrl   String?       @map("profile_photo_url")
+  deviceFingerprint String?       @unique @map("device_fingerprint")
+  deviceBoundAt     DateTime?     @map("device_bound_at")
+  expoPushToken     String?       @map("expo_push_token")
+  mfaEnabled        Boolean       @default(false) @map("mfa_enabled")
+  mfaSecret         String?       @map("mfa_secret")
+  status            OfficerStatus @default(pending)
+  loginTokenHash    String?       @map("login_token_hash")
+  loginTokenExpires DateTime?     @map("login_token_expires")
+  createdById       String        @map("created_by")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  lastLogin         DateTime?     @map("last_login")
+
+  createdBy         DistrictAdmin   @relation(fields: [createdById], references: [id])
+  facility          HealthFacility? @relation(fields: [facilityId], references: [id])
+  district          District?       @relation(fields: [districtId], references: [id])
+  registeredBirths  Birth[]
+  hospitalDeaths    Death[]         @relation("HospitalOfficerDeath")
+  auditLogs         AuditLog[]
+
+  @@map("hospital_officers")
+}
+
+model PublicUser {
+  id             String           @id @default(uuid())
+  email          String           @unique @db.VarChar(120)
+  passwordHash   String?          @map("password_hash")
+  authProvider   AuthProvider     @default(email) @map("auth_provider")
+  oauthId        String?          @map("oauth_id")
+  displayName    String?          @map("display_name") @db.VarChar(80)
+  status         PublicUserStatus @default(active)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  lastLogin      DateTime?        @map("last_login")
+
+  @@map("public_users")
+}
+
+// ─── CIVIL REGISTRY ───────────────────────────────────────
+
+model Citizen {
+  id                  String         @id @default(uuid())
+  nationalId          String         @unique @map("national_id") @db.VarChar(23)
+  firstName           String         @map("first_name") @db.VarChar(60)
+  middleName          String?        @map("middle_name") @db.VarChar(60)
+  surname             String         @db.VarChar(60)
+  gender              Gender
+  dateOfBirth         DateTime       @map("date_of_birth") @db.Date
+  age                 Int            @default(0)
+  vitalStatus         VitalStatus    @default(alive) @map("vital_status")
+  photoUrl            String?        @map("photo_url")
+  fingerprintTemplate String?        @map("fingerprint_template")
+  signatureUrl        String?        @map("signature_url")
+  idCardIssued        DateTime?      @map("id_card_issued") @db.Date
+  idCardExpires       DateTime?      @map("id_card_expires") @db.Date
+  idCardPdfUrl        String?        @map("id_card_pdf_url")
+  bloodGroup          String?        @map("blood_group") @db.VarChar(5)
+  currentVillageId    Int?           @map("current_village_id")
+  streetName          String?        @map("street_name") @db.VarChar(80)
+  houseRegNumber      String?        @map("house_reg_number") @db.VarChar(30)
+  fatherCitizenId     String?        @map("father_citizen_id")
+  motherCitizenId     String?        @map("mother_citizen_id")
+  maritalStatus       MaritalStatus  @default(single) @map("marital_status")
+  educationLevel      EducationLevel @default(none) @map("education_level")
+  occupations         Json?
+  disabilityStatus    Boolean        @default(false) @map("disability_status")
+  disabilityTypes     Json?          @map("disability_types")
+  disabilityCause     String?        @map("disability_cause")
+  landOwnershipAcres  Decimal?       @map("land_ownership_acres") @db.Decimal(10, 2)
+  animalKeeping       Json?          @map("animal_keeping")
+  healthInsurance     Json?          @map("health_insurance")
+  commDevices         Json?          @map("comm_devices")
+  socialFunds         Json?          @map("social_funds")
+  registeredById      String?        @map("registered_by")
+  registeredAt        DateTime?      @map("registered_at")
+  updatedAt           DateTime?      @updatedAt @map("updated_at")
+
+  currentVillage      Village?       @relation(fields: [currentVillageId], references: [id])
+  father              Citizen?       @relation("FatherChildren", fields: [fatherCitizenId], references: [id])
+  fatherChildren      Citizen[]      @relation("FatherChildren")
+  mother              Citizen?       @relation("MotherChildren", fields: [motherCitizenId], references: [id])
+  motherChildren      Citizen[]      @relation("MotherChildren")
+  registeredBy        VillageOfficer? @relation(fields: [registeredById], references: [id])
+  childrenLinks       CitizenChild[] @relation("ParentLinks")
+  parentLinks         CitizenChild[] @relation("ChildLinks")
+  birthRecord         Birth?         @relation("ChildBirth")
+  fatherBirths        Birth[]        @relation("FatherBirth")
+  motherBirths        Birth[]        @relation("MotherBirth")
+  deathRecord         Death?         @relation("CitizenDeath")
+  infantFatherDeaths  Death[]        @relation("InfantFatherDeath")
+  infantMotherDeaths  Death[]        @relation("InfantMotherDeath")
+  husbandMarriages    Marriage[]     @relation("HusbandMarriage")
+  wifeMarriages       Marriage[]     @relation("WifeMarriage")
+  migrations          Migration[]
+  region              Region?        @relation(fields: [regionId], references: [id])
+  regionId            Int?           @map("region_id")
+
+  @@map("citizens")
+}
+
+model CitizenChild {
+  id               String   @id @default(uuid())
+  parentCitizenId  String   @map("parent_citizen_id")
+  childCitizenId   String   @map("child_citizen_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  parent           Citizen  @relation("ParentLinks", fields: [parentCitizenId], references: [id])
+  child            Citizen  @relation("ChildLinks", fields: [childCitizenId], references: [id])
+
+  @@unique([parentCitizenId, childCitizenId])
+  @@map("citizen_children")
+}
+
+model Birth {
+  id              String   @id @default(uuid())
+  birthCertNo     String   @unique @map("birth_cert_no") @db.VarChar(30)
+  childCitizenId  String   @unique @map("child_citizen_id")
+  childFirstName  String   @map("child_first_name") @db.VarChar(60)
+  childMiddleName String?  @map("child_middle_name") @db.VarChar(60)
+  childSurname    String   @map("child_surname") @db.VarChar(60)
+  gender          Gender
+  dateOfBirth     DateTime @map("date_of_birth") @db.Date
+  fatherCitizenId String?  @map("father_citizen_id")
+  motherCitizenId String?  @map("mother_citizen_id")
+  facilityId      Int?     @map("facility_id")
+  officerId       String   @map("officer_id")
+  certPdfUrl      String?  @map("cert_pdf_url")
+  qrPayload       String?  @map("qr_payload")
+  ritaSynced      Boolean  @default(false) @map("rita_synced")
+  ritaSyncAt      DateTime? @map("rita_sync_at")
+  registeredAt    DateTime @default(now()) @map("registered_at")
+
+  child           Citizen        @relation("ChildBirth", fields: [childCitizenId], references: [id])
+  father          Citizen?       @relation("FatherBirth", fields: [fatherCitizenId], references: [id])
+  mother          Citizen?       @relation("MotherBirth", fields: [motherCitizenId], references: [id])
+  facility        HealthFacility? @relation(fields: [facilityId], references: [id])
+  officer         HospitalOfficer @relation(fields: [officerId], references: [id])
+
+  @@map("births")
+}
+
+model Death {
+  id               String            @id @default(uuid())
+  deathCertNo      String            @unique @map("death_cert_no") @db.VarChar(30)
+  citizenId        String?           @unique @map("citizen_id")
+  nationalId       String?           @map("national_id") @db.VarChar(23)
+  dateOfDeath      DateTime          @map("date_of_death") @db.Date
+  causeOfDeath     String            @map("cause_of_death")
+  ageAtDeath       Int?              @map("age_at_death")
+  locationType     DeathLocationType @map("location_type")
+  category         DeathCategory
+  placeOfDeath     String?           @map("place_of_death") @db.VarChar(120)
+  lastResidence    String?           @map("last_residence") @db.VarChar(200)
+  occupation       String?           @db.VarChar(120)
+  informantName    String?           @map("informant_name") @db.VarChar(120)
+  informantAddress String?           @map("informant_address") @db.VarChar(200)
+  facilityId       Int?              @map("facility_id")
+  villageOfficerId String?           @map("village_officer_id")
+  hospitalOfficerId String?          @map("hospital_officer_id")
+  infantFatherId   String?           @map("infant_father_id")
+  infantMotherId   String?           @map("infant_mother_id")
+  certPdfUrl       String?           @map("cert_pdf_url")
+  qrPayload        String?           @map("qr_payload")
+  ritaSynced       Boolean           @default(false) @map("rita_synced")
+  ritaSyncAt       DateTime?         @map("rita_sync_at")
+  registeredAt     DateTime          @default(now()) @map("registered_at")
+
+  citizen          Citizen?        @relation("CitizenDeath", fields: [citizenId], references: [id])
+  infantFather     Citizen?        @relation("InfantFatherDeath", fields: [infantFatherId], references: [id])
+  infantMother     Citizen?        @relation("InfantMotherDeath", fields: [infantMotherId], references: [id])
+  facility         HealthFacility? @relation(fields: [facilityId], references: [id])
+  villageOfficer   VillageOfficer? @relation("VillageOfficerDeath", fields: [villageOfficerId], references: [id])
+  hospitalOfficer  HospitalOfficer? @relation("HospitalOfficerDeath", fields: [hospitalOfficerId], references: [id])
+
+  @@map("deaths")
+}
+
+model Marriage {
+  id                 String           @id @default(uuid())
+  marriageCertNo     String           @unique @map("marriage_cert_no") @db.VarChar(30)
+  husbandId          String           @map("husband_id")
+  wifeId             String           @map("wife_id")
+  husbandNid         String           @map("husband_nid") @db.VarChar(23)
+  wifeNid            String           @map("wife_nid") @db.VarChar(23)
+  husbandAge         Int              @map("husband_age")
+  wifeAge            Int              @map("wife_age")
+  husbandStatusPrev  String           @map("husband_status_prev") @db.VarChar(20)
+  wifeStatusPrev     String           @map("wife_status_prev") @db.VarChar(20)
+  marriageDate       DateTime         @map("marriage_date") @db.Date
+  marriagePlace      String           @map("marriage_place") @db.VarChar(120)
+  regionId           Int?             @map("region_id")
+  religion           MarriageReligion
+  kindOfMarriage     KindOfMarriage   @map("kind_of_marriage")
+  witness1Name       String?          @map("witness1_name") @db.VarChar(120)
+  witness2Name       String?          @map("witness2_name") @db.VarChar(120)
+  registrarName      String?          @map("registrar_name") @db.VarChar(120)
+  status             MarriageStatus   @default(active)
+  dissolutionDate    DateTime?        @map("dissolution_date") @db.Date
+  dissolutionReason  String?          @map("dissolution_reason")
+  dissolutionAuth    String?          @map("dissolution_auth") @db.VarChar(120)
+  registeredById     String           @map("registered_by")
+  certPdfUrl         String?          @map("cert_pdf_url")
+  qrPayload          String?          @map("qr_payload")
+  ritaSynced         Boolean          @default(false) @map("rita_synced")
+  ritaSyncAt         DateTime?        @map("rita_sync_at")
+  registeredAt       DateTime         @default(now()) @map("registered_at")
+
+  husband            Citizen          @relation("HusbandMarriage", fields: [husbandId], references: [id])
+  wife               Citizen          @relation("WifeMarriage", fields: [wifeId], references: [id])
+  registeredBy       VillageOfficer   @relation(fields: [registeredById], references: [id])
+
+  @@map("marriages")
+}
+
+model Migration {
+  id               String          @id @default(uuid())
+  citizenId        String          @map("citizen_id")
+  fromVillageId    Int             @map("from_village_id")
+  toVillageId      Int             @map("to_village_id")
+  reason           String
+  status           MigrationStatus @default(pending)
+  requestDate      DateTime        @default(now()) @map("request_date")
+  expiryDate       DateTime        @map("expiry_date")
+  confirmedDate    DateTime?       @map("confirmed_date")
+  sourceOfficerId  String          @map("source_officer_id")
+  targetOfficerId  String?         @map("target_officer_id")
+
+  citizen          Citizen         @relation(fields: [citizenId], references: [id])
+  fromVillage      Village         @relation("MigrationFrom", fields: [fromVillageId], references: [id])
+  toVillage        Village         @relation("MigrationTo", fields: [toVillageId], references: [id])
+  sourceOfficer    VillageOfficer  @relation("SourceOfficer", fields: [sourceOfficerId], references: [id])
+  targetOfficer    VillageOfficer? @relation("TargetOfficer", fields: [targetOfficerId], references: [id])
+
+  @@map("migrations")
+}
+
+// ─── ASSETS ───────────────────────────────────────────────
+
+model HealthFacility {
+  id              Int               @id @default(autoincrement())
+  facilityRegNo   String            @unique @map("facility_reg_no") @db.VarChar(30)
+  facilityName    String            @map("facility_name") @db.VarChar(120)
+  facilityType    FacilityType      @map("facility_type")
+  facilityGrade   FacilityGrade     @map("facility_grade")
+  villageId       Int?              @map("village_id")
+  ownershipType   FacilityOwnership @map("ownership_type")
+  gpsLat          Decimal?          @map("gps_lat") @db.Decimal(10, 8)
+  gpsLng          Decimal?          @map("gps_lng") @db.Decimal(11, 8)
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  officers        HospitalOfficer[]
+  births          Birth[]
+  deaths          Death[]
+
+  @@map("health_facilities")
+}
+
+model Building {
+  id             String        @id @db.VarChar(20)
+  buildingType   BuildingType  @map("building_type")
+  name           String?       @db.VarChar(120)
+  streetLocation String        @map("street_location") @db.VarChar(120)
+  villageId      Int           @map("village_id")
+  owners         Json
+  ownershipType  OwnershipType @map("ownership_type")
+  hotelClass     String?       @map("hotel_class") @db.VarChar(20)
+  industryType   IndustryType? @map("industry_type")
+  coverageAcres  Decimal?      @map("coverage_acres") @db.Decimal(10, 2)
+  numBuildings   Int?          @map("num_buildings")
+  facilityId     Int?          @map("facility_id")
+  registeredById String        @map("registered_by")
+  registeredAt   DateTime      @default(now()) @map("registered_at")
+
+  village        Village        @relation(fields: [villageId], references: [id])
+  registeredBy   VillageOfficer @relation(fields: [registeredById], references: [id])
+
+  @@map("buildings")
+}
+
+model PublicInfrastructure {
+  id             String     @id @default(uuid())
+  infraType      InfraType  @map("infra_type")
+  name           String     @db.VarChar(120)
+  roadType       RoadType?  @map("road_type")
+  coverageAcres  Decimal?   @map("coverage_acres") @db.Decimal(10, 2)
+  lengthKm       Decimal?   @map("length_km") @db.Decimal(10, 2)
+  villageId      Int        @map("village_id")
+  registeredById String     @map("registered_by")
+  registeredAt   DateTime   @default(now()) @map("registered_at")
+
+  village        Village        @relation(fields: [villageId], references: [id])
+  registeredBy   VillageOfficer @relation(fields: [registeredById], references: [id])
+
+  @@map("public_infrastructure")
+}
+
+// ─── ANALYTICS ────────────────────────────────────────────
+
+model PopulationSnapshot {
+  id                   String          @id @default(uuid())
+  snapshotDate         DateTime        @map("snapshot_date") @db.Date
+  level                PopulationLevel
+  scopeId              Int             @map("scope_id")
+  totalPopulation      BigInt          @map("total_population")
+  maleCount            BigInt          @map("male_count")
+  femaleCount          BigInt          @map("female_count")
+  ageDistribution      Json            @map("age_distribution")
+  totalBuildings       Int             @default(0) @map("total_buildings")
+  totalInfrastructure  Int             @default(0) @map("total_infrastructure")
+  generatedAt          DateTime        @default(now()) @map("generated_at")
+
+  region     Region?   @relation(fields: [scopeId], references: [id], map: "snapshot_region_fk")
+  district   District? @relation(fields: [scopeId], references: [id], map: "snapshot_district_fk")
+  ward       Ward?     @relation(fields: [scopeId], references: [id], map: "snapshot_ward_fk")
+  village    Village?  @relation(fields: [scopeId], references: [id], map: "snapshot_village_fk")
+
+  @@map("population_snapshots")
+}
+
+// ─── AUDIT ────────────────────────────────────────────────
+
+model AuditLog {
+  id               String         @id @default(uuid())
+  actorId          String         @map("actor_id")
+  actorRole        AuditActorRole @map("actor_role")
+  action           String         @db.VarChar(80)
+  targetTable      String         @map("target_table") @db.VarChar(60)
+  targetId         String?        @map("target_id")
+  oldData          Json?          @map("old_data")
+  newData          Json?          @map("new_data")
+  ipAddress        String?        @map("ip_address") @db.VarChar(45)
+  gpsLat           Decimal?       @map("gps_lat") @db.Decimal(10, 8)
+  gpsLng           Decimal?       @map("gps_lng") @db.Decimal(11, 8)
+  timestamp        DateTime       @default(now())
+
+  superAdmin       SuperAdmin?     @relation(fields: [actorId], references: [id], map: "audit_super_admin_fk")
+  districtAdmin    DistrictAdmin?  @relation(fields: [actorId], references: [id], map: "audit_district_admin_fk")
+  villageOfficer   VillageOfficer? @relation(fields: [actorId], references: [id], map: "audit_village_officer_fk")
+  hospitalOfficer  HospitalOfficer? @relation(fields: [actorId], references: [id], map: "audit_hospital_officer_fk")
+
+  @@map("audit_logs")
+}
