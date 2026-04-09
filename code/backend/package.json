@@ -16,7 +16,11 @@
     "prisma:studio": "npx prisma studio",
     "prisma:seed": "node prisma/seed.js"
   },
-  "keywords": ["census", "tanzania", "nbs"],
+  "keywords": [
+    "census",
+    "tanzania",
+    "nbs"
+  ],
   "author": "Kihega",
   "license": "ISC",
   "dependencies": {
@@ -33,7 +37,7 @@
     "ioredis": "^5.0.0",
     "jsonwebtoken": "^9.0.0",
     "morgan": "^1.10.0",
-    "multer": "^1.4.5",
+    "multer": "^2.1.1",
     "node-cron": "^3.0.0",
     "pdf-lib": "^1.17.0",
     "qrcode": "^1.5.0",
