@@ -26,7 +26,7 @@
   │  NBS-003  │  Create GitHub Actions CI pipelines (3 pipelines)  │  3     │
   │  NBS-004  │  Deploy backend skeleton to Render with /health    │  2     │
   │  NBS-005  │  Deploy React skeleton to Vercel with placeholder  │  1     │
-  │  NBS-006  │  Set up PostgreSQL on Render + enable PostGIS      │  2     │
+  │  NBS-006  │  Set up PostgreSQL on Supabase + enable PostGIS      │  2     │
   │  NBS-007  │  Configure Upstash Redis + connect to backend      │  1     │
   │  NBS-008  │  Set up Prisma schema + initial migration          │  3     │
   │  NBS-009  │  Configure UptimeRobot to keep Render alive        │  1     │
@@ -45,21 +45,21 @@
   ACCEPTANCE CRITERIA:
   Given a fresh GitHub repository
   When the team runs the initial setup
-  Then the repo must have three workspace folders: /backend, /web, /mobile
+  Then the repo must have three workspace folders: code/backend, code/web, code/mobile
   And each folder has its own package.json with correct dependencies
   And a root README.md describes the project and setup steps
   And .gitignore excludes node_modules, .env, dist, build, *.apk
 
   TASKS:
-  [ ] Initialize GitHub repository: tanzania-census (public or private)
-  [ ] Create /backend folder → npm init → install core deps:
+  [ ] Initialize GitHub repository: Final_Dissertation (public or private)
+  [ ] Create code/backend folder → npm init → install core deps:
       express, prisma, @prisma/client, jsonwebtoken, bcryptjs,
       dotenv, cors, helmet, morgan, express-rate-limit,
       ioredis, node-cron, nodemailer, axios, pdf-lib, qrcode, zod
-  [ ] Create /web folder → npm create vite@latest → React + TypeScript
+  [ ] Create code/web folder → npm create vite@latest → React + TypeScript
       Install: tailwindcss, axios, react-query, zustand, recharts,
       react-router-dom, react-hook-form, zod
-  [ ] Create /mobile folder → npx create-expo-app
+  [ ] Create code/mobile folder → npx create-expo-app
       Install: expo-camera, expo-location, expo-secure-store,
       expo-notifications, @react-navigation/native, axios,
       @nozbe/watermelondb, zustand, react-hook-form

@@ -1,0 +1,1350 @@
+================================================================================
+  NBS NATIONAL CENSUS & CIVIL REGISTRY SYSTEM
+  COMPLETE SYSTEM DESIGN DOCUMENT  |  Version 1.0
+  National Bureau of Statistics (NBS) — Tanzania
+================================================================================
+
+
+════════════════════════════════════════════════════════════════════════════════
+  TABLE OF CONTENTS
+════════════════════════════════════════════════════════════════════════════════
+
+  1. SYSTEM ARCHITECTURE OVERVIEW
+  2. AUTHENTICATION & REGISTRATION FLOWS
+  3. DATABASE SCHEMA DESIGN
+  4. SECURITY & PRIVACY ARCHITECTURE
+  5. INFRASTRUCTURE & TECHNOLOGY STACK
+
+================================================================================
+
+
+
+
+████████████████████████████████████████████████████████████████████████████████
+  SECTION 1 — SYSTEM ARCHITECTURE OVERVIEW
+████████████████████████████████████████████████████████████████████████████████
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │               LAYER 1 — EXTERNAL GOVERNMENT INTEGRATIONS                 │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌─────────────┐
+  │   NIDA API     │  │ MoHCDGEC API   │  │   RITA API     │  │ Email (SMTP)│
+  │ Nat. ID Auth.  │  │ Facility Reg.  │  │ Civil Registry │  │  / SendGrid │
+  │                │  │                │  │                │  │             │
+  │ • Fetch citizen│  │ • Fetch fac.   │  │ • Push birth   │  │ • Login     │
+  │   bio by NID   │  │   info by reg. │  │   certificates │  │   tokens    │
+  │ • Auto-fill:   │  │   number       │  │ • Push death   │  │ • Welcome   │
+  │   name, DOB,   │  │ • Validate     │  │   certificates │  │   emails    │
+  │   gender, photo│  │   credentials  │  │ • Push marriage│  │ • OTP SMS   │
+  └───────┬────────┘  └───────┬────────┘  └───────┬────────┘  └──────┬──────┘
+          └───────────────────┴───────────────────┴──────────────────┘
+                                         │
+                             ════════════╪════════════
+                              SECURE API GATEWAY / VPN
+                              (TLS 1.3 + mTLS internal)
+                             ════════════╪════════════
+                                         │
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                  LAYER 2 — BACKEND MICROSERVICES                         │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+  │  AUTH SERVICE    │  │ USER MANAGEMENT  │  │ CIVIL REGISTRY   │
+  │                  │  │    SERVICE       │  │    SERVICE       │
+  │ • JWT issuance   │  │ • Super admin    │  │ • Citizen reg.   │
+  │   & refresh      │  │   CRUD           │  │ • Birth reg.     │
+  │ • One-time login │  │ • District admin │  │ • Death reg.     │
+  │   token gen.     │  │   CRUD           │  │ • Marriage reg.  │
+  │ • MFA (TOTP/SMS) │  │ • Village officer│  │ • Migration mgmt │
+  │ • Device         │  │   CRUD           │  │ • Building reg.  │
+  │   fingerprinting │  │ • Hospital off.  │  │ • Infrastructure │
+  │ • Session mgmt   │  │   CRUD           │  │   registration   │
+  └──────────────────┘  └──────────────────┘  └──────────────────┘
+
+  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+  │  ANALYTICS &     │  │  GEO-FENCE       │  │  CERTIFICATE     │
+  │  CENSUS SERVICE  │  │  SERVICE         │  │  SERVICE         │
+  │                  │  │                  │  │                  │
+  │ • Live pop counts│  │ • Device-location│  │ • Birth cert PDF │
+  │ • Pop. pyramid   │  │   binding        │  │ • Death cert PDF │
+  │   generation     │  │ • Village/fac.   │  │ • Marriage cert  │
+  │ • Regional dens. │  │   boundary check │  │ • National ID    │
+  │ • Gender ratios  │  │ • GPS coordinate │  │   card payload   │
+  │ • Real-time agg. │  │   validation     │  │ • QR code embed  │
+  │ • Drill-down:    │  │ • Offline GPS    │  │   (signed)       │
+  │   Nation→Village │  │   cache          │  │                  │
+  └──────────────────┘  └──────────────────┘  └──────────────────┘
+
+  ┌──────────────────┐  ┌──────────────────┐
+  │  AUDIT &         │  │  NOTIFICATION    │
+  │  MONITORING SVC  │  │  SERVICE         │
+  │                  │  │                  │
+  │ • System logs    │  │ • Migration req. │
+  │   (CPU/RAM/DB)   │  │   alerts         │
+  │ • User activity  │  │ • Email notifs   │
+  │   audit trail    │  │ • Push notifs    │
+  │ • Security event │  │   (mobile)       │
+  │   detection      │  │ • SMS OTP        │
+  │ • Perf metrics   │  │   dispatch       │
+  └──────────────────┘  └──────────────────┘
+
+                                         │
+                             ════════════╪════════════
+                              DATABASE ACCESS LAYER
+                             ════════════╪════════════
+                                         │
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                      LAYER 3 — DATA STORAGE                              │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌──────────┐
+  │ PostgreSQL 16   │  │   Redis 7       │  │ Object Storage  │  │Timescale │
+  │ + PostGIS       │  │   (Cache)       │  │ S3 / MinIO      │  │DB        │
+  │                 │  │                 │  │                 │  │          │
+  │ PRIMARY DB:     │  │ • Live pop.     │  │ • Profile photos│  │ • Pop.   │
+  │ • Citizens      │  │   counters      │  │   (encrypted)   │  │   trends │
+  │ • Births/Deaths │  │ • Session &     │  │ • Fingerprint   │  │ • Migr.  │
+  │ • Marriages     │  │   JWT cache     │  │   templates     │  │   trends │
+  │ • Migrations    │  │ • OTP tokens    │  │   (encrypted)   │  │ • System │
+  │ • Buildings     │  │   (TTL)         │  │ • Signatures    │  │   metrics│
+  │ • Geo boundaries│  │ • Rate limiting │  │ • PDF certs     │  │ • Audit  │
+  │ • Users/Admins  │  │ • Geo-fence     │  │ • ID card images│  │   log TS │
+  │ • Audit logs    │  │   cache         │  │                 │  │          │
+  │ Row-lvl encrypt │  │                 │  │                 │  │          │
+  └─────────────────┘  └─────────────────┘  └─────────────────┘  └──────────┘
+
+                                         │
+                             ════════════╪════════════
+                              CLIENT APPLICATIONS
+                             ════════════╪════════════
+                                         │
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                    LAYER 4 — CLIENT APPLICATIONS                         │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────────┐
+  │  SUPER ADMIN DASH  │  │ DISTRICT ADMIN DASH│  │  PUBLIC CITIZEN APP    │
+  │  (Web — Next.js)   │  │  (Web — Next.js)   │  │  (Mobile — R.Native)   │
+  │                    │  │                    │  │                        │
+  │ • NBS internal net │  │ • District-scoped  │  │ • Self-register        │
+  │ • Full national    │  │   data access      │  │   (email / Google)     │
+  │   data access      │  │ • Officer reg &    │  │ • Live census views    │
+  │ • System health    │  │   management       │  │ • National → Region →  │
+  │   monitoring       │  │ • District reports │  │   District → Ward →    │
+  │ • Admin lifecycle  │  │ • View officer     │  │   Village drill-down   │
+  │   management       │  │   status (active/  │  │ • Pop. pyramid & trend │
+  │                    │  │   offline)         │  │ • Zero PII exposed     │
+  └────────────────────┘  └────────────────────┘  └────────────────────────┘
+
+  ┌────────────────────────────┐  ┌────────────────────────────┐
+  │  VILLAGE OFFICER APP       │  │  HOSPITAL OFFICER APP      │
+  │  (Mobile — Android/iOS)    │  │  (Mobile — Android/iOS)    │
+  │                            │  │                            │
+  │ • Device-locked (1 device) │  │ • Device-locked (1 device) │
+  │ • GPS geo-fenced: village  │  │ • GPS geo-fenced: facility │
+  │ • Offline-first + sync     │  │ • Offline-first + sync     │
+  │ • Biometric capture        │  │ • Birth registration       │
+  │   (fingerprint/photo/sign) │  │ • Death registration       │
+  │ • Citizen CRUD             │  │ • Certificate generation   │
+  │ • Marriage registration    │  │                            │
+  │ • Migration requests       │  │                            │
+  │ • Building & infra reg.    │  │                            │
+  └────────────────────────────┘  └────────────────────────────┘
+
+
+  SYSTEM ROLES SUMMARY
+  ──────────────────────────────────────────────────────────────────────────
+  ROLE              INTERFACE     DATA SCOPE    CREATED BY
+  ──────────────────────────────────────────────────────────────────────────
+  Super Admin       Web Dashboard National      Self (1st) / Super Admin
+  District Admin    Web Dashboard District      Super Admin
+  Village Officer   Mobile App    Village (geo) District Admin
+  Hospital Officer  Mobile App    Facility (geo)District Admin
+  Public Citizen    Mobile App    Read-only     Self-register
+  ──────────────────────────────────────────────────────────────────────────
+
+
+
+
+████████████████████████████████████████████████████████████████████████████████
+  SECTION 2 — AUTHENTICATION & REGISTRATION FLOWS
+████████████████████████████████████████████████████████████████████████████████
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.1  SUPER ADMIN ONBOARDING FLOW
+────────────────────────────────────────────────────────────────────────────────
+
+  [Existing Super Admin Dashboard]
+          │
+          ▼
+  STEP 1: Enter Credentials
+          │  • Employee ID
+          │  • NIDA Number
+          │  • Email address
+          ▼
+  STEP 2: NIDA API Lookup
+          │  • System calls NIDA REST API
+          │  • Auto-fetches: full name, DOB, gender, photo
+          │  • Validates employee exists
+          ▼
+  STEP 3: Generate & Send Login Token
+          │  • System creates signed one-time JWT (24h TTL)
+          │  • SHA-256 hash stored in DB
+          │  • Official email sent with:
+          │    - Login token
+          │    - Super Admin dashboard URL
+          ▼
+  STEP 4: New Admin Opens Dashboard Link
+          │  • Lands on Welcome / Authorization page
+          │  • Enters one-time token
+          │  • System validates token hash + expiry
+          ▼
+  STEP 5: Profile Setup Page
+          │  • New password (min 12 chars, complexity rules)
+          │  • Confirm password
+          │  • Upload or capture profile photo
+          │  • Valid mobile number
+          │  • Department within NBS
+          ▼
+  STEP 6: Account Activated
+          │  • Token invalidated immediately after use
+          │  • Account status set to ACTIVE
+          ▼
+  STEP 7: Login with Email + Password
+          │  • Optional MFA (TOTP app or SMS OTP)
+          │  • JWT issued on success
+          ▼
+  [Super Admin Dashboard Access]
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.2  DISTRICT ADMIN ONBOARDING FLOW
+────────────────────────────────────────────────────────────────────────────────
+
+  [Super Admin Dashboard]
+          │
+          ▼
+  STEP 1: Super Admin Enters Credentials
+          │  • Employee ID
+          │  • NIDA Number
+          │  • Email address of new District Admin
+          ▼
+  STEP 2: NIDA API Lookup
+          │  • Auto-fetch: name, DOB, gender, photo
+          ▼
+  STEP 3: Email Dispatch
+          │  • One-time login token generated (24h TTL)
+          │  • Email sent with token + District Admin dashboard URL
+          ▼
+  STEP 4: New Admin Opens Dashboard Link
+          │  • Enters token on Welcome page
+          │  • Token validated
+          ▼
+  STEP 5: Profile Setup
+          │  • Region (select)
+          │  • District (select, filtered by region)
+          │  • New password + confirm password
+          │  • Profile photo (upload or capture)
+          │  • Valid mobile number
+          ▼
+  STEP 6: Account Activated
+          │  • Scoped to selected district
+          ▼
+  STEP 7: Login with Email + Password
+          │  • Optional MFA (TOTP or SMS OTP)
+          ▼
+  [District Admin Dashboard Access]
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.3  VILLAGE OFFICER MOBILE ONBOARDING FLOW
+────────────────────────────────────────────────────────────────────────────────
+
+  [District Admin Dashboard]
+          │
+          ▼
+  STEP 1: District Admin Enters Officer Credentials
+          │  • Employee ID
+          │  • NIDA Number
+          │  • Email address
+          ▼
+  STEP 2: NIDA Lookup → auto-fill bio data
+          ▼
+  STEP 3: Email Dispatch
+          │  • Token + mobile app download link sent to officer email
+          ▼
+  STEP 4: Officer Installs App & Enters Token
+          │  • Opens app → enters one-time token
+          │
+          │  [BACKGROUND PROCESSES — runs silently after token accepted]
+          │  ┌────────────────────────────────────────┐
+          │  │ a) Capture device fingerprint           │
+          │  │    (device ID + OS + hardware hash)     │
+          │  │ b) Record GPS coordinates               │
+          │  │ c) Bind officer to device (1 device     │
+          │  │    only — cannot change without admin)  │
+          │  │ d) Store village geo-fence polygon      │
+          │  │ e) If all OK → unlock next page         │
+          │  └────────────────────────────────────────┘
+          ▼
+  STEP 5: Profile Setup
+          │  • New password + confirm
+          │  • Profile photo (take with camera or upload)
+          │  • Valid mobile number
+          │  • Ward name
+          │  • Village name
+          │  • Region & District (auto-filled by admin scope)
+          ▼
+  STEP 6: Account Activated — Geo-Locked
+          │  • App validates GPS on EVERY session start
+          │  • If officer is outside village boundary → app blocked
+          │  • If device ID doesn't match bound device → app blocked
+          ▼
+  STEP 7: Login with Email + Password
+          │  • Optional MFA
+          ▼
+  [Village Officer App — Full Access within Village Boundary]
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.4  HOSPITAL OFFICER MOBILE ONBOARDING FLOW
+────────────────────────────────────────────────────────────────────────────────
+
+  Same as Village Officer flow EXCEPT at Step 5:
+          │
+          ▼
+  STEP 5: Profile Setup (Hospital variant)
+          │  • New password + confirm
+          │  • Profile photo(upload or capture)
+          │  • Valid mobile number
+          │  • Facility Registration Number
+          │    → System calls MoHCDGEC API to fetch all facility info
+          │      (name, type, location, district, ward, village)
+          │  • Region & District (auto-filled)
+          ▼
+  STEP 6: Geo-locked to assigned facility boundary
+          ▼
+  [Hospital Officer App — Births & Deaths only, inside facility geo-fence]
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.5  CITIZEN REGISTRATION FLOW  (by Village Officer)
+────────────────────────────────────────────────────────────────────────────────
+
+  [Village Officer App — inside village geo-fence]
+          │
+          ▼
+  STEP 1: Enter National ID Number
+          │  • System checks citizen age ≥ 18 (from NIDA DOB)
+          │  • Rejects if under 18
+          ▼
+  STEP 2: NIDA API Fetch
+          │  • Auto-populate: name, DOB, gender, parent IDs
+          │  • Check disability flag in NIDA record
+          │    - If disability flag = YES → ask officer:
+          │      "Still disabled?" or "Cured?"
+          │      (allow selecting cured disabilities for multi-disabled)
+          ▼
+  STEP 3: Biometric Capture
+          │  • Take live photo (camera)
+          │  • Capture fingerprints (hardware scanner)
+          │  • Capture signature (touchscreen)
+          ▼
+  STEP 4: Extended Personal Details
+          │  • Disability type(s): Hearing / Sight / etc. (multi-select)
+          │  • Disability cause: Road accident / Born with / etc.
+          │  • Education level (select one):
+          │    None / Primary / O-Level / A-Level / Certificate /
+          │    Diploma / Bachelor's / Master's / PhD / Other(VETA,online )
+          │  • Village street name
+          │  • House registration number
+          │  • Marital status (Yes/No)
+          │    - If Yes → recommend marriage registration (optional, with consent)
+          │  • Children National IDs (add multiple)
+          │  • Occupation (primary + additional economic activities)
+          ▼
+  STEP 5: Optional / Supplementary Details
+          │  • Land ownership in acres (optional)
+          │  • Animal keeping category (multi-select):
+          │    Livestock (cows/goats/pigs) / Birds (hens) / Other (dogs/donkeys)
+          │  • Health insurance provider(s) (multi-select)
+          │  • Communication devices (multi-select):
+          │    Mobile (kitochi / smartphone) , Computer ,Radio ,Television
+          │  • Social Mutual Fund memberships (multi-select):
+          │    NSSF / TASAF / etc.
+          ▼
+  STEP 6: Review & Confirm
+          │  • Officer reviews all captured data
+          │  • Citizen confirms (verbal or signature)
+          ▼
+  STEP 7: National ID Card Issued
+          │  • System assigns unique National ID (if new birth registration)
+          │  • Citizen status set to: ALIVE
+          │  • ID card print payload generated
+          │  • Card expiry = date of issue + 10 years
+          │  • After 10 years: citizen must return to update photo,
+          │    fingerprints, and signature for renewal if status will be alive.
+          ▼
+  [Citizen Record Created in Database]
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.6  BIRTH REGISTRATION FLOW  (by Hospital Officer)
+────────────────────────────────────────────────────────────────────────────────
+
+  [Hospital Officer App — inside facility geo-fence]
+          │
+          ▼
+  STEP 1: Enter Birth Details
+          │  • Child first name, middle name, surname
+          │  • Gender (Male / Female/)
+          │  • Date of birth
+          ▼
+  STEP 2: Link Parents
+          │  • Father National ID → validate in system
+          │  • Mother National ID → validate in system
+          │  • System links child to parent lineage records
+          ▼
+  STEP 3: Link Facility & Officer to child infos
+          │  • Facility ID auto-attached (from officer profile)
+          │  • Officer (doctor/nurse) National ID linked
+          ▼
+  STEP 4: Generate National ID for Child
+          │  • System auto-generates unique National ID for newborn
+          │  • Child status set to: ALIVE
+          │  • Age tracking starts from DOB
+          │    (auto-increments every year while status = ALIVE)
+          ▼
+  STEP 5: Issue Birth Certificate
+          │  • PDF certificate generated
+          │  • QR code embedded (digitally signed)
+          │  • Pushed to RITA API for civil registry sync
+          ▼
+  NOTE: When child turns 18 → must visit Village Officer
+        to register full citizen profile and receive National ID card
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.7  DEATH REGISTRATION FLOW
+────────────────────────────────────────────────────────────────────────────────
+
+  CASE A — Death OUTSIDE hospital (Village Officer registers):
+          │
+          ▼
+  • Enter citizen National ID
+  • System fetches citizen info
+  • Enter: date of death, cause/reason of death
+  • Citizen status updated to: DECEASED
+  • Age counter frozen at last recorded age
+  • Death certificate generated (PDF + QR)
+  • Pushed to RITA(individual get copy of it)
+
+
+  CASE B — Death INSIDE hospital (Hospital Officer registers):
+          │
+          ▼
+  • Select category: INFANT or ADULT
+  │
+  ├─► If INFANT:
+  │     • Enter father National ID
+  │     • Enter mother National ID
+  │     • Date of death
+  │     • Cause/reason (if applicable)
+  │     • Certificate generated → pushed to RITA(useful for tracking infant mortality rate)
+  │
+  └─► If ADULT:
+        • Enter citizen National ID → fetch all info
+        • Enter cause of death
+        • Enter date of death
+        • Link duty officer (doctor/nurse) National ID
+        • Citizen status → DECEASED
+        • Certificate generated → pushed to RITA(indivudual get a copy of it)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.8  MARRIAGE REGISTRATION FLOW  (by Village Officer)
+────────────────────────────────────────────────────────────────────────────────
+
+  STEP 1: Enter National IDs
+          │  • Husband National ID → fetch & verify citizen record
+          │  • Wife National ID → fetch & verify citizen record
+          ▼
+  STEP 2: Validate Marriage Rules
+          │  MALE:   Can have multiple wives simultaneously
+          │  FEMALE: Can have only ONE husband at a time.
+          │          Exception: allowed to register new marriage if
+          │          last husband's vital_status = DECEASED
+          │          or last marriage status = UNREGISTERED 
+          ▼
+  STEP 3: Generate Marriage Certificate
+          │  • System assigns unique marriage_id
+          │  • Certificate PDF generated (Pushed to RITA, While individual get a copy)
+          │  • Marriage status set to: ACTIVE
+          │  • Pushed to RITA
+          ▼
+  [Marriage Record Created — used for lineage tracking]
+
+
+  UNREGISTER MARRIAGE FLOW:
+  ──────────────────────────
+  • Officer enters marriage_id
+  . Couple provide vivid reasons for marriage dissolution or breakup
+  • Submits unregister request
+  • Request sent to authorized institution( RITA) for verification
+  • Institution checks the reasons  for dissolution , if vivid approve otherwise reject
+  • On approval:
+    - Marriage status → DISSOLVED or UNREGISTERED
+    - dissolution_date, dissolution_reason, dissolution_authority recorded
+  • Wife's marital lock released → eligible to re-marry
+
+
+────────────────────────────────────────────────────────────────────────────────
+  2.9  MIGRATION REGISTRATION FLOW  (by Village Officer)
+────────────────────────────────────────────────────────────────────────────────
+
+  [Source Village Officer — citizen's current village]
+          │
+          ▼
+  STEP 1: Officer enters citizen National ID
+          │  • System returns current residence info
+          ▼
+  STEP 2: Enter Migration Details
+          │  • New residence: Region → District → Ward → Village
+          │  • Reason for migration:
+          │    Economic activities / Job / Family / Education / Other
+          ▼
+  STEP 3: Migration Request Created
+          │  • Status: PENDING
+          │  • Expiry: request_date + 30 days
+          │  • Notification sent to TARGET village officer
+          ▼
+  [Citizen must physically visit target village within 30 days]
+          │
+          ▼
+  STEP 4: Target Village Officer Receives Request
+          │  • Sees pending migration request in app
+          │  • Verifies citizen identity in person
+          ▼
+  STEP 5: Confirm or Reject
+          │
+          ├─► CONFIRMED:
+          │     • Citizen residential info updated to new village
+          │     • Migration status → CONFIRMED
+          │     • Population counts auto-updated in both villages
+          │
+          ├─► REJECTED:
+          │     • Migration status → CANCELLED
+          │     • Reason recorded 
+          │
+          └─► NO ACTION within 30 days:
+                • System auto-cancels request
+                • Migration status → EXPIRED
+                • Citizen remains at original village
+
+
+
+
+████████████████████████████████████████████████████████████████████████████████
+  SECTION 3 — DATABASE SCHEMA DESIGN
+████████████████████████████████████████████████████████████████████████████████
+
+  CONVENTIONS:
+  ─────────────────────────────────────────────────────────────────
+  [PK]  Primary Key          [FK]  Foreign Key
+  ◌     Nullable field       *     Unique constraint
+  ─────────────────────────────────────────────────────────────────
+  Types: UUID, INT, BIGINT, VARCHAR(n), TEXT, DATE, TIMESTAMP,
+         BOOLEAN, ENUM(...), JSONB, DECIMAL, GEOGRAPHY, INET
+  ─────────────────────────────────────────────────────────────────
+
+
+════════════════════════════════════════════════════════════════════════════════
+  3.1  USERS & AUTHENTICATION TABLES
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: super_admins                                                    │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  admin_id          [PK]  │  UUID                    │  Auto-generated   │
+  │  employee_id         *   │  VARCHAR(30)             │  Unique           │
+  │  nida_number         *   │  VARCHAR(20)             │  Encrypted        │
+  │  full_name               │  VARCHAR(120)            │                   │
+  │  email               *   │  VARCHAR(120)            │  Unique           │
+  │  password_hash           │  TEXT                    │  bcrypt           │
+  │  mobile                  │  VARCHAR(15)             │                   │
+  │  department              │  VARCHAR(80)             │                   │
+  │  profile_photo_url       │  TEXT                    │  S3 path          │
+  │  mfa_enabled             │  BOOLEAN                 │  Default: false   │
+  │  mfa_secret          ◌   │  TEXT                    │  Encrypted        │
+  │  status                  │  ENUM(active,suspended)  │                   │
+  │  login_token_hash    ◌   │  TEXT                    │  SHA-256 hash     │
+  │  login_token_expires ◌   │  TIMESTAMP               │  24h TTL          │
+  │  created_by      [FK] ◌  │  UUID → super_admins     │  NULL if 1st      │
+  │  created_at              │  TIMESTAMP               │                   │
+  │  last_login          ◌   │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: district_admins                                                 │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  admin_id          [PK]  │  UUID                    │                   │
+  │  employee_id         *   │  VARCHAR(30)             │                   │
+  │  nida_number         *   │  VARCHAR(20)             │  Encrypted        │
+  │  full_name               │  VARCHAR(120)            │                   │
+  │  email               *   │  VARCHAR(120)            │                   │
+  │  password_hash           │  TEXT                    │  bcrypt           │
+  │  mobile                  │  VARCHAR(15)             │                   │
+  │  region_id       [FK]    │  INT → regions           │                   │
+  │  district_id     [FK]    │  INT → districts         │                   │
+  │  profile_photo_url       │  TEXT                    │                   │
+  │  mfa_enabled             │  BOOLEAN                 │                   │
+  │  mfa_secret          ◌   │  TEXT                    │  Encrypted        │
+  │  status                  │  ENUM(active,suspended)  │                   │
+  │  login_token_hash    ◌   │  TEXT                    │                   │
+  │  login_token_expires ◌   │  TIMESTAMP               │                   │
+  │  created_by      [FK]    │  UUID → super_admins     │                   │
+  │  created_at              │  TIMESTAMP               │                   │
+  │  last_login          ◌   │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: village_officers                                                │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  officer_id        [PK]  │  UUID                    │                   │
+  │  employee_id         *   │  VARCHAR(30)             │                   │
+  │  nida_number         *   │  VARCHAR(20)             │  Encrypted        │
+  │  full_name               │  VARCHAR(120)            │                   │
+  │  email               *   │  VARCHAR(120)            │                   │
+  │  password_hash           │  TEXT                    │  bcrypt           │
+  │  mobile                  │  VARCHAR(15)             │                   │
+  │  village_id      [FK]    │  INT → villages          │                   │
+  │  ward_id         [FK]    │  INT → wards             │                   │
+  │  district_id     [FK]    │  INT → districts         │                   │
+  │  profile_photo_url       │  TEXT                    │                   │
+  │  device_fingerprint  *   │  TEXT                    │  HMAC hash        │
+  │  device_bound_at         │  TIMESTAMP               │                   │
+  │  geo_fence_polygon       │  GEOGRAPHY(Polygon)      │  PostGIS          │
+  │  mfa_enabled             │  BOOLEAN                 │                   │
+  │  mfa_secret          ◌   │  TEXT                    │  Encrypted        │
+  │  status                  │  ENUM(active,offline,    │                   │
+  │                          │       suspended)         │                   │
+  │  login_token_hash    ◌   │  TEXT                    │                   │
+  │  login_token_expires ◌   │  TIMESTAMP               │                   │
+  │  created_by      [FK]    │  UUID → district_admins  │                   │
+  │  created_at              │  TIMESTAMP               │                   │
+  │  last_login          ◌   │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: hospital_officers                                               │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  officer_id        [PK]  │  UUID                    │                   │
+  │  employee_id         *   │  VARCHAR(30)             │                   │
+  │  nida_number         *   │  VARCHAR(20)             │  Encrypted        │
+  │  full_name               │  VARCHAR(120)            │                   │
+  │  email               *   │  VARCHAR(120)            │                   │
+  │  password_hash           │  TEXT                    │  bcrypt           │
+  │  mobile                  │  VARCHAR(15)             │                   │
+  │  facility_id     [FK]    │  INT → health_facilities │                   │
+  │  profile_photo_url       │  TEXT                    │                   │
+  │  device_fingerprint  *   │  TEXT                    │  HMAC hash        │
+  │  device_bound_at         │  TIMESTAMP               │                   │
+  │  geo_fence_polygon       │  GEOGRAPHY(Polygon)      │  PostGIS          │
+  │  mfa_enabled             │  BOOLEAN                 │                   │
+  │  mfa_secret          ◌   │  TEXT                    │  Encrypted        │
+  │  status                  │  ENUM(active,offline,    │                   │
+  │                          │       suspended)         │                   │
+  │  login_token_hash    ◌   │  TEXT                    │                   │
+  │  login_token_expires ◌   │  TIMESTAMP               │                   │
+  │  created_by      [FK]    │  UUID → district_admins  │                   │
+  │  created_at              │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: public_users  (Citizen App accounts)                            │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  user_id           [PK]  │  UUID                    │                   │
+  │  email               *   │  VARCHAR(120)            │                   │
+  │  password_hash       ◌   │  TEXT                    │  NULL if OAuth    │
+  │  auth_provider           │  ENUM(email,google,apple)│                   │
+  │  oauth_id            ◌   │  TEXT                    │                   │
+  │  display_name            │  VARCHAR(80)             │                   │
+  │  status                  │  ENUM(active,suspended)  │                   │
+  │  created_at              │  TIMESTAMP               │                   │
+  │  last_login          ◌   │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+  3.2  ADMINISTRATIVE GEOGRAPHY TABLES
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: regions                                                         │
+  ├──────────────────────┬───────────────────────────┬─────────────────────┤
+  │  region_id     [PK]  │  INT                      │  Auto-increment     │
+  │  region_name         │  VARCHAR(80)              │                     │
+  │  jurisdiction        │  ENUM(mainland,zanzibar)  │                     │
+  │  boundary_polygon    │  GEOGRAPHY(Polygon)        │  PostGIS            │
+  └──────────────────────┴───────────────────────────┴─────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: districts                                                       │
+  ├──────────────────────┬───────────────────────────┬─────────────────────┤
+  │  district_id   [PK]  │  INT                      │                     │
+  │  region_id   [FK]    │  INT → regions            │                     │
+  │  district_name       │  VARCHAR(80)              │                     │
+  │  boundary_polygon    │  GEOGRAPHY(Polygon)        │                     │
+  └──────────────────────┴───────────────────────────┴─────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: wards                                                           │
+  ├──────────────────────┬───────────────────────────┬─────────────────────┤
+  │  ward_id       [PK]  │  INT                      │                     │
+  │  district_id [FK]    │  INT → districts          │                     │
+  │  ward_name           │  VARCHAR(80)              │                     │
+  │  boundary_polygon    │  GEOGRAPHY(Polygon)        │                     │
+  └──────────────────────┴───────────────────────────┴─────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: villages                                                        │
+  ├──────────────────────┬───────────────────────────┬─────────────────────┤
+  │  village_id    [PK]  │  INT                      │                     │
+  │  ward_id     [FK]    │  INT → wards              │                     │
+  │  village_name        │  VARCHAR(80)              │                     │
+  │  boundary_polygon    │  GEOGRAPHY(Polygon)        │                     │
+  └──────────────────────┴───────────────────────────┴─────────────────────┘
+
+  HIERARCHY:  regions → districts → wards → villages → streets
+
+
+════════════════════════════════════════════════════════════════════════════════
+  3.3  CIVIL REGISTRY — CORE TABLES
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: citizens                                  (CORE / LARGEST TABLE)│
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  citizen_id        [PK]  │  UUID                    │  Internal ID      │
+  │  national_id         *   │  VARCHAR(20)             │  Unique, indexed  │
+  │  first_name              │  VARCHAR(60)             │                   │
+  │  middle_name         ◌   │  VARCHAR(60)             │                   │
+  │  surname                 │  VARCHAR(60)             │                   │
+  │  gender                  │  ENUM(male,female)       │                   │
+  │  date_of_birth           │  DATE                    │                   │
+  │  age                     │  INT                     │  Auto-computed    │
+  │                          │                          │  yearly from DOB  │
+  │                          │                          │  Frozen on death  │
+  │  vital_status            │  ENUM(alive,deceased)    │  Default: alive   │
+  │  photo_url               │  TEXT                    │  S3 path          │
+  │  fingerprint_template    │  TEXT                    │  Encrypted (AES)  │
+  │  signature_url           │  TEXT                    │  S3 path          │
+  │  national_id_issued      │  DATE                    │                   │
+  │  national_id_expires     │  DATE                    │  +10 years        │
+  │  current_village_id [FK] │  INT → villages          │  Updated on migr. │
+  │  street_name             │  VARCHAR(80)             │                   │
+  │  house_reg_number    ◌   │  VARCHAR(30)             │                   │
+  │  father_citizen_id  [FK]◌│  UUID → citizens         │  Lineage link     │
+  │  mother_citizen_id  [FK]◌│  UUID → citizens         │  Lineage link     │
+  │  marital_status          │  ENUM(single,married,    │                   │
+  │                          │       widowed,divorced)  │                   │
+  │  education_level         │  ENUM(none,primary,      │                   │
+  │                          │  o_level,a_level,        │                   │
+  │                          │  certificate,diploma,    │                   │
+  │                          │  bachelor,master,phd,    │                   │
+  │                          │  other)                  │                   │
+  │  occupations             │  JSONB                   │  Array of strings │
+  │  disability_status       │  BOOLEAN                 │  Default: false   │
+  │  disability_types    ◌   │  JSONB                   │  ['hearing',...]  │
+  │  disability_cause    ◌   │  TEXT                    │                   │
+  │  land_ownership_acres ◌  │  DECIMAL(10,2)           │  Optional         │
+  │  animal_keeping      ◌   │  JSONB                   │  {category:[...]} │
+  │  health_insurance    ◌   │  JSONB                   │  Array of provids │
+  │  comm_devices        ◌   │  JSONB                   │  Array of types   │
+  │  social_funds        ◌   │  JSONB                   │  Array of funds   │
+  │  registered_by    [FK]   │  UUID → village_officers │                   │
+  │  registered_at           │  TIMESTAMP               │                   │
+  │  updated_at              │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: births                                                          │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  birth_id          [PK]  │  UUID                    │                   │
+  │  birth_cert_no       *   │  VARCHAR(30)             │  System-generated │
+  │  child_citizen_id [FK]   │  UUID → citizens         │                   │
+  │  child_first_name        │  VARCHAR(60)             │                   │
+  │  child_middle_name   ◌   │  VARCHAR(60)             │                   │
+  │  child_surname           │  VARCHAR(60)             │                   │
+  │  gender                  │  ENUM(male,female)       │                   │
+  │  date_of_birth           │  DATE                    │                   │
+  │  father_citizen_id  [FK] │  UUID → citizens         │                   │
+  │  mother_citizen_id  [FK] │  UUID → citizens         │                   │
+  │  facility_id       [FK]  │  INT → health_facilities │                   │
+  │  officer_id        [FK]  │  UUID → hospital_officers│  Doctor/nurse     │
+  │  rita_synced             │  BOOLEAN                 │  Default: false   │
+  │  rita_sync_at        ◌   │  TIMESTAMP               │                   │
+  │  registered_at           │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: deaths                                                          │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  death_id          [PK]  │  UUID                    │                   │
+  │  death_cert_no       *   │  VARCHAR(30)             │  System-generated │
+  │  citizen_id       [FK] ◌ │  UUID → citizens         │  NULL if infant   │
+  │  date_of_death           │  DATE                    │                   │
+  │  cause_of_death          │  TEXT                    │                   │
+  │  location_type           │  ENUM(hospital,outside)  │                   │
+  │  category                │  ENUM(infant,adult)      │                   │
+  │  facility_id      [FK] ◌ │  INT → health_facilities │  If in hospital   │
+  │  officer_id       [FK]   │  UUID                    │  Hosp. or village │
+  │  infant_father_id [FK] ◌ │  UUID → citizens         │  If infant        │
+  │  infant_mother_id [FK] ◌ │  UUID → citizens         │  If infant        │
+  │  rita_synced             │  BOOLEAN                 │                   │
+  │  rita_sync_at        ◌   │  TIMESTAMP               │                   │
+  │  registered_at           │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: marriages                                                       │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  marriage_id       [PK]  │  UUID                    │  System-generated │
+  │  marriage_cert_no    *   │  VARCHAR(30)             │                   │
+  │  husband_id       [FK]   │  UUID → citizens         │  Males: multi OK  │
+  │  wife_id          [FK]   │  UUID → citizens         │  Female: 1 at time│
+  │  marriage_date           │  DATE                    │                   │
+  │  status                  │  ENUM(active,dissolved,  │                   │
+  │                          │       unregistered)      │                   │
+  │  dissolution_date    ◌   │  DATE                    │                   │
+  │  dissolution_reason  ◌   │  TEXT                    │                   │
+  │  dissolution_auth    ◌   │  VARCHAR(120)            │  Institution name │
+  │  registered_by   [FK]    │  UUID → village_officers │                   │
+  │  rita_synced             │  BOOLEAN                 │                   │
+  │  rita_sync_at        ◌   │  TIMESTAMP               │                   │
+  │  registered_at           │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: migrations                                                      │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  migration_id      [PK]  │  UUID                    │                   │
+  │  citizen_id       [FK]   │  UUID → citizens         │                   │
+  │  from_village_id  [FK]   │  INT → villages          │                   │
+  │  to_village_id    [FK]   │  INT → villages          │                   │
+  │  reason                  │  TEXT                    │                   │
+  │  status                  │  ENUM(pending,confirmed, │                   │
+  │                          │  cancelled,expired)      │                   │
+  │  request_date            │  TIMESTAMP               │                   │
+  │  expiry_date             │  TIMESTAMP               │  +30 days         │
+  │  confirmed_date      ◌   │  TIMESTAMP               │                   │
+  │  source_officer_id [FK]  │  UUID → village_officers │                   │
+  │  target_officer_id [FK]◌ │  UUID → village_officers │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: citizen_children  (link table)                                  │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  id                [PK]  │  UUID                    │                   │
+  │  parent_citizen_id [FK]  │  UUID → citizens         │                   │
+  │  child_citizen_id  [FK]  │  UUID → citizens         │                   │
+  │  created_at              │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+  3.4  ASSETS & INFRASTRUCTURE TABLES
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: buildings                                                       │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  building_id       [PK]  │  VARCHAR(20)             │  System-generated │
+  │  building_type           │  ENUM(residential,       │                   │
+  │                          │  business,hotel,hospital,│                   │
+  │                          │  school,college,         │                   │
+  │                          │  university,industry,    │                   │
+  │                          │  government,police,      │                   │
+  │                          │  military,training,other)│                   │
+  │  name                ◌   │  VARCHAR(120)            │  For named bldgs  │
+  │  street_location         │  VARCHAR(120)            │                   │
+  │  village_id       [FK]   │  INT → villages          │  Auto from officer│
+  │  owners                  │  JSONB                   │  [citizen_id, ...]│
+  │  ownership_type          │  ENUM(private,public,    │                   │
+  │                          │       government)        │                   │
+  │  hotel_class         ◌   │  VARCHAR(20)             │  Hotels only      │
+  │  industry_type       ◌   │  ENUM(processing,        │  Industries only  │
+  │                          │  manufacturing,other)    │                   │
+  │  coverage_acres      ◌   │  DECIMAL(10,2)           │  Schools/hospitals│
+  │  num_buildings       ◌   │  INT                     │  Compound count   │
+  │  facility_id      [FK] ◌ │  INT → health_facilities │  If hospital      │
+  │  registered_by   [FK]    │  UUID → village_officers │                   │
+  │  registered_at           │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: public_infrastructure                                           │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  infra_id          [PK]  │  UUID                    │                   │
+  │  infra_type              │  ENUM(road,railway,      │                   │
+  │                          │  station,port,bus_stand) │                   │
+  │  name                    │  VARCHAR(120)            │                   │
+  │  road_type           ◌   │  ENUM(tarmac,rough)      │  Roads only       │
+  │  coverage_acres      ◌   │  DECIMAL(10,2)           │                   │
+  │  length_km           ◌   │  DECIMAL(10,2)           │  Roads/railways   │
+  │  village_id       [FK]   │  INT → villages          │                   │
+  │  registered_by   [FK]    │  UUID → village_officers │                   │
+  │  registered_at           │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: health_facilities                                               │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  facility_id       [PK]  │  INT                     │                   │
+  │  facility_reg_no     *   │  VARCHAR(30)             │  From MoHCDGEC    │
+  │  facility_name           │  VARCHAR(120)            │                   │
+  │  facility_type           │  ENUM(hospital,clinic,   │                   │
+  │                          │  dispensary,health_ctr)  │                   │
+  │  village_id       [FK]   │  INT → villages          │                   │
+  │  ownership_type          │  ENUM(public,private,    │                   │
+  │                          │       mission)           │                   │
+  │  gps_location            │  GEOGRAPHY(Point)        │                   │
+  │  geo_fence_polygon       │  GEOGRAPHY(Polygon)      │  Officer boundary │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+  3.5  ANALYTICS & SYSTEM TABLES
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: population_snapshots  (daily aggregates for public views)       │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  snapshot_id       [PK]  │  UUID                    │                   │
+  │  snapshot_date           │  DATE                    │                   │
+  │  level                   │  ENUM(national,region,   │                   │
+  │                          │  district,ward,village)  │                   │
+  │  scope_id                │  INT                     │  FK to level table│
+  │  total_population        │  BIGINT                  │  status=alive only│
+  │  male_count              │  BIGINT                  │                   │
+  │  female_count            │  BIGINT                  │                   │
+  │  age_distribution        │  JSONB                   │  Bands: 0-4,5-9..│
+  │  total_buildings         │  INT                     │                   │
+  │  total_infrastructure    │  INT                     │                   │
+  │  generated_at            │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: audit_logs  (append-only — no UPDATE, no DELETE)                │
+  ├──────────────────────────┬──────────────────────────┬───────────────────┤
+  │  COLUMN                  │  TYPE                    │  NOTES            │
+  ├──────────────────────────┼──────────────────────────┼───────────────────┤
+  │  log_id            [PK]  │  UUID                    │                   │
+  │  actor_id                │  UUID                    │  User who acted   │
+  │  actor_role              │  ENUM(super_admin,       │                   │
+  │                          │  district_admin,         │                   │
+  │                          │  village_officer,        │                   │
+  │                          │  hospital_officer,       │                   │
+  │                          │  public_user)            │                   │
+  │  action                  │  VARCHAR(80)             │  e.g. CREATE_BIRTH│
+  │  target_table            │  VARCHAR(60)             │  e.g. citizens    │
+  │  target_id               │  UUID                    │  Record affected  │
+  │  old_data            ◌   │  JSONB                   │  Before state     │
+  │  new_data            ◌   │  JSONB                   │  After state      │
+  │  ip_address              │  INET                    │                   │
+  │  gps_coordinates     ◌   │  GEOGRAPHY(Point)        │  Mobile officers  │
+  │  timestamp               │  TIMESTAMP               │                   │
+  └──────────────────────────┴──────────────────────────┴───────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+  3.6  KEY RELATIONSHIPS DIAGRAM
+════════════════════════════════════════════════════════════════════════════════
+
+  super_admins ──creates──► district_admins
+  super_admins ──creates──► super_admins
+
+  district_admins ──creates──► village_officers
+  district_admins ──creates──► hospital_officers
+
+  village_officers ──registers──► citizens
+  village_officers ──registers──► marriages
+  village_officers ──registers──► buildings
+  village_officers ──registers──► public_infrastructure
+  village_officers ──initiates──► migrations
+  village_officers ──registers──► deaths (outside hospital)
+
+  hospital_officers ──registers──► births
+  hospital_officers ──registers──► deaths (inside hospital)
+
+  citizens ──linked to──► citizens (father/mother — lineage)
+  citizens ──linked to──► citizens (children — via citizen_children)
+  citizens ──linked to──► marriages (as husband or wife)
+  citizens ──linked to──► migrations
+  citizens ──linked to──► births (as father/mother)
+  citizens ──linked to──► deaths
+
+  villages ──belongs to──► wards ──► districts ──► regions
+
+
+
+
+████████████████████████████████████████████████████████████████████████████████
+  SECTION 4 — SECURITY & PRIVACY ARCHITECTURE
+████████████████████████████████████████████████████████████████████████████████
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4.1  AUTHENTICATION SECURITY
+════════════════════════════════════════════════════════════════════════════════
+
+  PASSWORD HASHING
+  • Algorithm: bcrypt with cost factor ≥ 12
+  • Never stored in plaintext at any point
+
+  JSON WEB TOKENS (JWT)
+  • Access token TTL:  15 minutes
+  • Refresh token TTL: 7 days (rotated on each use)
+  • Signed with RS256 (asymmetric key pair)
+  • Stored in HttpOnly cookies (web) / secure storage (mobile)
+
+  ONE-TIME LOGIN TOKENS
+  • Generated as signed JWT (separate signing key)
+  • SHA-256 hash stored in DB (never the raw token)
+  • TTL: 24 hours
+  • Single-use: invalidated immediately after first successful use
+  • Cannot be reused or extended
+
+  MULTI-FACTOR AUTHENTICATION (MFA)
+  • Method 1: TOTP (RFC 6238) via authenticator app (optional)
+  • Method 2: SMS OTP — 6-digit code, 5-minute TTL
+  • Backup codes: 8 single-use codes generated at MFA setup
+
+  ACCOUNT PROTECTION
+  • Lockout after 5 consecutive failed login attempts
+  • Exponential backoff: 1m → 5m → 15m → 1h → permanent lock
+  • Permanent lock requires admin reset
+  • Session invalidated on: password change, device change, admin suspension
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4.2  DEVICE BINDING & GEO-FENCE SECURITY
+════════════════════════════════════════════════════════════════════════════════
+
+  DEVICE FINGERPRINT GENERATION
+  • Formula: HMAC-SHA256 ( device_id + OS_version + hardware_hash )
+  • Captured silently during initial token activation
+  • Stored as hashed value in village_officers / hospital_officers table
+  • One device per officer — cannot be changed without district admin reset
+
+  GEO-FENCE ENFORCEMENT
+  • Village boundaries stored as PostGIS GEOGRAPHY(Polygon) in DB
+  • On every app session start:
+      GPS coordinate captured → ST_Within(officer_gps, geo_fence_polygon)
+      If FALSE → session blocked, error shown
+  • Offline mode: geo-fence polygon cached locally (encrypted)
+  • Sync happens automatically when connection restored
+
+  BLOCKING CONDITIONS
+  • Device ID doesn't match bound device → BLOCKED
+  • GPS outside assigned boundary → BLOCKED
+  • Token expired before device binding completes → RESTART required
+  • App detects mock/spoofed GPS (via sensor fusion checks) → BLOCKED
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4.3  DATA ENCRYPTION
+════════════════════════════════════════════════════════════════════════════════
+
+  IN TRANSIT
+  • All HTTP traffic: TLS 1.3 (minimum TLS 1.2)
+  • Service-to-service: Mutual TLS (mTLS)
+  • Mobile apps: certificate pinning
+
+  AT REST
+  • PostgreSQL tablespace: AES-256 encryption
+  • Column-level (pgcrypto): NIDA numbers, biometric templates, MFA secrets
+  • Fingerprint templates: AES-256-GCM encrypted BEFORE storing
+  • Object storage (photos, PDFs): Server-Side Encryption (SSE-S3 or SSE-KMS)
+
+  KEY MANAGEMENT
+  • Master keys: Hardware Security Module (HSM) or cloud KMS
+  • Separate encryption keys per data classification:
+      - PUBLIC: unencrypted aggregated stats
+      - INTERNAL: user metadata
+      - CONFIDENTIAL: citizen PII
+      - RESTRICTED: biometric data, NIDA numbers
+  • Automatic key rotation: every 90 days
+  • Encrypted backups with separate backup key
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4.4  ROLE-BASED ACCESS CONTROL (RBAC)
+════════════════════════════════════════════════════════════════════════════════
+
+  ROLE               READ                          WRITE
+  ─────────────────────────────────────────────────────────────────────────
+  Super Admin        ALL tables, ALL regions        All (incl. user mgmt)
+  District Admin     Own district only              Officer CRUD in district
+  Village Officer    Own village citizens only      Citizen, building, infra,
+                                                    marriage, migration, death
+  Hospital Officer   Own facility records only      Birth, death (facility)
+  Public User        Aggregated/anonymized only     None (read-only)
+  ─────────────────────────────────────────────────────────────────────────
+
+  • Row-Level Security (RLS) enforced at PostgreSQL database level
+  • API middleware validates scope before every query
+  • Public citizen app receives ZERO personally identifiable information
+  • Researcher data access requires NBS authorization + consent framework
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4.5  AUDIT TRAIL
+════════════════════════════════════════════════════════════════════════════════
+
+  • Every INSERT, UPDATE, DELETE triggers audit_log entry
+  • Logs are APPEND-ONLY (no UPDATE or DELETE on audit_logs allowed)
+  • Each log entry captures:
+      - Who acted (actor_id, actor_role)
+      - What they did (action, target_table, target_id)
+      - What changed (old_data JSONB, new_data JSONB)
+      - Where from (ip_address, gps_coordinates for mobile officers)
+      - When (timestamp)
+  • Super Admin can search/filter all logs
+  • Automated alerts on:
+      - Unusual data access volumes
+      - Access from unexpected IP/location
+      - Multiple failed login attempts
+      - Off-hours officer activity
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4.6  NETWORK SECURITY
+════════════════════════════════════════════════════════════════════════════════
+
+  • Super/District Admin dashboards: VPN or IP whitelist required
+  • API rate limiting: per-user and per-endpoint via Redis
+  • CORS: restricted to known app origins only
+  • DDoS protection: CDN/WAF layer (CloudFront + WAF or equivalent)
+  • API Gateway: request schema validation, payload size limits
+  • NIDA & external APIs: whitelisted egress IPs only
+  • Intrusion detection system (IDS) on all network segments
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4.7  PRIVACY BY DESIGN
+════════════════════════════════════════════════════════════════════════════════
+
+  • Public app shows ZERO PII — only aggregate population statistics
+  • Biometric data physically separated from PII in storage
+  • Data minimization: optional fields collected only with citizen consent
+  • Research/external access: authorized via NBS consent framework only
+  • Data classification enforced at all layers
+  • Certificate QR codes contain digitally signed payload (government PKI)
+  • Right to anonymization for withdrawn research consent
+
+
+
+
+████████████████████████████████████████████████████████████████████████████████
+  SECTION 5 — INFRASTRUCTURE & TECHNOLOGY STACK
+████████████████████████████████████████████████████████████████████████████████
+
+
+════════════════════════════════════════════════════════════════════════════════
+  5.1  DEPLOYMENT ARCHITECTURE
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  CLOUD / ON-PREMISE HYBRID                                              │
+  │                                                                         │
+  │  ┌─────────────────────────┐     ┌───────────────────────────────────┐ │
+  │  │  PRIMARY DATA CENTRE    │     │  SECONDARY DATA CENTRE (Standby)  │ │
+  │  │  (Gov. approved cloud   │◄───►│  Hot standby / failover           │ │
+  │  │   or on-premise)        │     │                                   │ │
+  │  └─────────────────────────┘     └───────────────────────────────────┘ │
+  │            │                                                            │
+  │            │  VPN / Secure Tunnel                                       │
+  │     ┌──────┴──────┐                                                     │
+  │     │  NIDA API   │  MoHCDGEC API   RITA API   Email/SMS               │
+  │     └─────────────┘                                                     │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  CONTAINERIZATION
+  • All microservices: Docker containers
+  • Orchestration: Kubernetes (EKS or self-hosted k8s)
+  • Helm charts for deployment management
+  • Rolling updates with zero downtime
+
+  CI/CD PIPELINE
+  • Source control: Git (GitHub or GitLab)
+  • Pipeline: GitHub Actions / GitLab CI
+  • Stages: Lint → Unit Test → Integration Test → SAST/DAST → Build → Deploy
+  • Environments: dev → staging → production
+  • Database migrations: Flyway or Liquibase
+  • Automated rollback on failed health checks
+
+
+════════════════════════════════════════════════════════════════════════════════
+  5.2  TECHNOLOGY STACK
+════════════════════════════════════════════════════════════════════════════════
+
+  FRONTEND (WEB DASHBOARDS)
+  ──────────────────────────────────────────────────────────────
+  Framework        Next.js 14 (App Router) + React 18
+  Language         TypeScript
+  Styling          TailwindCSS
+  State            Zustand / React Query
+  Auth             NextAuth.js (JWT + OAuth)
+  Charts           Recharts / D3.js (population pyramids)
+
+  MOBILE APPS (Officer + Citizen)
+  ──────────────────────────────────────────────────────────────
+  Framework        React Native (Expo) 
+  Offline          SQLite (WatermelonDB) with background sync
+  Maps/Geo         React Native Maps + PostGIS queries
+  Biometrics       Expo Camera, fingerprint SDK
+  Storage          Encrypted secure storage (expo-secure-store)
+
+  BACKEND SERVICES
+  ──────────────────────────────────────────────────────────────
+  Runtime          Node.js 20 LTS or Python 3.12
+  Framework        NestJS (Node) or FastAPI (Python)
+  API Style        REST + WebSockets (live population counts)
+  Validation       Zod (Node) / Pydantic (Python)
+  ORM              Prisma (Node) or SQLAlchemy (Python)
+
+  DATABASES
+  ──────────────────────────────────────────────────────────────
+  Primary DB       PostgreSQL 16 + PostGIS 3.4
+  Cache            Redis 7 (sessions, counters, rate limiting)
+  Time-series      TimescaleDB (pop. trends, system metrics)
+  Search           PostgreSQL full-text search / Elasticsearch
+
+  STORAGE & MESSAGING
+  ──────────────────────────────────────────────────────────────
+  Object storage   MinIO (self-hosted) or AWS S3
+  Message queue    RabbitMQ or AWS SQS
+  Email            AWS SES or SendGrid
+  SMS (OTP)        Africa's Talking or Twilio
+
+  DOCUMENT GENERATION
+  ──────────────────────────────────────────────────────────────
+  PDF certs        Puppeteer or WeasyPrint
+  QR codes         qrcode library + digital signature
+  ID card print    Custom PDF template + print driver
+
+  API GATEWAY & INFRASTRUCTURE
+  ──────────────────────────────────────────────────────────────
+  API Gateway      Kong or AWS API Gateway
+  Load Balancer    NGINX or AWS ALB
+  CDN / WAF        CloudFront + AWS WAF
+  VPN              WireGuard or OpenVPN (admin access)
+
+  OBSERVABILITY
+  ──────────────────────────────────────────────────────────────
+  Metrics          Prometheus + Grafana
+  Logs             ELK Stack (Elasticsearch + Logstash + Kibana)
+  Tracing          Jaeger (distributed tracing)
+  Alerting         PagerDuty / Grafana Alerting
+  Uptime           Healthchecks.io or internal probe
+
+
+════════════════════════════════════════════════════════════════════════════════
+  5.3  POPULATION ANALYTICS — PUBLIC DRILL-DOWN LEVELS
+════════════════════════════════════════════════════════════════════════════════
+
+  LEVEL 1 — NATIONAL (Home Page)
+  ─────────────────────────────────────────────────────────────
+  • Toggle: Tanzania Mainland / Tanzania Zanzibar
+  • Total live population (status = ALIVE only)
+  • Gender ratio (Male / Female)
+  • Population pyramid (age bands: 0-4, 5-9, 10-14, ... 80+)
+  • Population trend curve (monthly/yearly)
+  • Regional density distribution (% across regions)
+  • Total buildings count
+  • Total public infrastructure count
+  • [Button → Region View]
+
+  LEVEL 2 — REGION
+  ─────────────────────────────────────────────────────────────
+  • Select: region name
+  • Total population for region
+  • Gender ratio
+  • Population pyramid
+  • District density distribution (% across districts)
+  • Total buildings & infrastructure
+  • Auto-updates after confirmed migrations
+  • [Button → District View]
+
+  LEVEL 3 — DISTRICT
+  ─────────────────────────────────────────────────────────────
+  • Select: district name
+  • Total population for district
+  • Gender ratio
+  • Population pyramid
+  • Ward density distribution (% across wards)
+  • Total buildings & infrastructure
+  • [Button → Ward View]
+
+  LEVEL 4 — WARD
+  ─────────────────────────────────────────────────────────────
+  • Select: ward name
+  • Total population for ward
+  • Gender ratio
+  • Population pyramid
+  • Village density distribution (% across villages)
+  • Total buildings & infrastructure
+  • [Button → Village View]
+
+  LEVEL 5 — VILLAGE  (most granular public view)
+  ─────────────────────────────────────────────────────────────
+  • Select: village name
+  • Total population for village
+  • Gender ratio
+  • Population pyramid
+  • Street-level density distribution (%)
+  • Total buildings & infrastructure
+
+  NOTE: NO PII is exposed at any level. All figures are
+        aggregated counts and percentages only.
+
+
+================================================================================
+  END OF DOCUMENT: NBS_SYSTEM_DESIGN.txt
+  National Bureau of Statistics — Census & Civil Registry System v1.0
+================================================================================
