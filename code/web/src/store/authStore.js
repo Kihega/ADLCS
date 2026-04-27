@@ -13,7 +13,7 @@ import { create } from 'zustand'
 // Key used in localStorage for the refresh token
 const REFRESH_KEY = 'adlcs_rt'
 
-export const useAuthStore = create((set, get) => ({
+export const useAuthStore = create((set) => ({
   // ── State ───────────────────────────────────────────────────────────────────
   user:            null,   // safe profile from server (no passwordHash/mfaSecret)
   role:            null,   // 'super_admin' | 'district_admin' | 'village_officer' | 'hospital_officer' | 'public_user'
