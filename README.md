@@ -157,3 +157,29 @@ Requires vercel.json rewrites
 Jest imports index.js
 Guard startServer() with require.main === module
 Dissertation — Tanzania NBS · GitHub: Kihega/ADLCS
+
+---
+
+## Web Login Page
+
+Live at: `https://final-dissertation.vercel.app/login`
+
+### What is built
+- Full two-step login flow (password → optional MFA TOTP)
+- Zustand auth store — access token in memory, refresh token in localStorage
+- Axios client with automatic silent token refresh on 401
+- Protected routes with role-based redirection
+- Session restoration on page reload (SilentRefresh on app mount)
+- Placeholder dashboards for all 5 roles (real dashboards built next)
+
+### Login flow (web)
+User enters email + password
+↓
+POST /api/auth/login
+↓ mfaRequired: false     → tokens issued → redirect to role dashboard
+↓ mfaRequired: true      → step 2 shown
+User enters 6-digit TOTP
+↓
+POST /api/auth/mfa/verify
+↓
+tokens issued → redirect to role dashboard
