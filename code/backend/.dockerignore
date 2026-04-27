@@ -1,0 +1,17 @@
+# Exclude everything that Docker does not need to build the image.
+# This keeps the build context small and avoids leaking secrets.
+
+node_modules
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.nyc_output
+tests
+*.test.js
+*.spec.js
+prisma/migrations
+.git
+.gitignore
+README.md

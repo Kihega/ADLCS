@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────
+# ADLCS Backend — System & Runtime Requirements
+# This file documents the environment this service needs.
+# Node packages are in package.json; this covers everything else.
+# ─────────────────────────────────────────────────────────────
+
+# ── Node.js runtime ──────────────────────────────────────────
+# Must be 20.x LTS (Prisma v6 requires Node >= 18, we pin 20 for LTS stability)
+node>=20.0.0
+
+# ── OS-level packages (Alpine Linux inside Docker) ───────────
+# openssl   — Prisma query engine binary links against this at runtime
+# dumb-init — PID 1 signal forwarding so Docker stop is clean
+
+# ── Render.com (cloud deployment) ────────────────────────────
+# Runtime: Node 20 (set in Render dashboard → Environment)
+# Build:   npm ci && npx prisma generate
+# Start:   node src/index.js
+# Region:  Frankfurt (EU) — closest to Tanzania with free tier
+
+# ── Key pinned npm packages (see package.json for full list) ──
+# prisma@6.19.3        — pinned; v7 breaks url config, do not upgrade
+# @prisma/client@6.19.3
+# express@^4.18        — NOT express 5; wildcard routing changed in v5
+# ioredis@^5           — must use rediss:// (double-s) for Upstash TLS
