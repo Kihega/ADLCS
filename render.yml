@@ -1,32 +1,63 @@
+# ─────────────────────────────────────────────────────────────
+# Render deployment configuration — ADLCS
+# Docs: https://render.com/docs/blueprint-spec
+# ─────────────────────────────────────────────────────────────
+
 services:
   - type: web
-    name: tanzania-census-backend
+    name: adlcs-backend
     env: node
     plan: free
+    # rootDir is relative to the repo root
     rootDir: code/backend
-    buildCommand: npm install
+    # npm ci is deterministic (uses lockfile); prisma generate builds the client
+    buildCommand: npm ci && npx prisma generate
     startCommand: node src/index.js
     branch: main
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
-        sync: false
+
+      # ── Database (Supabase PostgreSQL) ──────────────────────
+      # Pooler URL for normal queries (PgBouncer, port 6543)
       - key: DATABASE_URL_POOLER
         sync: false
+      # Direct URL for migrations / Prisma migrations only
+      - key: DATABASE_URL
+        sync: false
+
+      # ── Cache (Upstash Redis) ───────────────────────────────
+      # Must be rediss:// (double-s) — Upstash requires TLS
       - key: REDIS_URL
         sync: false
+
+      # ── Auth tokens ─────────────────────────────────────────
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
         sync: false
+
+      # ── Encryption ──────────────────────────────────────────
       - key: ENCRYPTION_KEY
         sync: false
+
+      # ── Email (Resend) ──────────────────────────────────────
       - key: RESEND_API_KEY
         sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+      # ── Media (Cloudinary) ──────────────────────────────────
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
         sync: false
       - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      # ── CORS ────────────────────────────────────────────────
+      - key: WEB_URL
+        sync: false
+      - key: VERCEL_URL
         sync: false
