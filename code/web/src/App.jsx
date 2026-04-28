@@ -22,7 +22,8 @@ import { apiRefresh, apiMe }  from './api/auth.api'
 
 import ProtectedRoute         from './components/ProtectedRoute'
 import LoginPage              from './pages/LoginPage'
-import PlaceholderDashboard   from './pages/PlaceholderDashboard'
+import PlaceholderDashboard     from './pages/PlaceholderDashboard'
+import DistrictAdminDashboard  from './pages/DistrictAdminDashboard'
 
 /**
  * SilentRefresh — runs once on app mount.
@@ -85,7 +86,7 @@ export default function App() {
           path="/district-admin"
           element={
             <ProtectedRoute roles={['district_admin']}>
-              <PlaceholderDashboard />
+              <DistrictAdminDashboard />
             </ProtectedRoute>
           }
         />

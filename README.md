@@ -183,3 +183,34 @@ User enters 6-digit TOTP
 POST /api/auth/mfa/verify
 ↓
 tokens issued → redirect to role dashboard
+
+---
+
+## UI Update — Login, Dashboards & Mobile Login
+
+### Web Login Page (redesigned)
+- **Layout:** Horizontal top banner (flag bg + coat of arms + NBS title + logo in one row) with Tanzania flag colour stripe
+- **Bottom:** Centred auth card — identical multi-mode logic (login → MFA → token → registration → success)
+- **Modes shared** by Super Admin and District Admin
+
+### District Admin Dashboard
+- Derived from SuperAdminDashboard — same visual design, same components
+- **Scope:** All data, stats, maps filtered to the admin's assigned district
+- **Removed** (super admin only): District Admins mgmt, System Performance, Security Alerts, System Log Reports
+- **Added:** Facility Management, Manage Officers, District Reports
+- **Stats:** District Population · Village Officers · Hospital Officers · Registered Facilities
+
+### Mobile Login Screen (shared: Village Officer + Hospital Officer)
+File: `code/mobile/src/screens/auth/LoginScreen.tsx`
+
+**First-open Device Activation flow** (system design §2.4 / §2.5):
+1. Modal appears immediately, blocks login form
+2. Officer enters one-time token from email (10-min countdown)
+3. Background: device fingerprint captured, GPS recorded, geo-fence downloaded
+4. AsyncStorage key `adlcs_device_activated = true` persisted
+5. Modal dismissed → login form fades in
+
+**Login flow:**
+- Step 1: email + password → backend `/api/auth/login`
+- Step 2 (if MFA): 6-digit TOTP → `/api/auth/mfa/verify`
+- Role routing: `village_officer` → VillageHome, `hospital_officer` → HospitalHome
