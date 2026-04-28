@@ -126,7 +126,7 @@ const STATS=[
   {MuiIcon:HomeWorkIcon,      label:'Registered Facilities',value:'8',        badge:'2 pending setup', bColor:'text-orange-400 bg-orange-500/10 border-orange-500/20',line:'bg-orange-400',ibg:'bg-orange-500/10 text-orange-400'},
 ]
 
-function getStrength(pwd){
+function _getStrength(pwd){
   let s=0
   if(pwd.length>=8)s++;if(/[A-Z]/.test(pwd))s++;if(/[0-9]/.test(pwd))s++;if(/[^A-Za-z0-9]/.test(pwd))s++;if(pwd.length>=12)s++
   if(s<=1)return{label:'Weak',      color:'bg-red-500',   tc:'text-red-400',   w:'w-1/5'}
@@ -145,7 +145,7 @@ const PyramidTooltip=({active,payload,label})=>{
 }
 
 // ── GEO FILTER BAR (reusable) ─────────────────────────────
-function GeoFilterBar({onFilterChange,darkMode,t,showScopeCards=true}){
+function GeoFilterBar({onFilterChange,_darkMode,t,showScopeCards=true}){
   const [scope,setScope]=useState('national')
   const [region,setRegion]=useState('')
   const [district,setDistrict]=useState('')
@@ -301,7 +301,7 @@ function WarningPopup({type,user,onConfirm,onCancel,t}){
 }
 
 // ── DASHBOARD CONTENT ────────────────────────────────────
-function DashboardContent({darkMode,t,onNewReg}){
+function DashboardContent({_darkMode,t,onNewReg}){
   const [pFilter,setPFilter]=useState('national')
   const [showRegions,setShowRegions]=useState(false)
   const [showActions,setShowActions]=useState(false)
@@ -320,7 +320,7 @@ function DashboardContent({darkMode,t,onNewReg}){
         </div>
       </div>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        {STATS.map(({MuiIcon,label,value,badge,bColor,line,ibg})=>(
+        {STATS.map(({MuiIcon:_MuiIcon,label,value,badge,bColor,line,ibg})=>(
           <div key={label} className={`${t.card} border ${t.cardBorder} rounded-xl p-4 hover:shadow-lg transition-all`}>
             <div className="flex items-start justify-between mb-4"><div className={`w-9 h-9 rounded-lg flex items-center justify-center ${ibg}`}><MuiIcon sx={{fontSize:18}}/></div><span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${bColor}`}>{badge}</span></div>
             <p className={`text-[10px] font-mono tracking-widest uppercase mb-1 ${t.textDim}`}>{label}</p>
@@ -397,7 +397,7 @@ function DashboardContent({darkMode,t,onNewReg}){
 }
 
 // ── DEMOGRAPHICS CONTENT ─────────────────────────────────
-function DemographicsContent({darkMode,t}){
+function DemographicsContent({_darkMode,t}){
   const [pFilter,setPFilter]=useState('national')
   const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',ward:'',village:''})
   const meta=filterMeta[pFilter]
@@ -549,7 +549,7 @@ function DemographicsContent({darkMode,t}){
   const isNationalScope = !selRegion
   const isRegionScope   = selRegion && !selDistrict
   const isDistrictScope = selDistrict && !selWard
-  const isWardScope     = !!selWard
+  const _isWardScope     = !!selWard
 
   const getTableData=()=>{
     if(isNationalScope){
@@ -778,7 +778,7 @@ function DemographicsContent({darkMode,t}){
 
 
 // ── INFRASTRUCTURE CONTENT ───────────────────────────────
-function InfrastructureContent({darkMode,t}){
+function InfrastructureContent({_darkMode,t}){
   const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
@@ -915,7 +915,7 @@ function InfrastructureContent({darkMode,t}){
 }
 
 // ── DISTRICT ADMINS CONTENT ──────────────────────────────
-function DistrictAdminsContent({darkMode,t,onNewReg}){
+function DistrictAdminsContent({_darkMode,t,onNewReg}){
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=5
@@ -976,7 +976,7 @@ function DistrictAdminsContent({darkMode,t,onNewReg}){
 }
 
 // ── VILLAGE OFFICERS CONTENT ─────────────────────────────
-function VillageOfficersContent({darkMode,t}){
+function VillageOfficersContent({_darkMode,t}){
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=5
@@ -1043,7 +1043,7 @@ function VillageOfficersContent({darkMode,t}){
 }
 
 // ── HEALTH OFFICERS CONTENT ──────────────────────────────
-function HealthOfficersContent({darkMode,t}){
+function HealthOfficersContent({_darkMode,t}){
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=5
@@ -1099,7 +1099,7 @@ function HealthOfficersContent({darkMode,t}){
 }
 
 // ── MANAGE USERS CONTENT ─────────────────────────────────
-function ManageUsersContent({darkMode,t}){
+function ManageUsersContent({_darkMode,t}){
   const [roleFilter,setRoleFilter]=useState('all')
   const [search,setSearch]=useState('')
   const [warning,setWarning]=useState(null) // {type:'suspend'|'delete', user}
@@ -1178,7 +1178,7 @@ function ManageUsersContent({darkMode,t}){
 }
 
 // ── SYSTEM PERFORMANCE ───────────────────────────────────
-function SystemPerformanceContent({darkMode,t}){
+function SystemPerformanceContent({_darkMode,t}){
   const [tick,setTick]=useState(0)
   useEffect(()=>{const id=setInterval(()=>setTick(x=>x+1),3000);return()=>clearInterval(id)},[])
   const cpu=Math.min(98,32+Math.round(Math.sin(tick*0.7)*12))
@@ -1195,17 +1195,10 @@ function SystemPerformanceContent({darkMode,t}){
     {name:'SMS Gateway',    status:'RUNNING',latency:'340ms',uptime:'98.90%',color:'text-[#00ff9d]'},
     {name:'Audit Logger',   status:'RUNNING',latency:'1ms',  uptime:'100%',  color:'text-[#00ff9d]'},
   ]
-  const Gauge=({label,value,color})=>(
-    <div className={`${t.card} border ${t.cardBorder} rounded-xl p-4`}>
-      <div className="flex items-center justify-between mb-3"><p className={`text-[10px] font-mono uppercase tracking-widest ${t.textDim}`}>{label}</p><span className={`text-lg font-extrabold ${color}`}>{value}%</span></div>
-      <div className={`h-2 rounded-full ${darkMode?'bg-gray-200':'bg-[#1e2d45]'}`}><div className={`h-2 rounded-full transition-all duration-1000 ${value>85?'bg-red-500':value>70?'bg-yellow-400':color.replace('text-','bg-')}`} style={{width:`${value}%`}}/></div>
-      <div className="flex justify-between mt-1"><span className={`text-[9px] ${t.textDim}`}>0%</span><span className={`text-[9px] ${t.textDim}`}>100%</span></div>
-    </div>
-  )
   return(
     <div className="space-y-5">
       <div className="flex items-center justify-between"><div><h1 className={`font-bold text-xl sm:text-2xl ${t.text}`}>System Performance</h1><p className={`text-xs mt-0.5 ${t.textSub}`}>Live infrastructure metrics</p></div><span className="flex items-center gap-1.5 text-[10px] text-[#00ff9d] font-mono bg-[#00ff9d]/10 border border-[#00ff9d]/20 rounded-full px-3 py-1"><span className="w-1.5 h-1.5 rounded-full bg-[#00ff9d] animate-pulse"/>LIVE</span></div>
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3"><Gauge label="CPU Usage" value={cpu} color="text-[#00d4ff]"/><Gauge label="RAM Usage" value={ram} color="text-[#00ff9d]"/><Gauge label="Disk Usage" value={disk} color="text-orange-400"/><Gauge label="Network I/O" value={net} color="text-purple-400"/></div>
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3"><Gauge label="CPU Usage" value={cpu} color="text-[#00d4ff]" cardCls={`${t.card} border ${t.cardBorder}`} textDim={t.textDim}/><Gauge label="RAM Usage" value={ram} color="text-[#00ff9d]" cardCls={`${t.card} border ${t.cardBorder}`} textDim={t.textDim}/><Gauge label="Disk Usage" value={disk} color="text-orange-400" cardCls={`${t.card} border ${t.cardBorder}`} textDim={t.textDim}/><Gauge label="Network I/O" value={net} color="text-purple-400" cardCls={`${t.card} border ${t.cardBorder}`} textDim={t.textDim}/></div>
       <div className={`${t.card} border ${t.cardBorder} rounded-xl overflow-hidden`}>
         <div className={`px-5 py-4 border-b ${t.border}`}><p className={`font-bold text-sm ${t.text}`}>Service Health</p></div>
         <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className={`border-b ${t.border}`}>{['Service','Status','Latency','Uptime'].map(h=><th key={h} className={`px-4 py-3 text-left text-[9px] font-mono uppercase tracking-widest ${t.textDim}`}>{h}</th>)}</tr></thead><tbody>{SERVICES.map(s=><tr key={s.name} className={`border-b ${t.border} ${t.rowHover}`}><td className={`px-4 py-3 font-semibold ${t.text}`}>{s.name}</td><td className="px-4 py-3"><span className={`text-[9px] font-mono ${s.color}`}>{s.status}</span></td><td className={`px-4 py-3 font-mono ${t.textSub}`}>{s.latency}</td><td className={`px-4 py-3 font-mono text-[#00ff9d]`}>{s.uptime}</td></tr>)}</tbody></table></div>
@@ -1215,7 +1208,7 @@ function SystemPerformanceContent({darkMode,t}){
 }
 
 // ── LOG REPORTS ──────────────────────────────────────────
-function LogReportsContent({darkMode,t}){
+function LogReportsContent({_darkMode,t}){
   const [typeFilter,setTypeFilter]=useState('all')
   const [search,setSearch]=useState('')
   const LOGS=[
@@ -1244,7 +1237,7 @@ function LogReportsContent({darkMode,t}){
 }
 
 // ── SECURITY ALERTS ──────────────────────────────────────
-function SecurityAlertsContent({darkMode,t}){
+function SecurityAlertsContent({_darkMode,t}){
   const [sevFilter,setSevFilter]=useState('all')
   const ALERTS=[
     {id:'ALT-001',severity:'CRITICAL',type:'Brute Force',    region:'Kilimanjaro',  detail:'5 consecutive failed logins from same IP',       time:'2026-05-12 13:58',ip:'41.33.12.205',resolved:false},
@@ -1269,7 +1262,7 @@ function SecurityAlertsContent({darkMode,t}){
 }
 
 // ── MIGRATION TRENDS ─────────────────────────────────────
-function MigrationTrendsContent({darkMode,t}){
+function MigrationTrendsContent({_darkMode,t}){
   const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   const data=[
     {month:'Jan',incoming:1240,outgoing:980},{month:'Feb',incoming:1380,outgoing:1120},
@@ -1296,7 +1289,7 @@ function MigrationTrendsContent({darkMode,t}){
 }
 
 // ── MARRIAGE ISSUES ──────────────────────────────────────
-function MarriageIssuesContent({darkMode,t}){
+function MarriageIssuesContent({_darkMode,t}){
   const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   const STATS_M=[
     {label:'Total Marriages',value:'12,340,210',color:'text-[#00ff9d]'},{label:'Active',value:'11,890,430',color:'text-[#00d4ff]'},
@@ -1304,11 +1297,6 @@ function MarriageIssuesContent({darkMode,t}){
   ]
   const KINDS=[{label:'Monogamous',value:'78.4%',pct:78},{label:'Potentially Polygamous',value:'14.2%',pct:14},{label:'Polygamous',value:'4.8%',pct:5},{label:'Customary/Unregistered',value:'2.6%',pct:3}]
   // Daily 24-hr registrations/dissolutions
-  const dailyMarriage=Array.from({length:24},(_,h)=>({
-    hour:`${String(h).padStart(2,'0')}:00`,
-    registrations: Math.round(8+Math.sin(h*0.5)*5+Math.random()*4),
-    dissolutions:  Math.round(2+Math.sin(h*0.3)*2+Math.random()*2),
-  }))
   return(
     <div className="space-y-5">
       <div><h1 className={`font-bold text-xl sm:text-2xl ${t.text}`}>Marriage Issues</h1><p className={`text-xs mt-0.5 ${t.textSub}`}>Civil marriage registry — national data</p></div>
@@ -1348,15 +1336,9 @@ function MarriageIssuesContent({darkMode,t}){
 }
 
 // ── HEALTH TRENDS ─────────────────────────────────────────
-function HealthTrendsContent({darkMode,t}){
+function HealthTrendsContent({_darkMode,t}){
   const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   // Daily 24-hr data (00:00–23:00)
-  const dailyData=Array.from({length:24},(_,h)=>({
-    hour:`${String(h).padStart(2,'0')}:00`,
-    births: Math.round(40+Math.sin(h*0.4)*25+Math.random()*15),
-    deaths: Math.round(12+Math.sin(h*0.3)*8+Math.random()*6),
-    admissions: Math.round(80+Math.sin(h*0.5)*40+Math.random()*20),
-  }))
   const STATS_H=[
     {label:'Registered Births',    value:'1,247,320',  color:'text-[#00ff9d]'},
     {label:'Registered Deaths',    value:'312,840',    color:'text-red-400'},
@@ -1436,7 +1418,7 @@ const TYPE_STYLE = {
   data:   {label:'DATA',    color:'text-purple-400', bg:'bg-purple-400/10'},
 }
 
-function GlobalSearch({t, darkMode, onNavigate}) {
+function GlobalSearch({t,_darkMode, onNavigate}) {
   const [query,   setQuery]   = useState('')
   const [focused, setFocused] = useState(false)
   const [selIdx,  setSelIdx]  = useState(0)
@@ -1462,7 +1444,7 @@ function GlobalSearch({t, darkMode, onNavigate}) {
     if (e.key === 'Escape')    { setFocused(false); setQuery('') }
   }
 
-  useEffect(() => { setSelIdx(0) }, [query])
+  useEffect(() => { const t = setTimeout(() => setSelIdx(0), 0); return () => clearTimeout(t) }, [query])
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setFocused(false) }
