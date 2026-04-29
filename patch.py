@@ -1,55 +1,84 @@
 #!/usr/bin/env python3
 """
-PATCH #1 — Fix Dockerfile COPY paths for Render Docker mode
-PROBLEM: Render Docker build context = code/backend/, but Dockerfile
-         uses COPY code/backend/... which fails (no nested path in context)
-FIXES: "Exited with status 1 while building your code"
+PATCH #6 — Make Redis connection non-fatal for local dev
+If Redis is unavailable (e.g., testing without Upstash),
+the server should still start. This is safe for dev only.
 RUN FROM: repo root (cd ~/ADLCS)
 """
 
 import os
 
-DOCKERFILE_PATH = "code/backend/Dockerfile"
+REDIS_PATH = "code/backend/src/lib/redis.js"
 
-NEW_DOCKERFILE = '''\
-# ─────────────────────────────────────────────────────────────
-# ADLCS Backend — Node.js 20 on Alpine Linux
-# Build context = code/backend/ (Render Docker mode)
-# Alpine is used to keep the image small (~180MB vs ~900MB on Debian).
-# OpenSSL is required by Prisma Client at runtime.
-# ─────────────────────────────────────────────────────────────
-FROM node:20-alpine AS base
+NEW_REDIS = """\
+const Redis = require('ioredis')
 
-# Install system dependencies
-RUN apk add --no-cache openssl dumb-init
+let redis = null
+let redisAvailable = false
 
-WORKDIR /app
+function connectRedis() {
+  // If no REDIS_URL set (local dev without Redis), skip gracefully
+  if (!process.env.REDIS_URL) {
+    console.warn('⚠️  REDIS_URL not set — Redis disabled (dev mode only)')
+    return null
+  }
 
-# ── Dependency layer (cached unless package-lock.json changes) ──
-# Build context is code/backend/ so paths are relative to it
-COPY package.json package-lock.json ./
-COPY prisma ./prisma/
+  if (redis && redis.status === 'ready') return redis
 
-RUN npm ci --omit=dev && npx prisma generate
+  redis = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+    connectTimeout: 10000,
+    lazyConnect: false,
+    retryStrategy(times) {
+      if (times > 3) {
+        console.error('❌ Redis retry limit reached — running without cache')
+        redisAvailable = false
+        return null  // stop retrying
+      }
+      return Math.min(times * 500, 2000)
+    },
+  })
 
-# ── Source layer ──
-COPY src ./src/
+  redis.on('ready', () => {
+    redisAvailable = true
+    console.log('✅ Redis connected successfully')
+  })
 
-# Non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
+  redis.on('error', (err) => {
+    redisAvailable = false
+    console.error('❌ Redis error:', err.message)
+  })
 
-EXPOSE 5000
+  redis.on('close', () => {
+    redisAvailable = false
+    console.log('⚠️  Redis connection closed')
+  })
 
-ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "src/index.js"]
-'''
+  return redis
+}
 
-with open(DOCKERFILE_PATH, "w") as f:
-    f.write(NEW_DOCKERFILE)
+function getRedis() {
+  if (!redis) {
+    return connectRedis()
+  }
+  return redis
+}
 
-print(f"✅ Patched: {DOCKERFILE_PATH}")
-print("   Fixed COPY paths: code/backend/... → relative paths")
-print("   Build context is now correctly code/backend/")
+function isRedisReady() {
+  return redisAvailable && redis && redis.status === 'ready'
+}
+
+module.exports = { connectRedis, getRedis, isRedisReady }
+"""
+
+with open(REDIS_PATH, "w") as f:
+    f.write(NEW_REDIS)
+
+print(f"✅ Patched: {REDIS_PATH}")
+print("   Added: graceful degradation when REDIS_URL is not set")
+print("   Added: isRedisReady() helper for other modules")
+print("   Added: connectTimeout: 10000ms")
 print()
-print("Next: git add code/backend/Dockerfile && git commit -m 'fix: Dockerfile COPY paths for Render Docker build' && git push")
+print("Now backend starts even without Redis (useful for local dev testing)")
+print("In production, REDIS_URL is always set on Render → Redis works normally")
