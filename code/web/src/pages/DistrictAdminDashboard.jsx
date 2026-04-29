@@ -397,7 +397,7 @@ function DashboardContent({_darkMode,t,onNewReg}){
 }
 
 // ── DEMOGRAPHICS CONTENT ─────────────────────────────────
-function DemographicsContent({_darkMode,t}){
+function DemographicsContent({darkMode,t}){
   const [pFilter,setPFilter]=useState('national')
   const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',ward:'',village:''})
   const meta=filterMeta[pFilter]
@@ -407,7 +407,7 @@ function DemographicsContent({_darkMode,t}){
 
   // Scope multipliers for card values
   const scopeMult={national:1,mainland:0.915,zanzibar:0.085}
-  const m=scopeMult[activeFilter.scope]||1
+  const _m=scopeMult[activeFilter.scope]||1
 
   // ── REAL NBS 2022 REGION DATA ──────────────────────────
   const REGION_POP_DATA=[
@@ -778,8 +778,8 @@ function DemographicsContent({_darkMode,t}){
 
 
 // ── INFRASTRUCTURE CONTENT ───────────────────────────────
-function InfrastructureContent({_darkMode,t}){
-  const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
+function InfrastructureContent({darkMode,t}){
+  const [_activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=8
@@ -976,7 +976,7 @@ function DistrictAdminsContent({_darkMode,t,onNewReg}){
 }
 
 // ── VILLAGE OFFICERS CONTENT ─────────────────────────────
-function VillageOfficersContent({_darkMode,t}){
+function VillageOfficersContent({darkMode,t}){
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=5
@@ -1043,7 +1043,7 @@ function VillageOfficersContent({_darkMode,t}){
 }
 
 // ── HEALTH OFFICERS CONTENT ──────────────────────────────
-function HealthOfficersContent({_darkMode,t}){
+function HealthOfficersContent({darkMode,t}){
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=5
@@ -1099,7 +1099,7 @@ function HealthOfficersContent({_darkMode,t}){
 }
 
 // ── MANAGE USERS CONTENT ─────────────────────────────────
-function ManageUsersContent({_darkMode,t}){
+function ManageUsersContent({darkMode,t}){
   const [roleFilter,setRoleFilter]=useState('all')
   const [search,setSearch]=useState('')
   const [warning,setWarning]=useState(null) // {type:'suspend'|'delete', user}
@@ -1178,7 +1178,7 @@ function ManageUsersContent({_darkMode,t}){
 }
 
 // ── SYSTEM PERFORMANCE ───────────────────────────────────
-function SystemPerformanceContent({_darkMode,t}){
+function SystemPerformanceContent({darkMode,t}){
   const [tick,setTick]=useState(0)
   useEffect(()=>{const id=setInterval(()=>setTick(x=>x+1),3000);return()=>clearInterval(id)},[])
   const cpu=Math.min(98,32+Math.round(Math.sin(tick*0.7)*12))
@@ -1208,7 +1208,7 @@ function SystemPerformanceContent({_darkMode,t}){
 }
 
 // ── LOG REPORTS ──────────────────────────────────────────
-function LogReportsContent({_darkMode,t}){
+function LogReportsContent({darkMode,t}){
   const [typeFilter,setTypeFilter]=useState('all')
   const [search,setSearch]=useState('')
   const LOGS=[
@@ -1237,7 +1237,7 @@ function LogReportsContent({_darkMode,t}){
 }
 
 // ── SECURITY ALERTS ──────────────────────────────────────
-function SecurityAlertsContent({_darkMode,t}){
+function SecurityAlertsContent({darkMode,t}){
   const [sevFilter,setSevFilter]=useState('all')
   const ALERTS=[
     {id:'ALT-001',severity:'CRITICAL',type:'Brute Force',    region:'Kilimanjaro',  detail:'5 consecutive failed logins from same IP',       time:'2026-05-12 13:58',ip:'41.33.12.205',resolved:false},
@@ -1262,8 +1262,8 @@ function SecurityAlertsContent({_darkMode,t}){
 }
 
 // ── MIGRATION TRENDS ─────────────────────────────────────
-function MigrationTrendsContent({_darkMode,t}){
-  const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
+function MigrationTrendsContent({darkMode,t}){
+  const [_activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   const data=[
     {month:'Jan',incoming:1240,outgoing:980},{month:'Feb',incoming:1380,outgoing:1120},
     {month:'Mar',incoming:1520,outgoing:1350},{month:'Apr',incoming:1680,outgoing:1200},
@@ -1289,8 +1289,15 @@ function MigrationTrendsContent({_darkMode,t}){
 }
 
 // ── MARRIAGE ISSUES ──────────────────────────────────────
-function MarriageIssuesContent({_darkMode,t}){
-  const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
+// DAILY_MARRIAGE — module-level (Math.random not allowed in render body)
+const DAILY_MARRIAGE = Array.from({length:24},(_,h)=>({
+  hour:`${String(h).padStart(2,'0')}:00`,
+  registrations: Math.round(8+Math.sin(h*0.5)*5 + (h*7+3)%4),
+  dissolutions:  Math.round(2+Math.sin(h*0.3)*2 + (h*3+1)%2),
+}))
+
+function MarriageIssuesContent({darkMode,t}){
+  const [_activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   const STATS_M=[
     {label:'Total Marriages',value:'12,340,210',color:'text-[#00ff9d]'},{label:'Active',value:'11,890,430',color:'text-[#00d4ff]'},
     {label:'Dissolved',value:'312,840',color:'text-red-400'},{label:'Pending Dissolution',value:'136,940',color:'text-yellow-400'},
@@ -1336,8 +1343,16 @@ function MarriageIssuesContent({_darkMode,t}){
 }
 
 // ── HEALTH TRENDS ─────────────────────────────────────────
-function HealthTrendsContent({_darkMode,t}){
-  const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
+// DAILY_HEALTH — module-level (Math.random not allowed in render body)
+const DAILY_HEALTH = Array.from({length:24},(_,h)=>({
+  hour:`${String(h).padStart(2,'0')}:00`,
+  births:     Math.round(40+Math.sin(h*0.4)*25 + (h*11+5)%15),
+  deaths:     Math.round(12+Math.sin(h*0.3)*8  + (h*7+2)%6),
+  admissions: Math.round(80+Math.sin(h*0.5)*40 + (h*13+7)%20),
+}))
+
+function HealthTrendsContent({darkMode,t}){
+  const [_activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   // Daily 24-hr data (00:00–23:00)
   const STATS_H=[
     {label:'Registered Births',    value:'1,247,320',  color:'text-[#00ff9d]'},
@@ -1512,7 +1527,7 @@ function GlobalSearch({t,_darkMode, onNavigate}) {
 export default function DistrictAdminDashboard({onSectionChange,onLogout}){
   const [sidebarOpen, setSidebarOpen] =useState(false)
   const [activeNav,   setActiveNav]   =useState('Dashboard')
-  const [darkMode,    setDarkMode]    =useState(false)
+  const darkMode = false // district dashboard always dark; toggle removed
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [showChangePwd,setShowChangePwd]=useState(false)
   const [showNewReg,  setShowNewReg]  =useState(false)
@@ -1660,7 +1675,7 @@ export default function DistrictAdminDashboard({onSectionChange,onLogout}){
           <button onClick={()=>setSidebarOpen(false)} className={`lg:hidden ${t.textDim} hover:text-red-400`}><X size={16}/></button>
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {NAV.map(({label,Icon})=>(
+          {NAV.map(({label,Icon:_Icon})=>(
             <button key={label} onClick={()=>setNav(label)} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all duration-150 border text-[11px] font-medium ${activeNav===label?t.navActive:`${t.textDim} ${t.navHover} border-transparent`}`}>
               <Icon sx={{fontSize:15}} className="shrink-0"/>
               <span className="leading-tight">{label}</span>
