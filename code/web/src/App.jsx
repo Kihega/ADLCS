@@ -23,7 +23,7 @@ import { apiRefresh, apiMe }  from './api/auth.api'
 import ProtectedRoute         from './components/ProtectedRoute'
 import LoginPage              from './pages/LoginPage'
 import PlaceholderDashboard     from './pages/PlaceholderDashboard'
-import DistrictAdminDashboard  from './pages/DistrictAdminDashboard'
+#import DistrictAdminDashboard  from './pages/DistrictAdminDashboard'
 
 /**
  * SilentRefresh — runs once on app mount.
