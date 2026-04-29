@@ -320,7 +320,7 @@ function DashboardContent({_darkMode,t,onNewReg}){
         </div>
       </div>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        {STATS.map(({MuiIcon:_MuiIcon,label,value,badge,bColor,line,ibg})=>(
+        {STATS.map(({MuiIcon,label,value,badge,bColor,line,ibg})=>(
           <div key={label} className={`${t.card} border ${t.cardBorder} rounded-xl p-4 hover:shadow-lg transition-all`}>
             <div className="flex items-start justify-between mb-4"><div className={`w-9 h-9 rounded-lg flex items-center justify-center ${ibg}`}><MuiIcon sx={{fontSize:18}}/></div><span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${bColor}`}>{badge}</span></div>
             <p className={`text-[10px] font-mono tracking-widest uppercase mb-1 ${t.textDim}`}>{label}</p>
@@ -779,7 +779,7 @@ function DemographicsContent({darkMode,t}){
 
 // ── INFRASTRUCTURE CONTENT ───────────────────────────────
 function InfrastructureContent({darkMode,t}){
-  const [_activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
+  const [activeFilter,setActiveFilter]=useState({scope:'national',region:'',district:'',village:''})
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=8
@@ -976,7 +976,7 @@ function DistrictAdminsContent({_darkMode,t,onNewReg}){
 }
 
 // ── VILLAGE OFFICERS CONTENT ─────────────────────────────
-function VillageOfficersContent({darkMode,t}){
+function VillageOfficersContent({t}){
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=5
@@ -1043,7 +1043,7 @@ function VillageOfficersContent({darkMode,t}){
 }
 
 // ── HEALTH OFFICERS CONTENT ──────────────────────────────
-function HealthOfficersContent({darkMode,t}){
+function HealthOfficersContent({t}){
   const [search,setSearch]=useState('')
   const [page,setPage]=useState(0)
   const PER_PAGE=5
@@ -1178,6 +1178,26 @@ function ManageUsersContent({darkMode,t}){
 }
 
 // ── SYSTEM PERFORMANCE ───────────────────────────────────
+// Gauge — hoisted to module level (must not be defined inside render)
+function Gauge({label, value, color, darkMode, t}) {
+  return (
+    <div className={`${t.card} border ${t.cardBorder} rounded-xl p-4`}>
+      <div className="flex items-center justify-between mb-3">
+        <p className={`text-[10px] font-mono uppercase tracking-widest ${t.textDim}`}>{label}</p>
+        <span className={`text-lg font-extrabold ${color}`}>{value}%</span>
+      </div>
+      <div className={`h-2 rounded-full ${darkMode?'bg-gray-200':'bg-[#1e2d45]'}`}>
+        <div className={`h-2 rounded-full transition-all duration-1000 ${value>85?'bg-red-500':value>70?'bg-yellow-400':color.replace('text-','bg-')}`}
+             style={{width:`${value}%`}}/>
+      </div>
+      <div className="flex justify-between mt-1">
+        <span className={`text-[9px] ${t.textDim}`}>0%</span>
+        <span className={`text-[9px] ${t.textDim}`}>100%</span>
+      </div>
+    </div>
+  )
+}
+
 function SystemPerformanceContent({darkMode,t}){
   const [tick,setTick]=useState(0)
   useEffect(()=>{const id=setInterval(()=>setTick(x=>x+1),3000);return()=>clearInterval(id)},[])
@@ -1527,7 +1547,7 @@ function GlobalSearch({t,_darkMode, onNavigate}) {
 export default function DistrictAdminDashboard({onSectionChange,onLogout}){
   const [sidebarOpen, setSidebarOpen] =useState(false)
   const [activeNav,   setActiveNav]   =useState('Dashboard')
-  const darkMode = false // district dashboard always dark; toggle removed
+  const [darkMode,setDarkMode]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [showChangePwd,setShowChangePwd]=useState(false)
   const [showNewReg,  setShowNewReg]  =useState(false)
@@ -1675,7 +1695,7 @@ export default function DistrictAdminDashboard({onSectionChange,onLogout}){
           <button onClick={()=>setSidebarOpen(false)} className={`lg:hidden ${t.textDim} hover:text-red-400`}><X size={16}/></button>
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {NAV.map(({label,Icon:_Icon})=>(
+          {NAV.map(({label,Icon})=>(
             <button key={label} onClick={()=>setNav(label)} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all duration-150 border text-[11px] font-medium ${activeNav===label?t.navActive:`${t.textDim} ${t.navHover} border-transparent`}`}>
               <Icon sx={{fontSize:15}} className="shrink-0"/>
               <span className="leading-tight">{label}</span>
