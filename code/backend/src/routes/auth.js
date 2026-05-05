@@ -1,11 +1,11 @@
 /**
  * auth.js — ADLCS Auth Routes
  *
- * POST /api/auth/login        — step 1: email + password
- * POST /api/auth/mfa/verify   — step 2: TOTP code (only when MFA is enabled)
- * POST /api/auth/refresh      — get a new access token from a refresh token
- * POST /api/auth/logout       — invalidate the refresh token (requires auth)
- * GET  /api/auth/me           — return current user's profile (requires auth)
+ * POST /api/auth/login        — step 1: email + password         [rate-limited]
+ * POST /api/auth/mfa/verify   — step 2: TOTP code               [rate-limited]
+ * POST /api/auth/refresh      — new access token from refresh token
+ * POST /api/auth/logout       — invalidate refresh token         [requires auth]
+ * GET  /api/auth/me           — current user profile             [requires auth]
  */
 
 const { Router } = require('express')
@@ -15,6 +15,7 @@ const authService              = require('../services/auth.service')
 const { requireAuth,
         requireMfaTemp }       = require('../middleware/auth')
 const { verifyRefresh }        = require('../lib/jwt')
+const { authLimiter }          = require('../middleware/security')
 
 const router = Router()
 
@@ -27,15 +28,14 @@ const loginSchema = z.object({
 
 const mfaSchema = z.object({
   tempToken: z.string().min(1, 'tempToken is required'),
-  // TOTP codes are always exactly 6 digits
-  code: z.string().length(6).regex(/^\d{6}$/, 'MFA code must be 6 digits'),
+  code:      z.string().length(6).regex(/^\d{6}$/, 'MFA code must be 6 digits'),
 })
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'refreshToken is required'),
 })
 
-/** Parse and validate request body against a schema. Returns { data } or { error }. */
+/** Parse and validate request body against a schema. */
 function validate(schema, body) {
   const result = schema.safeParse(body)
   if (!result.success) {
@@ -45,7 +45,8 @@ function validate(schema, body) {
 }
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
-router.post('/login', async (req, res) => {
+// authLimiter: max 10 attempts per 15 min — slows brute-force attacks
+router.post('/login', authLimiter, async (req, res) => {
   const { error, data } = validate(loginSchema, req.body)
   if (error) return res.status(400).json({ success: false, message: error })
 
@@ -58,8 +59,9 @@ router.post('/login', async (req, res) => {
 })
 
 // ── POST /api/auth/mfa/verify ─────────────────────────────────────────────────
-// requireMfaTemp runs first — it verifies the tempToken and injects req.mfaUser
-router.post('/mfa/verify', requireMfaTemp, async (req, res) => {
+// authLimiter: also throttle TOTP guessing
+// requireMfaTemp: verifies the tempToken and injects req.mfaUser
+router.post('/mfa/verify', authLimiter, requireMfaTemp, async (req, res) => {
   const { error, data } = validate(mfaSchema, req.body)
   if (error) return res.status(400).json({ success: false, message: error })
 
@@ -77,12 +79,10 @@ router.post('/refresh', async (req, res) => {
   if (error) return res.status(400).json({ success: false, message: error })
 
   try {
-    // Verify JWT signature to extract sub + role before hitting Redis
     const decoded = verifyRefresh(data.refreshToken)
     const result  = await authService.refresh(decoded.sub, decoded.role, data.refreshToken)
     return res.json({ success: true, ...result })
   } catch (err) {
-    // verifyRefresh throws a JWT error (no .status), service throws { status, message }
     return res.status(err.status || 401).json({
       success: false,
       message: err.message || 'Invalid or expired refresh token',
