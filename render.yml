@@ -8,47 +8,62 @@ services:
     name: adlcs-backend
     env: node
     plan: free
-    # rootDir is relative to the repo root
     rootDir: code/backend
-    # npm ci is deterministic (uses lockfile); prisma generate builds the client
-    buildCommand: npm ci && npx prisma generate
+
+    # ── Build ────────────────────────────────────────────────
+    # 1. npm ci   — install exact versions from lockfile
+    # 2. prisma generate --schema — MUST use explicit --schema flag because
+    #    Prisma 6 looks for schema.prisma in the rootDir first. If an empty
+    #    schema.prisma exists there (even 0 bytes), it silently wins over
+    #    the "prisma.schema" config in package.json when called directly.
+    buildCommand: npm ci && npx prisma generate --schema=prisma/schema.prisma
+
     startCommand: node src/index.js
     branch: main
     healthCheckPath: /api/health
+
     envVars:
       - key: NODE_ENV
         value: production
 
-      # ── Database (Supabase PostgreSQL) ──────────────────────
-      # Pooler URL for normal queries (PgBouncer, port 6543)
+      # ── Database ─────────────────────────────────────────────
+      # DATABASE_URL_POOLER — PgBouncer / pooled URL (port 5432 on Render)
+      #   Used by Prisma Client for all normal queries.
+      #   On Render PostgreSQL: Dashboard → your DB → Connections → "Internal Database URL"
+      #   (the internal URL is faster than external; use external only from Termux)
       - key: DATABASE_URL_POOLER
         sync: false
-      # Direct URL for migrations / Prisma migrations only
+
+      # DATABASE_URL — direct (non-pooled) connection
+      #   Required by Prisma for migrations (prisma migrate deploy / db push).
+      #   On Render PostgreSQL: same dashboard → "External Database URL"
       - key: DATABASE_URL
         sync: false
 
-      # ── Cache (Upstash Redis) ───────────────────────────────
+      # ── Cache (Upstash Redis) ──────────────────────────────
       # Must be rediss:// (double-s) — Upstash requires TLS
       - key: REDIS_URL
         sync: false
 
-      # ── Auth tokens ─────────────────────────────────────────
+      # ── Auth tokens ────────────────────────────────────────
+      # Generate each with:
+      #   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
         sync: false
 
-      # ── Encryption ──────────────────────────────────────────
+      # ── Encryption ─────────────────────────────────────────
       - key: ENCRYPTION_KEY
         sync: false
 
-      # ── Email (Resend) ──────────────────────────────────────
+      # ── Email (Resend) ─────────────────────────────────────
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
         sync: false
 
-      # ── Media (Cloudinary) ──────────────────────────────────
+      # ── Media (Cloudinary) ────────────────────────────────
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
@@ -56,8 +71,15 @@ services:
       - key: CLOUDINARY_API_SECRET
         sync: false
 
-      # ── CORS ────────────────────────────────────────────────
+      # ── CORS ──────────────────────────────────────────────
+      # WEB_URL — full Vercel URL including https://
+      #   Example: https://adlcs-web.vercel.app
       - key: WEB_URL
         sync: false
+
+      # VERCEL_URL — Vercel auto-injects this on their side (hostname only).
+      #   On Render you must set it manually. Use just the hostname, no protocol:
+      #   Example: adlcs-web.vercel.app   (NOT https://adlcs-web.vercel.app)
+      #   security.js normalises it — it adds https:// itself.
       - key: VERCEL_URL
         sync: false
