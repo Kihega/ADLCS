@@ -45,6 +45,9 @@ const MOCK_QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&da
 // it — no lint error. Keeping it avoids a diff churn when it gets used.
 
 export default function LoginPage({ onLogin, _adminType = null }) {
+  if (_adminType) {
+  // future logic placeholder
+}
   const navigate     = useNavigate()
   const { setAuth }  = useAuthStore()
 
