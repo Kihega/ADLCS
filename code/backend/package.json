@@ -6,15 +6,18 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "build": "npx prisma generate",
-    "postinstall": "npx prisma generate",
+    "build": "npx prisma generate --schema=prisma/schema.prisma",
+    "postinstall": "npx prisma generate --schema=prisma/schema.prisma",
     "test": "jest --forceExit",
     "test:coverage": "jest --coverage --forceExit",
     "lint": "echo 'Linting passed'",
-    "prisma:migrate": "npx prisma migrate dev",
-    "prisma:generate": "npx prisma generate",
-    "prisma:studio": "npx prisma studio",
+    "prisma:migrate": "npx prisma migrate dev --schema=prisma/schema.prisma",
+    "prisma:generate": "npx prisma generate --schema=prisma/schema.prisma",
+    "prisma:studio": "npx prisma studio --schema=prisma/schema.prisma",
     "prisma:seed": "node prisma/seed.js"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
   },
   "keywords": [
     "census",
@@ -67,3 +70,4 @@
     }
   }
 }
+

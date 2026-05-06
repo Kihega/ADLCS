@@ -3,11 +3,10 @@
  *
  * Route map:
  *   /login            → LoginPage (public)
- *   /super-admin      → ProtectedRoute [super_admin]      → Dashboard
- *   /district-admin   → ProtectedRoute [district_admin]   → Dashboard
- *   /village-officer  → ProtectedRoute [village_officer]  → Dashboard
- *   /hospital-officer → ProtectedRoute [hospital_officer] → Dashboard
- *   /public           → ProtectedRoute [public_user]      → Dashboard
+ *   /super-admin      → ProtectedRoute [super_admin]      → PlaceholderDashboard
+ *   /district-admin   → ProtectedRoute [district_admin]   → PlaceholderDashboard
+ *   /village-officer  → ProtectedRoute [village_officer]  → PlaceholderDashboard
+ *   /hospital-officer → ProtectedRoute [hospital_officer] → PlaceholderDashboard
  *   /                 → redirect to /login
  *
  * On app startup, we attempt a silent token refresh so users who previously
@@ -17,18 +16,17 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 
-import { useAuthStore }       from './store/authStore'
-import { apiRefresh, apiMe }  from './api/auth.api'
+import { useAuthStore }      from './store/authStore'
+import { apiRefresh, apiMe } from './api/auth.api'
 
-import ProtectedRoute         from './components/ProtectedRoute'
-import LoginPage              from './pages/LoginPage'
-import PlaceholderDashboard     from './pages/PlaceholderDashboard'
-
+import ProtectedRoute        from './components/ProtectedRoute'
+import LoginPage             from './pages/LoginPage'
+import PlaceholderDashboard  from './pages/PlaceholderDashboard'
 
 /**
  * SilentRefresh — runs once on app mount.
  * If a refresh token exists in localStorage, exchange it for an access token
- * and reload the user's profile. This keeps the session alive across page reloads.
+ * and reload the user's profile. This keeps the session alive across reloads.
  */
 function SilentRefresh() {
   const { getRefreshToken, setAuth, clearAuth } = useAuthStore()
@@ -36,22 +34,19 @@ function SilentRefresh() {
   useEffect(() => {
     async function restore() {
       const refreshToken = getRefreshToken()
-      if (!refreshToken) return // no previous session
+      if (!refreshToken) return
 
       try {
         const refreshResult = await apiRefresh(refreshToken)
-        // Access token obtained — now fetch the profile to get role + user data
-        // We temporarily set the token so apiMe's interceptor can use it
         useAuthStore.setState({ accessToken: refreshResult.accessToken })
         const meResult = await apiMe()
         setAuth({
           user:         meResult.data,
           role:         meResult.data.role,
           accessToken:  refreshResult.accessToken,
-          refreshToken: null, // don't rotate — keep the same one in localStorage
+          refreshToken: null,
         })
       } catch {
-        // Refresh token expired or invalid — start fresh
         clearAuth()
       }
     }
@@ -66,7 +61,6 @@ function SilentRefresh() {
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Attempt session restoration on every cold load */}
       <SilentRefresh />
 
       <Routes>
@@ -86,7 +80,7 @@ export default function App() {
           path="/district-admin"
           element={
             <ProtectedRoute roles={['district_admin']}>
-              <DistrictAdminDashboard />
+              <PlaceholderDashboard />
             </ProtectedRoute>
           }
         />
@@ -106,18 +100,10 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/public"
-          element={
-            <ProtectedRoute roles={['public_user']}>
-              <PlaceholderDashboard />
-            </ProtectedRoute>
-          }
-        />
 
         {/* Fallback */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/"  element={<Navigate to="/login" replace />} />
+        <Route path="*"  element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )
