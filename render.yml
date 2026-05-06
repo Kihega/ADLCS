@@ -1,6 +1,5 @@
 # ─────────────────────────────────────────────────────────────
 # Render deployment configuration — ADLCS
-# Docs: https://render.com/docs/blueprint-spec
 # ─────────────────────────────────────────────────────────────
 
 services:
@@ -10,13 +9,11 @@ services:
     plan: free
     rootDir: code/backend
 
-    # ── Build ────────────────────────────────────────────────
-    # 1. npm ci   — install exact versions from lockfile
-    # 2. prisma generate --schema — MUST use explicit --schema flag because
-    #    Prisma 6 looks for schema.prisma in the rootDir first. If an empty
-    #    schema.prisma exists there (even 0 bytes), it silently wins over
-    #    the "prisma.schema" config in package.json when called directly.
-    buildCommand: npm ci && npx prisma generate --schema=prisma/schema.prisma
+    # Build order:
+    #   1. npm ci                — install exact deps from lockfile
+    #   2. prisma generate       -- generate Prisma client from correct schema
+    #   3. node prisma/seed.js   -- upsert 4 test users (safe to repeat every deploy)
+    buildCommand: npm ci && npx prisma generate --schema=prisma/schema.prisma && node prisma/seed.js
 
     startCommand: node src/index.js
     branch: main
@@ -26,44 +23,42 @@ services:
       - key: NODE_ENV
         value: production
 
-      # ── Database ─────────────────────────────────────────────
-      # DATABASE_URL_POOLER — PgBouncer / pooled URL (port 5432 on Render)
-      #   Used by Prisma Client for all normal queries.
-      #   On Render PostgreSQL: Dashboard → your DB → Connections → "Internal Database URL"
-      #   (the internal URL is faster than external; use external only from Termux)
+      # ── Supabase PostgreSQL ───────────────────────────────────
+      # DATABASE_URL_POOLER — Supabase Transaction pooler (port 6543)
+      #   Supabase dashboard → Project → Connect → Connection string
+      #   → Transaction mode → copy URI
+      #   Format: postgresql://postgres.PROJECTREF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
       - key: DATABASE_URL_POOLER
         sync: false
 
-      # DATABASE_URL — direct (non-pooled) connection
-      #   Required by Prisma for migrations (prisma migrate deploy / db push).
-      #   On Render PostgreSQL: same dashboard → "External Database URL"
+      # DATABASE_URL — Supabase direct connection (port 5432)
+      #   Supabase dashboard → Project → Connect → Connection string
+      #   → Direct connection → copy URI
+      #   Format: postgresql://postgres:PASSWORD@db.PROJECTREF.supabase.co:5432/postgres
       - key: DATABASE_URL
         sync: false
 
-      # ── Cache (Upstash Redis) ──────────────────────────────
-      # Must be rediss:// (double-s) — Upstash requires TLS
+      # ── Cache (Upstash Redis) ─────────────────────────────────
       - key: REDIS_URL
         sync: false
 
-      # ── Auth tokens ────────────────────────────────────────
-      # Generate each with:
-      #   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+      # ── JWT secrets ───────────────────────────────────────────
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
         sync: false
 
-      # ── Encryption ─────────────────────────────────────────
+      # ── Encryption ────────────────────────────────────────────
       - key: ENCRYPTION_KEY
         sync: false
 
-      # ── Email (Resend) ─────────────────────────────────────
+      # ── Email (Resend) ────────────────────────────────────────
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
         sync: false
 
-      # ── Media (Cloudinary) ────────────────────────────────
+      # ── Media (Cloudinary) ────────────────────────────────────
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
@@ -71,15 +66,13 @@ services:
       - key: CLOUDINARY_API_SECRET
         sync: false
 
-      # ── CORS ──────────────────────────────────────────────
-      # WEB_URL — full Vercel URL including https://
-      #   Example: https://adlcs-web.vercel.app
+      # ── CORS ──────────────────────────────────────────────────
+      # WEB_URL — full Vercel URL with https://
+      #   e.g. https://adlcs-web.vercel.app
       - key: WEB_URL
         sync: false
 
-      # VERCEL_URL — Vercel auto-injects this on their side (hostname only).
-      #   On Render you must set it manually. Use just the hostname, no protocol:
-      #   Example: adlcs-web.vercel.app   (NOT https://adlcs-web.vercel.app)
-      #   security.js normalises it — it adds https:// itself.
+      # VERCEL_URL — hostname only, NO https://, NO trailing slash
+      #   e.g. adlcs-web.vercel.app
       - key: VERCEL_URL
         sync: false
