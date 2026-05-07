@@ -45,9 +45,6 @@ const MOCK_QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&da
 // it — no lint error. Keeping it avoids a diff churn when it gets used.
 
 export default function LoginPage({ onLogin, _adminType = null }) {
-  if (_adminType) {
-  // future logic placeholder
-}
   const navigate     = useNavigate()
   const { setAuth }  = useAuthStore()
 
@@ -234,7 +231,7 @@ export default function LoginPage({ onLogin, _adminType = null }) {
           <div className="w-20 h-0.5 bg-yellow-400 mx-auto mb-4" />
           <h1 className="text-2xl font-extrabold tracking-wide drop-shadow mb-1">National Bureau of Statistics</h1>
           <p className="text-sm text-white/70 uppercase tracking-widest mb-0.5">Automated Digital Live Census</p>
-          <p className="text-xs text-white/50 font-mono mb-8">Research Model (V 1.0.0)</p>
+          <p className="text-xs text-white/50 font-mono mb-8">Research Model (V 1.X.X)</p>
           <div className="w-20 h-20 rounded-2xl border-2 border-white/30 bg-white/10 flex items-center justify-center mb-6">
             <img src="/assets/longo_nbs.png" alt="NBS" className="w-14 h-14 object-contain" />
           </div>

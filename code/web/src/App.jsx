@@ -1,16 +1,16 @@
 /**
  * App.jsx — ADLCS Web Router
  *
- * Route map:
- *   /login            → LoginPage (public)
- *   /super-admin      → ProtectedRoute [super_admin]      → PlaceholderDashboard
- *   /district-admin   → ProtectedRoute [district_admin]   → PlaceholderDashboard
- *   /village-officer  → ProtectedRoute [village_officer]  → PlaceholderDashboard
- *   /hospital-officer → ProtectedRoute [hospital_officer] → PlaceholderDashboard
- *   /                 → redirect to /login
+ * Web portal serves ADMIN roles only:
+ *   /super-admin    → ProtectedRoute [super_admin]    → PlaceholderDashboard
+ *   /district-admin → ProtectedRoute [district_admin] → PlaceholderDashboard
+ *   /mobile-only    → MobileOnlyPage (shown when village/hospital officer
+ *                     accidentally logs in via web — tells them to use the app)
+ *   /login          → LoginPage (public)
+ *   /               → redirect to /login
  *
- * On app startup, we attempt a silent token refresh so users who previously
- * logged in are restored without having to re-enter their credentials.
+ * Village officers and hospital officers are served by the React Native
+ * mobile app (code/mobile). Their routes are intentionally absent here.
  */
 
 import { useEffect } from 'react'
@@ -19,15 +19,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore }      from './store/authStore'
 import { apiRefresh, apiMe } from './api/auth.api'
 
-import ProtectedRoute        from './components/ProtectedRoute'
-import LoginPage             from './pages/LoginPage'
-import PlaceholderDashboard  from './pages/PlaceholderDashboard'
+import ProtectedRoute       from './components/ProtectedRoute'
+import LoginPage            from './pages/LoginPage'
+import PlaceholderDashboard from './pages/PlaceholderDashboard'
+import MobileOnlyPage       from './pages/MobileOnlyPage'
 
-/**
- * SilentRefresh — runs once on app mount.
- * If a refresh token exists in localStorage, exchange it for an access token
- * and reload the user's profile. This keeps the session alive across reloads.
- */
+// ── Silent token refresh on startup ──────────────────────────────────────────
 function SilentRefresh() {
   const { getRefreshToken, setAuth, clearAuth } = useAuthStore()
 
@@ -35,7 +32,6 @@ function SilentRefresh() {
     async function restore() {
       const refreshToken = getRefreshToken()
       if (!refreshToken) return
-
       try {
         const refreshResult = await apiRefresh(refreshToken)
         useAuthStore.setState({ accessToken: refreshResult.accessToken })
@@ -50,7 +46,6 @@ function SilentRefresh() {
         clearAuth()
       }
     }
-
     restore()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -64,10 +59,10 @@ export default function App() {
       <SilentRefresh />
 
       <Routes>
-        {/* Public */}
+        {/* ── Public ───────────────────────────────────────────────────── */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Protected — each role gets its own path */}
+        {/* ── Admin web routes ──────────────────────────────────────────── */}
         <Route
           path="/super-admin"
           element={
@@ -84,24 +79,11 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/village-officer"
-          element={
-            <ProtectedRoute roles={['village_officer']}>
-              <PlaceholderDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/hospital-officer"
-          element={
-            <ProtectedRoute roles={['hospital_officer']}>
-              <PlaceholderDashboard />
-            </ProtectedRoute>
-          }
-        />
 
-        {/* Fallback */}
+        {/* ── Mobile-only notice (village / hospital officers on web) ────── */}
+        <Route path="/mobile-only" element={<MobileOnlyPage />} />
+
+        {/* ── Fallback ─────────────────────────────────────────────────── */}
         <Route path="/"  element={<Navigate to="/login" replace />} />
         <Route path="*"  element={<Navigate to="/login" replace />} />
       </Routes>
