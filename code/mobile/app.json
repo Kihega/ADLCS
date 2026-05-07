@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Tanzania Digital Live Census Model",
-    "slug": "tanzania-digital-live-census",
+    "slug": "poptz-researchmodel",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,8 +24,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "bc9e125c-f6e4-4cb5-89cb-b10cf48fe757"
+        "projectId": "805ae45f-2a9e-477d-bb33-d341a6733fb6"
       }
-    }
+    },
+    "owner": "mangentechnologies-026"
   }
 }
