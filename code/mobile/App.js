@@ -1,15 +1,15 @@
 /**
- * App.js — ADLCS Mobile Navigation Root
+ * App.js — ADLCS Mobile Navigation Root  v2.1
  *
  * Stack:
- *   Splash        → animated launch screen with loading bar
- *   Login         → LoginScreen (village & hospital officers)
- *   VillageHome   → placeholder dashboard (village_officer)
- *   HospitalHome  → placeholder dashboard (hospital_officer)
+ *   Splash          — animated launch screen with loading bar
+ *   Login           — shared login (village + hospital officers)
+ *   VillageHome     — village officer dashboard
+ *   HospitalHome    — hospital officer dashboard  [redesigned v2.1]
+ *   RegisterBirth   — multi-step birth registration [NEW v2.1]
  *
- * Kept as .js (not .tsx) so Expo's registerRootComponent in index.js
- * picks it up without any TypeScript config needed at the entry point.
- * All screens are .tsx.
+ * All screen implementations are .tsx; this entry file stays .js
+ * so Expo registerRootComponent in index.js works without TS config.
  */
 
 import { NavigationContainer } from '@react-navigation/native'
@@ -21,6 +21,7 @@ import SplashScreen        from './src/screens/SplashScreen'
 import LoginScreen         from './src/screens/auth/LoginScreen'
 import VillageHomeScreen   from './src/screens/village/VillageHomeScreen'
 import HospitalHomeScreen  from './src/screens/hospital/HospitalHomeScreen'
+import RegisterBirthScreen from './src/screens/hospital/RegisterBirthScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -41,6 +42,11 @@ export default function App() {
           <Stack.Screen name="Login"        component={LoginScreen} />
           <Stack.Screen name="VillageHome"  component={VillageHomeScreen} />
           <Stack.Screen name="HospitalHome" component={HospitalHomeScreen} />
+          <Stack.Screen
+            name="RegisterBirth"
+            component={RegisterBirthScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
