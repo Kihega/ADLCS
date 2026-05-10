@@ -1,135 +1,103 @@
-# ADLCS — Mobile App
+# ADLC-TZ Mobile  —  Hospital & Village Officer Apps
 
-React Native + Expo SDK 52 · EAS Build (Android & iOS)
-
-Used by: **Village Officers** and **Hospital Officers**
+> **Government internal use only** · NBS Tanzania · Expo SDK 51 · React Native
 
 ---
 
-## Screens
+## Purpose
+
+Three role-specific screens share this Expo codebase and connect to the ADLCS backend API. The apps are the primary data-capture interface for civil registration events (births, deaths, migrations, citizen enumeration) across Tanzania's health facilities and village administrative units.
+
+---
+
+## Screen Map
 
 ```
-src/screens/
-├── SplashScreen.tsx                 Animated launch screen
-├── auth/
-│   └── LoginScreen.tsx             Device activation + login (shared)
-├── village/
-│   └── VillageHomeScreen.tsx       Village officer dashboard
-└── hospital/
-    ├── HospitalHomeScreen.tsx      Hospital officer dashboard  ← v2.1 redesign
-    └── RegisterBirthScreen.tsx     Birth registration wizard  ← NEW v2.1
+Splash
+  └─ Login (OTP → device-bind → password-setup → login form → MFA)
+       ├─ HospitalHome
+       │    ├─ RegisterBirth   (multi-step form)
+       │    ├─ RecordDeath     (citizen lookup → death details → cert)
+       │    ├─ IssueCertificate(birth/death cert generation)
+       │    ├─ ViewRecords     (paginated list, search, filter)
+       │    ├─ PendingCases    (unresolved / unsynced records)
+       │    └─ SyncData        (RITA sync status + manual trigger)
+       └─ VillageHome
+            ├─ RegisterCitizen (Sprint 3)
+            ├─ RecordBirth     (Sprint 3)
+            ├─ RecordDeath     (Sprint 3)
+            ├─ RecordMigration (Sprint 5)
+            └─ Reports         (Sprint 6)
 ```
 
 ---
 
-## Navigation (App.js)
+## Security Behaviours
 
-```
-Splash → Login → VillageHome
-                → HospitalHome → RegisterBirth
-```
+### Authentication Flow
 
-All screens use `NativeStackNavigator` with `headerShown: false`.
-`RegisterBirth` uses `animation: 'slide_from_right'`.
+1. **New device:** OTP sent to registered email → officer enters OTP → app captures device fingerprint + GPS → officer sets password → backend binds fingerprint to account
+2. **Returning device:** email + password → (optional) TOTP MFA → JWT pair issued
+3. **Token storage:** access token and refresh token stored in `AsyncStorage` under `adlcs_*` keys — never in-memory only
+4. **Token lifecycle:** access token 15 min; refresh token 7 days; refresh token hash stored in Redis (SHA-256); raw token never leaves the device unencrypted in transit (TLS 1.3)
 
----
+### Geofence Enforcement
 
-## Hospital Officer Home — v2.1 Changes
+| Role | Boundary | Poll Interval | Timeout |
+|------|----------|---------------|---------|
+| Hospital Officer | 0.5 km from facility GPS | 30 s | 3 hours |
+| Village Officer  | 1.0 km from village centroid | 30 s | 3 hours |
 
-### Header row (flag background, blurRadius = 2)
-| Position | Element |
-|---|---|
-| LEFT   | NBS logo in gold-bordered circle |
-| CENTRE | NBS-CENSUS title · gold divider · "Census for Development" |
-| RIGHT  | **National Coat of Arms** in circle (replaced old profile avatar + employee ID) |
+- **In zone:** green badge, `✓ In Zone · X.XX km`
+- **Out of zone:** red badge + ⚠ icon, `✗ Out of Zone · X.XX km`
+- **3 hours out:** all tokens and activation keys cleared → forced navigate to Login with Alert popup warning
 
-### Sub-header row (below title)
-| Side | Elements |
-|---|---|
-| LEFT  | Role badge (HEALTH FACILITY OFFICER) · facility location |
-| RIGHT | ☀/🌙 dark/light toggle · 🔔 notification bell (with badge) · profile avatar ▾ |
+### Development Mode
 
-**Profile avatar dropdown** (animated fade + slide):
-| Item | Icon | Colour |
-|---|---|---|
-| Settings | ⚙ Settings | Teal |
-| Sign Out | ↩ Sign Out | Red |
+When `__DEV__ === true` (Expo Go), `AsyncStorage` is wiped on every app mount. This forces the full onboarding flow on every QR scan, allowing the complete auth + device-binding flow to be tested on any device without reinstalling.
 
-### Other changes
-- Flag `blurRadius` **5–6 → 2** (Tanzania flag colours now clearly visible)
-- Gradient overlay opacity reduced to match
-- Employee ID text **removed** entirely
-- Quick Actions: **2 rows of 3** (was 1 implicit row of 6, wrapped by flexWrap)
+The boundary timeout is also shortened to **5 minutes** in `__DEV__` mode to allow geofence-logout testing.
 
 ---
 
-## Register Birth Screen — System Design §2.7
+## Global State
 
-4-step wizard. Launched by tapping **Register / Birth** quick action.
+| Context | Provides | Consumed by |
+|---------|----------|-------------|
+| `ThemeContext` | `isDark`, `theme`, `toggleTheme` | All screens, all modals |
+| `GeofenceContext` | `inZone`, `distanceKm`, `outSince`, `setGeofenceConfig` | HospitalHome, VillageHome |
 
-### Step 1 — Child Information
-Fields: First name · Middle name · Surname · Gender (Male/Female toggle) · Date of Birth
-
-### Step 2 — Father Identification
-- Text input for National ID (`YYYYMMDD-LLLLL-SSSSS-CC`)
-- **Search** button → mock async lookup (900 ms simulated latency)
-- Validates: record exists · vital_status = ALIVE · age ≥ 18 · gender = MALE
-- On success: citizen card with full profile (name, DOB, region, district, village, occupation, blood group)
-- ⚡ Auto-fill button for quick testing
-
-### Step 3 — Mother Identification
-Same as Step 2 but gender = FEMALE.
-
-### Step 4 — Review & Submit
-- Child summary (name, gender, DOB, facility)
-- Father & mother name + NID
-- Officer declaration under Cap 108 R.E. 2002
-- **Register Birth** button → 1.4 s simulated submission
-
-### Success Modal (animated spring scale-in)
-- Auto-generated child National ID (`YYYYMMDD-07031-SSSSS-CC`)
-- Birth certificate number (`XXXXXXXX A`)
-- RITA sync note
-- Done → navigate back to HospitalHome
+The theme toggle in either dashboard changes the colour scheme for **all** screens and modals globally. No per-screen `isDark` state exists.
 
 ---
 
-## Test Data
+## Key Dependencies
 
-### Hospital Officer Login
-```
-Email:    hospital.officer@adlcs.tz
-Password: Demo@1234
-```
+| Package | Purpose |
+|---------|---------|
+| `expo-location` | GPS polling for geofence |
+| `expo-device` | Device fingerprint on activation |
+| `@react-native-async-storage/async-storage` | Token / session persistence |
+| `expo-linear-gradient` | Header gradient overlays |
+| `lucide-react-native` | Icon system |
+| `@react-navigation/native-stack` | Screen navigation |
+| `react-native-safe-area-context` | Edge insets |
 
-### Test Parents (pre-seeded mock DB in RegisterBirthScreen.tsx)
+---
 
-**Father**
-```
-Name:       John Michael Makonde
-NID:        19850315-07031-00001-24
-DOB:        15 March 1985  ·  Age: 41
-Gender:     MALE  ·  Status: ALIVE
-Occupation: Civil Engineer
-Region:     Dar es Salaam  ·  District: Kinondoni
-Ward:       Mwananyamala   ·  Village:  Kinondoni
-Blood:      O+  ·  Marital: MARRIED
-```
+## Environment Variables
 
-**Mother**
+Create `code/mobile/.env` (not committed):
+
 ```
-Name:       Grace Rose Mwamba
-NID:        19880622-07031-00002-13
-DOB:        22 June 1988  ·  Age: 37
-Gender:     FEMALE  ·  Status: ALIVE
-Occupation: Registered Nurse
-Region:     Dar es Salaam  ·  District: Kinondoni
-Ward:       Mwananyamala   ·  Village:  Kinondoni
-Blood:      A+  ·  Marital: MARRIED
+EXPO_PUBLIC_API_URL=https://adlcs-backend.onrender.com/api
 ```
 
-Both parents satisfy all validation rules (alive, 18+, correct gender).
-Use **⚡ Auto-fill test ID** to populate and search automatically.
+For local development:
+
+```
+EXPO_PUBLIC_API_URL=http://<your-local-ip>:5000/api
+```
 
 ---
 
@@ -138,42 +106,11 @@ Use **⚡ Auto-fill test ID** to populate and search automatically.
 ```bash
 cd code/mobile
 npm install
-npx expo start
-# Scan QR with Expo Go, or press 'a' (Android) / 'i' (iOS)
+npx expo start          # Expo Go — scan QR on Android/iOS
 ```
 
-## EAS Build
-
-```bash
-eas build --profile development --platform android
-eas build --profile production  --platform all
-```
+Tested on: Kali Linux (Termux/Android), Expo Go 2.31+.
 
 ---
 
-## Assets
-
-```
-public/assets/
-├── flag.jpg           Tanzania flag (header ImageBackground)
-├── court_of_arm.png   National Coat of Arms (header right)
-├── longo_nbs.png      NBS logo (header left)
-├── buildings.jpg      (future use)
-└── people.jpg         (future use)
-```
-
----
-
-## Implementation Notes
-
-| Topic | Detail |
-|---|---|
-| `App.js` kept as `.js` | Expo `registerRootComponent` entry must be JS; all screens are `.tsx` |
-| `blurRadius` | Set to `2` on the flag `ImageBackground` for visibility |
-| Gradient overlay | Lower opacity (`0.70/0.65`) so flag colours show through |
-| Coat of Arms | `require('../../../public/assets/court_of_arm.png')` — 50×50 circle |
-| Dropdown | `position: absolute`, `zIndex: 999`, animated with `Animated.parallel` |
-| Actions grid | Two separate `<View style={hc.actionsRow}>` (flex row, 3 cards each) |
-| NID format | `YYYYMMDD-LLLLL-SSSSS-CC` — regex `/^\d{8}-\d{5}-\d{5}-\d{2}$/` |
-| Parent lookup | Async mock with 900 ms delay; real app calls `GET /api/citizens/:nid` |
-| Child NID gen | Random seq + CC; real app: system generates from region+DOB+sequence |
+*NBS Tanzania · ADLC-TZ Mobile v3.0 · © 2026*
