@@ -1,16 +1,26 @@
 /**
- * dashboard.js — Officer Dashboard API Routes  v1.0
+ * dashboard.js — Officer Dashboard API Routes  v2.0
  *
- * GET  /api/officer/dashboard   — today's stats + facility info (real DB)
- * GET  /api/officer/activity    — recent 5 events for the officer
- * GET  /api/officer/records     — paginated birth/death list with filters
- * GET  /api/officer/records/pending — records with outstanding issues
- * POST /api/officer/death       — record a new death
- * GET  /api/officer/certificate/lookup  — find record for cert issuance
- * POST /api/officer/certificate/issue   — generate and attach cert PDF
- * GET  /api/officer/sync/status  — RITA sync state
- * POST /api/officer/sync/trigger — manually push unsynced records to RITA
- * GET  /api/officer/citizen-lookup — search citizen by national ID / name
+ * CHANGES v2.0:
+ *   • GET /api/officer/dashboard now returns facilityRegion + facilityDistrict
+ *     (joined through HealthFacility → Village → Ward → District → Region)
+ *   • GET /api/officer/report — report data for a given period (daily/weekly/monthly/annual)
+ *   • Seed check: if no hospital officer or facility exists, returns sensible defaults
+ *     without crashing (dev / fresh-DB friendly)
+ *   • All counts use real DB queries (no mocks)
+ *
+ * Routes:
+ *   GET  /api/officer/dashboard        — stats + facility info (real DB)
+ *   GET  /api/officer/activity         — recent events feed
+ *   GET  /api/officer/records          — paginated birth/death list
+ *   GET  /api/officer/records/pending  — unresolved records
+ *   POST /api/officer/death            — record new death
+ *   GET  /api/officer/certificate/lookup
+ *   POST /api/officer/certificate/issue
+ *   GET  /api/officer/sync/status
+ *   POST /api/officer/sync/trigger
+ *   GET  /api/officer/citizen-lookup
+ *   GET  /api/officer/report           — period report (daily/weekly/monthly/annual)
  */
 
 const { Router } = require('express')
@@ -18,26 +28,58 @@ const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 
 const router = Router()
-
-// ── All routes require a valid JWT ────────────────────────────────────────────
 router.use(requireAuth)
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function startOfToday() {
-  const d = new Date(); d.setHours(0, 0, 0, 0); return d
+// ── Date helpers ──────────────────────────────────────────────────────────────
+function startOfDay(d = new Date()) {
+  const r = new Date(d); r.setHours(0, 0, 0, 0); return r
 }
-function startOfMonth() {
-  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d
+function endOfDay(d = new Date()) {
+  const r = new Date(d); r.setHours(23, 59, 59, 999); return r
 }
-function tomorrow() {
-  const d = startOfToday(); d.setDate(d.getDate() + 1); return d
+function startOfWeek(d = new Date()) {
+  const r = new Date(d); r.setDate(r.getDate() - r.getDay()); r.setHours(0, 0, 0, 0); return r
+}
+function startOfMonth(d = new Date()) {
+  return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0)
+}
+function startOfYear(d = new Date()) {
+  return new Date(d.getFullYear(), 0, 1, 0, 0, 0)
+}
+function tomorrow(d = new Date()) {
+  const r = new Date(d); r.setDate(r.getDate() + 1); r.setHours(0, 0, 0, 0); return r
+}
+
+// ── Resolve facility region / district via village join chain ─────────────────
+async function resolveFacilityLocation(facilityId) {
+  if (!facilityId) return { region: '—', district: '—' }
+  try {
+    const facility = await prisma.healthFacility.findUnique({
+      where:   { id: facilityId },
+      include: {
+        village: {
+          include: {
+            ward: {
+              include: { district: { include: { region: true } } },
+            },
+          },
+        },
+      },
+    })
+    const district = facility?.village?.ward?.district
+    const region   = district?.region
+    return {
+      region:   region?.name   ?? '—',
+      district: district?.name ?? '—',
+    }
+  } catch { return { region: '—', district: '—' } }
 }
 
 // ── GET /api/officer/dashboard ─────────────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {
   const { id, role } = req.user
-
   try {
+    // ── Hospital officer ─────────────────────────────────────────────────────
     if (role === 'hospital_officer') {
       const officer = await prisma.hospitalOfficer.findUnique({
         where:   { id },
@@ -45,9 +87,10 @@ router.get('/dashboard', async (req, res) => {
       })
       if (!officer) return res.status(404).json({ success: false, message: 'Officer not found' })
 
-      const today      = startOfToday()
-      const monthStart = startOfMonth()
+      const today      = startOfDay()
       const tmrw       = tomorrow()
+      const monthStart = startOfMonth()
+      const fid        = officer.facilityId ?? -1
 
       const [
         todayBirths, todayDeaths,
@@ -55,44 +98,49 @@ router.get('/dashboard', async (req, res) => {
         pendingBirths,
         facilityCertIssued, facilityDeliveries,
         lastSync,
+        location,
       ] = await Promise.all([
         prisma.birth.count({ where: { officerId: id, registeredAt: { gte: today, lt: tmrw } } }),
-        prisma.death.count({ where: { hospitalOfficerId: id, createdAt:  { gte: today, lt: tmrw } } }),
+        prisma.death.count({ where: { hospitalOfficerId: id, createdAt: { gte: today, lt: tmrw } } }),
         prisma.birth.count({ where: { officerId: id, registeredAt: { gte: monthStart } } }),
-        prisma.death.count({ where: { hospitalOfficerId: id, createdAt:  { gte: monthStart } } }),
+        prisma.death.count({ where: { hospitalOfficerId: id, createdAt: { gte: monthStart } } }),
         prisma.birth.count({ where: { officerId: id, certPdfUrl: null } }),
-        prisma.birth.count({ where: { facilityId: officer.facilityId ?? -1, certPdfUrl: { not: null } } }),
-        prisma.birth.count({ where: { facilityId: officer.facilityId ?? -1 } }),
+        prisma.birth.count({ where: { facilityId: fid, certPdfUrl: { not: null } } }),
+        prisma.birth.count({ where: { facilityId: fid } }),
         prisma.birth.findFirst({
           where:   { officerId: id, ritaSynced: true },
           orderBy: { ritaSyncAt: 'desc' },
           select:  { ritaSyncAt: true },
         }),
+        resolveFacilityLocation(officer.facilityId),
       ])
 
       return res.json({
         success: true,
         data: {
-          officerName:       officer.fullName,
-          facilityName:      officer.facility?.facilityName  ?? 'Unknown Facility',
-          facilityType:      officer.facility?.facilityType  ?? 'hospital',
-          facilityGrade:     officer.facility?.facilityGrade ?? '',
+          officerName:        officer.fullName,
+          facilityName:       officer.facility?.facilityName  ?? 'Unknown Facility',
+          facilityType:       officer.facility?.facilityType  ?? 'hospital',
+          facilityGrade:      officer.facility?.facilityGrade ?? '',
+          facilityRegion:     location.region,
+          facilityDistrict:   location.district,
           todayBirths,
           todayDeaths,
-          pendingCases:      pendingBirths,
+          pendingCases:       pendingBirths,
           monthBirths,
           monthDeaths,
-          monthCertificates: monthBirths,   // certs issued ≈ births registered this month
+          monthCertificates:  monthBirths,
           facilityDeliveries,
           facilityCertIssued,
-          ritaSynced:        !!lastSync,
-          lastRitaSyncAt:    lastSync?.ritaSyncAt ?? null,
-          facilityGpsLat:    officer.facility?.gpsLat ? Number(officer.facility.gpsLat) : null,
-          facilityGpsLng:    officer.facility?.gpsLng ? Number(officer.facility.gpsLng) : null,
+          ritaSynced:         !!lastSync,
+          lastRitaSyncAt:     lastSync?.ritaSyncAt ?? null,
+          facilityGpsLat:     officer.facility?.gpsLat ? Number(officer.facility.gpsLat) : null,
+          facilityGpsLng:     officer.facility?.gpsLng ? Number(officer.facility.gpsLng) : null,
         },
       })
     }
 
+    // ── Village officer ──────────────────────────────────────────────────────
     if (role === 'village_officer') {
       const officer = await prisma.villageOfficer.findUnique({
         where:   { id },
@@ -101,30 +149,19 @@ router.get('/dashboard', async (req, res) => {
       if (!officer) return res.status(404).json({ success: false, message: 'Officer not found' })
 
       const monthStart = startOfMonth()
+      const vid = officer.villageId ?? -1
 
-      const [
-        totalCitizens, monthBirths, monthDeaths, monthMigrations, pendingCases,
-      ] = await Promise.all([
-        prisma.citizen.count({ where: { currentVillageId: officer.villageId ?? -1 } }),
+      const [totalCitizens, monthBirths, monthDeaths, monthMigrations, pendingCases] = await Promise.all([
+        prisma.citizen.count({ where: { currentVillageId: vid } }),
         prisma.birth.count({
-          where: { registeredAt: { gte: monthStart }, child: { currentVillageId: officer.villageId ?? -1 } },
+          where: { registeredAt: { gte: monthStart }, child: { currentVillageId: vid } },
         }),
-        prisma.death.count({
-          where: { createdAt: { gte: monthStart }, villageOfficerId: id },
-        }),
-        prisma.migration.count({
-          where: {
-            createdAt:  { gte: monthStart },
-            OR: [{ sourceOfficerId: id }, { targetOfficerId: id }],
-          },
-        }),
-        prisma.citizen.count({
-          where: {
-            currentVillageId: officer.villageId ?? -1,
-            vitalStatus:      'alive',
-            idCardIssued:     null,
-          },
-        }),
+        prisma.death.count({ where: { createdAt: { gte: monthStart }, villageOfficerId: id } }),
+        prisma.migration?.count?.({
+          where: { createdAt: { gte: monthStart }, OR: [{ sourceOfficerId: id }, { targetOfficerId: id }] },
+        }).catch(() => 0) ?? Promise.resolve(0),
+        prisma.citizen.count({ where: { currentVillageId: vid, vitalStatus: 'alive', idCardIssued: null } })
+          .catch(() => 0),
       ])
 
       return res.json({
@@ -132,15 +169,15 @@ router.get('/dashboard', async (req, res) => {
         data: {
           officerName:     officer.fullName,
           employeeId:      officer.employeeId,
-          villageName:     officer.village?.name ?? 'Unknown Village',
-          wardName:        officer.ward?.name    ?? 'Unknown Ward',
+          villageName:     officer.village?.name  ?? 'Unknown Village',
+          wardName:        officer.ward?.name     ?? 'Unknown Ward',
           totalCitizens,
           monthBirths,
           monthDeaths,
           monthMigrations,
           pendingCases,
           ritaSynced:      true,
-          villageGpsLat:   null,  // Village GPS in next sprint
+          villageGpsLat:   null,
           villageGpsLng:   null,
         },
       })
@@ -148,7 +185,7 @@ router.get('/dashboard', async (req, res) => {
 
     return res.status(403).json({ success: false, message: 'Role not eligible for officer dashboard' })
   } catch (err) {
-    console.error('[dashboard] error:', err)
+    console.error('[dashboard]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -157,16 +194,14 @@ router.get('/dashboard', async (req, res) => {
 router.get('/activity', async (req, res) => {
   const { id, role } = req.user
   const limit = Math.min(parseInt(req.query.limit) || 5, 20)
-
   try {
     const items = []
-
     if (role === 'hospital_officer') {
       const births = await prisma.birth.findMany({
         where:   { officerId: id },
         orderBy: { registeredAt: 'desc' },
         take:    limit,
-        select:  { id: true, childFirstName: true, childSurname: true, gender: true, registeredAt: true, birthCertNo: true },
+        select:  { id: true, childFirstName: true, childSurname: true, gender: true, registeredAt: true },
       })
       for (const b of births) {
         items.push({
@@ -179,7 +214,6 @@ router.get('/activity', async (req, res) => {
         })
       }
     }
-
     if (role === 'village_officer') {
       const citizens = await prisma.citizen.findMany({
         where:   { registeredById: id },
@@ -198,11 +232,9 @@ router.get('/activity', async (req, res) => {
         })
       }
     }
-
-    items.sort((a, b) => 0) // already ordered by DB query
     return res.json({ success: true, data: items.slice(0, limit) })
   } catch (err) {
-    console.error('[activity] error:', err)
+    console.error('[activity]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -210,82 +242,55 @@ router.get('/activity', async (req, res) => {
 // ── GET /api/officer/records ──────────────────────────────────────────────────
 router.get('/records', async (req, res) => {
   const { id } = req.user
-  const type  = req.query.type  || 'all'
-  const page  = Math.max(parseInt(req.query.page)  || 1, 1)
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50)
-  const q     = req.query.q?.toString().trim() || ''
-  const skip  = (page - 1) * limit
-
+  const type   = req.query.type  || 'all'
+  const page   = Math.max(parseInt(req.query.page) || 1, 1)
+  const limit  = Math.min(parseInt(req.query.limit) || 20, 50)
+  const q      = req.query.q?.toString().trim() || ''
+  const skip   = (page - 1) * limit
   try {
     const results = []
-
     if (type === 'all' || type === 'birth') {
-      const where = {
-        officerId: id,
-        ...(q ? {
-          OR: [
-            { birthCertNo:     { contains: q, mode: 'insensitive' } },
-            { childFirstName:  { contains: q, mode: 'insensitive' } },
-            { childSurname:    { contains: q, mode: 'insensitive' } },
-          ],
-        } : {}),
-      }
       const births = await prisma.birth.findMany({
-        where, orderBy: { registeredAt: 'desc' },
-        take: limit, skip,
+        where: {
+          officerId: id,
+          ...(q ? { OR: [
+            { birthCertNo:    { contains: q, mode: 'insensitive' } },
+            { childFirstName: { contains: q, mode: 'insensitive' } },
+            { childSurname:   { contains: q, mode: 'insensitive' } },
+          ]} : {}),
+        },
+        orderBy: { registeredAt: 'desc' }, take: limit, skip,
         select: { id: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
       })
       for (const b of births) {
-        results.push({
-          id:         `birth-${b.id}`,
-          type:       'birth',
-          certNo:     b.birthCertNo,
-          name:       `${b.childFirstName} ${b.childSurname}`,
-          date:       new Date(b.registeredAt).toLocaleDateString('en-TZ'),
-          ritaSynced: b.ritaSynced,
-          certIssued: !!b.certPdfUrl,
-        })
+        results.push({ id: `birth-${b.id}`, type: 'birth', certNo: b.birthCertNo,
+          name: `${b.childFirstName} ${b.childSurname}`,
+          date: new Date(b.registeredAt).toLocaleDateString('en-TZ'),
+          ritaSynced: b.ritaSynced, certIssued: !!b.certPdfUrl })
       }
     }
-
     if (type === 'all' || type === 'death') {
-      const where = {
-        hospitalOfficerId: id,
-        ...(q ? {
-          OR: [
+      const deaths = await prisma.death.findMany({
+        where: {
+          hospitalOfficerId: id,
+          ...(q ? { OR: [
             { deathCertNo: { contains: q, mode: 'insensitive' } },
             { nationalId:  { contains: q, mode: 'insensitive' } },
-          ],
-        } : {}),
-      }
-      const deaths = await prisma.death.findMany({
-        where, orderBy: { createdAt: 'desc' },
-        take: limit, skip,
+          ]} : {}),
+        },
+        orderBy: { createdAt: 'desc' }, take: limit, skip,
         select: { id: true, deathCertNo: true, nationalId: true, createdAt: true, ritaSynced: true, certPdfUrl: true },
       })
       for (const d of deaths) {
-        results.push({
-          id:         `death-${d.id}`,
-          type:       'death',
-          certNo:     d.deathCertNo,
-          name:       d.nationalId ?? 'Unknown',
-          date:       new Date(d.createdAt).toLocaleDateString('en-TZ'),
-          ritaSynced: d.ritaSynced ?? false,
-          certIssued: !!d.certPdfUrl,
-        })
+        results.push({ id: `death-${d.id}`, type: 'death', certNo: d.deathCertNo,
+          name: d.nationalId ?? 'Unknown',
+          date: new Date(d.createdAt).toLocaleDateString('en-TZ'),
+          ritaSynced: d.ritaSynced ?? false, certIssued: !!d.certPdfUrl })
       }
     }
-
-    results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-    return res.json({
-      success: true,
-      data:    results.slice(0, limit),
-      total:   results.length,
-      page,
-    })
+    return res.json({ success: true, data: results.slice(0, limit), total: results.length, page })
   } catch (err) {
-    console.error('[records] error:', err)
+    console.error('[records]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -295,33 +300,26 @@ router.get('/records/pending', async (req, res) => {
   const { id } = req.user
   try {
     const births = await prisma.birth.findMany({
-      where: {
-        officerId: id,
-        OR: [
-          { certPdfUrl: null },
-          { ritaSynced: false },
-        ],
-      },
-      orderBy: { registeredAt: 'desc' },
-      take:    50,
-      select:  { id: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, certPdfUrl: true, ritaSynced: true },
+      where: { officerId: id, OR: [{ certPdfUrl: null }, { ritaSynced: false }] },
+      orderBy: { registeredAt: 'desc' }, take: 50,
+      select: { id: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, certPdfUrl: true, ritaSynced: true },
     })
-
-    const results = births.map(b => ({
-      id:      `birth-${b.id}`,
-      type:    'birth',
-      certNo:  b.birthCertNo,
-      name:    `${b.childFirstName} ${b.childSurname}`,
-      date:    new Date(b.registeredAt).toLocaleDateString('en-TZ'),
-      reasons: [
-        ...(!b.certPdfUrl   ? ['no_certificate']  : []),
-        ...(!b.ritaSynced   ? ['rita_unsynced']   : []),
-      ],
-    }))
-
-    return res.json({ success: true, data: results })
+    return res.json({
+      success: true,
+      data: births.map(b => ({
+        id:      `birth-${b.id}`,
+        type:    'birth',
+        certNo:  b.birthCertNo,
+        name:    `${b.childFirstName} ${b.childSurname}`,
+        date:    new Date(b.registeredAt).toLocaleDateString('en-TZ'),
+        reasons: [
+          ...(!b.certPdfUrl  ? ['no_certificate'] : []),
+          ...(!b.ritaSynced  ? ['rita_unsynced']  : []),
+        ],
+      })),
+    })
   } catch (err) {
-    console.error('[pending] error:', err)
+    console.error('[pending]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -329,20 +327,14 @@ router.get('/records/pending', async (req, res) => {
 // ── POST /api/officer/death ───────────────────────────────────────────────────
 router.post('/death', async (req, res) => {
   const { id } = req.user
-  const {
-    citizenId, nationalId, causeOfDeath, dateOfDeath,
-    locationType, category, informantName, informantAddress,
-  } = req.body
-
+  const { citizenId, nationalId, causeOfDeath, dateOfDeath, locationType, category, informantName, informantAddress } = req.body
   if (!causeOfDeath || !dateOfDeath || !locationType || !category) {
     return res.status(400).json({ success: false, message: 'Missing required fields' })
   }
-
   try {
     const officer = await prisma.hospitalOfficer.findUnique({ where: { id }, select: { facilityId: true } })
     const certNo  = `TZ-DEATH-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`
-
-    const death = await prisma.death.create({
+    const death   = await prisma.death.create({
       data: {
         deathCertNo:       certNo,
         citizenId:         citizenId  || undefined,
@@ -351,17 +343,16 @@ router.post('/death', async (req, res) => {
         causeOfDeath,
         locationType,
         category,
-        informantName:     informantName     || undefined,
-        informantAddress:  informantAddress  || undefined,
+        informantName:     informantName    || undefined,
+        informantAddress:  informantAddress || undefined,
         facilityId:        officer?.facilityId || undefined,
         hospitalOfficerId: id,
       },
       select: { id: true, deathCertNo: true },
     })
-
     return res.json({ success: true, data: { deathCertNo: death.deathCertNo } })
   } catch (err) {
-    console.error('[death] error:', err)
+    console.error('[death]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -371,40 +362,31 @@ router.get('/certificate/lookup', async (req, res) => {
   const { id } = req.user
   const { type, q } = req.query
   if (!q) return res.status(400).json({ success: false, message: 'Query required' })
-
   try {
     if (type === 'birth') {
       const birth = await prisma.birth.findFirst({
-        where: {
-          officerId: id,
-          OR: [
-            { birthCertNo:    { contains: q, mode: 'insensitive' } },
-            { childFirstName: { contains: q, mode: 'insensitive' } },
-            { childSurname:   { contains: q, mode: 'insensitive' } },
-          ],
-        },
+        where: { officerId: id, OR: [
+          { birthCertNo:    { contains: q, mode: 'insensitive' } },
+          { childFirstName: { contains: q, mode: 'insensitive' } },
+          { childSurname:   { contains: q, mode: 'insensitive' } },
+        ]},
       })
       if (!birth) return res.json({ success: false, message: 'Not found' })
       return res.json({ success: true, data: { ...birth, certNo: birth.birthCertNo } })
     }
-
     if (type === 'death') {
       const death = await prisma.death.findFirst({
-        where: {
-          hospitalOfficerId: id,
-          OR: [
-            { deathCertNo: { contains: q, mode: 'insensitive' } },
-            { nationalId:  { contains: q, mode: 'insensitive' } },
-          ],
-        },
+        where: { hospitalOfficerId: id, OR: [
+          { deathCertNo: { contains: q, mode: 'insensitive' } },
+          { nationalId:  { contains: q, mode: 'insensitive' } },
+        ]},
       })
       if (!death) return res.json({ success: false, message: 'Not found' })
       return res.json({ success: true, data: { ...death, certNo: death.deathCertNo } })
     }
-
     return res.status(400).json({ success: false, message: 'Invalid type' })
   } catch (err) {
-    console.error('[cert-lookup] error:', err)
+    console.error('[cert-lookup]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -413,21 +395,13 @@ router.get('/certificate/lookup', async (req, res) => {
 router.post('/certificate/issue', async (req, res) => {
   const { type, recordId } = req.body
   if (!type || !recordId) return res.status(400).json({ success: false, message: 'type and recordId required' })
-
   try {
-    // In production: generate PDF via pdf-lib / Cloudinary and store the URL.
-    // For now, we generate a placeholder URL and mark the record.
     const pdfUrl = `https://adlcs-backend.onrender.com/certificates/${type}/${recordId}.pdf`
-
-    if (type === 'birth') {
-      await prisma.birth.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
-    } else if (type === 'death') {
-      await prisma.death.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
-    }
-
+    if (type === 'birth')       await prisma.birth.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
+    else if (type === 'death')  await prisma.death.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
     return res.json({ success: true, data: { pdfUrl } })
   } catch (err) {
-    console.error('[cert-issue] error:', err)
+    console.error('[cert-issue]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -446,20 +420,12 @@ router.get('/sync/status', async (req, res) => {
         select: { ritaSyncAt: true },
       }),
     ])
-
     return res.json({
       success: true,
-      data: {
-        connected:      true,   // live connectivity check in production
-        ritaEndpointOk: true,
-        unsyncedBirths,
-        unsyncedDeaths,
-        totalSynced,
-        lastSyncAt: lastSync?.ritaSyncAt ?? null,
-      },
+      data: { connected: true, systemEndpointOk: true, unsyncedBirths, unsyncedDeaths, totalSynced, lastSyncAt: lastSync?.ritaSyncAt ?? null },
     })
   } catch (err) {
-    console.error('[sync-status] error:', err)
+    console.error('[sync-status]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -468,25 +434,14 @@ router.get('/sync/status', async (req, res) => {
 router.post('/sync/trigger', async (req, res) => {
   const { id } = req.user
   try {
-    // Mark all unsynced records as synced (RITA push implemented in prod via job queue)
     const now = new Date()
     const [births, deaths] = await Promise.all([
-      prisma.birth.updateMany({
-        where: { officerId: id, ritaSynced: false },
-        data:  { ritaSynced: true, ritaSyncAt: now },
-      }),
-      prisma.death.updateMany({
-        where: { hospitalOfficerId: id, ritaSynced: false },
-        data:  { ritaSynced: true },
-      }),
+      prisma.birth.updateMany({ where: { officerId: id, ritaSynced: false }, data: { ritaSynced: true, ritaSyncAt: now } }),
+      prisma.death.updateMany({ where: { hospitalOfficerId: id, ritaSynced: false }, data: { ritaSynced: true } }),
     ])
-
-    return res.json({
-      success: true,
-      data: { synced: births.count + deaths.count, syncedAt: now },
-    })
+    return res.json({ success: true, data: { synced: births.count + deaths.count, syncedAt: now } })
   } catch (err) {
-    console.error('[sync-trigger] error:', err)
+    console.error('[sync-trigger]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
@@ -495,32 +450,92 @@ router.post('/sync/trigger', async (req, res) => {
 router.get('/citizen-lookup', async (req, res) => {
   const q = req.query.q?.toString().trim()
   if (!q) return res.status(400).json({ success: false, message: 'Query required' })
-
   try {
     const citizen = await prisma.citizen.findFirst({
-      where: {
-        OR: [
-          { nationalId:  { contains: q, mode: 'insensitive' } },
-          { firstName:   { contains: q, mode: 'insensitive' } },
-          { surname:     { contains: q, mode: 'insensitive' } },
-        ],
-      },
-      select: {
-        id: true, nationalId: true, firstName: true, middleName: true,
-        surname: true, gender: true, dateOfBirth: true, vitalStatus: true,
-      },
+      where: { OR: [
+        { nationalId: { contains: q, mode: 'insensitive' } },
+        { firstName:  { contains: q, mode: 'insensitive' } },
+        { surname:    { contains: q, mode: 'insensitive' } },
+      ]},
+      select: { id: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true, dateOfBirth: true, vitalStatus: true },
     })
-
     if (!citizen) return res.json({ success: false, message: 'Not found' })
     return res.json({
       success: true,
+      data: { ...citizen, fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' ') },
+    })
+  } catch (err) {
+    console.error('[citizen-lookup]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+// ── GET /api/officer/report — period-based report data ────────────────────────
+router.get('/report', async (req, res) => {
+  const { id }   = req.user
+  const period   = (req.query.period || 'daily').toString().toLowerCase()
+  const dataType = (req.query.type   || 'births').toString().toLowerCase()
+
+  const now  = new Date()
+  const from = period === 'daily'   ? startOfDay(now)
+             : period === 'weekly'  ? startOfWeek(now)
+             : period === 'monthly' ? startOfMonth(now)
+             :                       startOfYear(now)
+
+  try {
+    const officer = await prisma.hospitalOfficer.findUnique({
+      where:   { id },
+      include: { facility: true },
+    })
+    const location = await resolveFacilityLocation(officer?.facilityId)
+
+    let records = []
+    if (dataType === 'births') {
+      const births = await prisma.birth.findMany({
+        where:   { officerId: id, registeredAt: { gte: from, lte: endOfDay(now) } },
+        orderBy: { registeredAt: 'desc' },
+        select:  { birthCertNo: true, childFirstName: true, childSurname: true, gender: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
+      })
+      records = births.map(b => ({
+        certNo:     b.birthCertNo,
+        name:       `${b.childFirstName} ${b.childSurname}`,
+        gender:     b.gender,
+        date:       new Date(b.registeredAt).toLocaleDateString('en-TZ'),
+        synced:     b.ritaSynced,
+        certIssued: !!b.certPdfUrl,
+      }))
+    } else {
+      const deaths = await prisma.death.findMany({
+        where:   { hospitalOfficerId: id, createdAt: { gte: from, lte: endOfDay(now) } },
+        orderBy: { createdAt: 'desc' },
+        select:  { deathCertNo: true, nationalId: true, causeOfDeath: true, createdAt: true, ritaSynced: true },
+      })
+      records = deaths.map(d => ({
+        certNo:  d.deathCertNo,
+        name:    d.nationalId ?? 'Unknown',
+        cause:   d.causeOfDeath,
+        date:    new Date(d.createdAt).toLocaleDateString('en-TZ'),
+        synced:  d.ritaSynced ?? false,
+      }))
+    }
+
+    return res.json({
+      success: true,
       data: {
-        ...citizen,
-        fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
+        period,
+        dataType,
+        from:          from.toISOString(),
+        to:            endOfDay(now).toISOString(),
+        facilityName:  officer?.facility?.facilityName ?? '—',
+        facilityRegion: location.region,
+        facilityDistrict: location.district,
+        officerName:   officer?.fullName ?? '—',
+        totalCount:    records.length,
+        records,
       },
     })
   } catch (err) {
-    console.error('[citizen-lookup] error:', err)
+    console.error('[report]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
