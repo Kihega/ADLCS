@@ -1,75 +1,81 @@
 /**
- * App.js — ADLCS Mobile Navigation Root  v3.0
+ * App.js — ADLCS Mobile Root  v5.0  PRODUCTION
  *
- * Providers (outermost → innermost):
- *   SafeAreaProvider
- *   ThemeProvider    — global dark/light theme shared by all screens
- *   GeofenceProvider — GPS boundary monitoring, 3-hr logout timer
- *   NavigationContainer (ref={navigationRef} — used by GeofenceContext)
+ * Startup:
+ *  1. Initialize local SQLite DB (getDb())
+ *  2. Start network sync monitor (SyncService.init)
+ *  3. In __DEV__ mode: clear AsyncStorage so onboarding runs fresh every QR scan
  *
- * Screens registered:
- *   Splash          — animated launch screen
- *   Login           — shared auth (village + hospital officers)
- *   VillageHome     — village officer dashboard
- *   HospitalHome    — hospital officer dashboard
- *   RegisterBirth   — multi-step birth registration
- *   RecordDeath     — death recording form
- *   IssueCertificate— certificate issuance workflow
- *   ViewRecords     — paginated record list
- *   PendingCases    — pending / incomplete registrations
- *   SyncData        — manual sync status screen
- *
- * Dev behaviour:
- *   When __DEV__ === true (Expo Go), AsyncStorage is cleared on every mount
- *   so the full onboarding flow (OTP → device binding → password setup)
- *   runs fresh on every QR scan — no need to reinstall or wipe data manually.
+ * Navigation registers ALL screens so no "undefined route" crashes.
  */
 
-import { useEffect }                         from 'react'
-import { NavigationContainer }               from '@react-navigation/native'
-import { createNativeStackNavigator }        from '@react-navigation/native-stack'
-import { SafeAreaProvider }                  from 'react-native-safe-area-context'
-import AsyncStorage                          from '@react-native-async-storage/async-storage'
+import React, { useEffect, useState } from 'react'
+import { View, ActivityIndicator }    from 'react-native'
+import { NavigationContainer }        from '@react-navigation/native'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { SafeAreaProvider }           from 'react-native-safe-area-context'
+import AsyncStorage                   from '@react-native-async-storage/async-storage'
 
-import { ThemeProvider }                     from './src/context/ThemeContext'
-import { GeofenceProvider }                  from './src/context/GeofenceContext'
-import { navigationRef }                     from './src/navigation/navigationService'
+import { ThemeProvider }  from './src/context/ThemeContext'
+import { GeofenceProvider } from './src/context/GeofenceContext'
+import { navigationRef }  from './src/navigation/navigationService'
+import { getDb }          from './src/services/localDb'
+import * as SyncService   from './src/services/syncService'
 
-import SplashScreen                          from './src/screens/SplashScreen'
-import LoginScreen                           from './src/screens/auth/LoginScreen'
-import VillageHomeScreen                     from './src/screens/village/VillageHomeScreen'
-import HospitalHomeScreen                    from './src/screens/hospital/HospitalHomeScreen'
-import RegisterBirthScreen                   from './src/screens/hospital/RegisterBirthScreen'
-import RecordDeathScreen                     from './src/screens/hospital/RecordDeathScreen'
-import IssueCertificateScreen                from './src/screens/hospital/IssueCertificateScreen'
-import ViewRecordsScreen                     from './src/screens/hospital/ViewRecordsScreen'
-import PendingCasesScreen                    from './src/screens/hospital/PendingCasesScreen'
-import SyncDataScreen                        from './src/screens/hospital/SyncDataScreen'
+// ─── Screens ──────────────────────────────────────────────────────────────────
+import SplashScreen           from './src/screens/SplashScreen'
+import LoginScreen            from './src/screens/auth/LoginScreen'
+import HospitalHomeScreen     from './src/screens/hospital/HospitalHomeScreen'
+import VillageHomeScreen      from './src/screens/village/VillageHomeScreen'
+import RegisterBirthScreen    from './src/screens/hospital/RegisterBirthScreen'
+import RecordDeathScreen      from './src/screens/hospital/RecordDeathScreen'
+import IssueCertificateScreen from './src/screens/hospital/IssueCertificateScreen'
+import ViewRecordsScreen      from './src/screens/hospital/ViewRecordsScreen'
+import PendingCasesScreen     from './src/screens/hospital/PendingCasesScreen'
+import SyncDataScreen         from './src/screens/hospital/SyncDataScreen'
 
 const Stack = createNativeStackNavigator()
 
-// Keys to wipe on every dev reload so the full onboarding flow is re-triggered
 const DEV_CLEAR_KEYS = [
-  'adlcs_device_activated',
-  'adlcs_access_token',
-  'adlcs_refresh_token',
-  'adlcs_role',
-  'adlcs_officer_name',
-  'adlcs_facility',
-  'adlcs_out_since',
+  'adlcs_device_activated','adlcs_access_token','adlcs_refresh_token',
+  'adlcs_role','adlcs_officer_name','adlcs_facility','adlcs_out_since',
 ]
 
 function Root() {
+  const [ready, setReady] = useState(false)
+
   useEffect(() => {
-    if (__DEV__) {
-      // ── DEV MODE: wipe state on every Expo Go reload / QR scan ──────────
-      // This ensures the full OTP → device-bind → password-setup flow runs
-      // every time, simulating a genuine first-install on a new device.
-      AsyncStorage.multiRemove(DEV_CLEAR_KEYS).then(() => {
-        if (__DEV__) console.log('[DEV] AsyncStorage cleared — fresh onboarding flow')
-      })
+    async function boot() {
+      try {
+        // 1. Init local SQLite DB
+        await getDb()
+
+        // 2. Dev mode: clear state so full onboarding triggers every QR scan
+        if (__DEV__) {
+          await AsyncStorage.multiRemove(DEV_CLEAR_KEYS)
+          console.log('[DEV] Storage cleared — fresh onboarding flow')
+        }
+
+        // 3. Start sync monitor — auto-syncs when device comes online
+        SyncService.init(async () => AsyncStorage.getItem('adlcs_access_token'))
+
+      } catch (e) {
+        console.error('[Boot] error:', e)
+      } finally {
+        setReady(true)
+      }
     }
+    boot()
+    return () => { SyncService.stop() }
   }, [])
+
+  if (!ready) {
+    return (
+      <View style={{ flex:1, backgroundColor:'#050d1a', alignItems:'center', justifyContent:'center' }}>
+        <ActivityIndicator size="large" color="#0891b2" />
+      </View>
+    )
+  }
 
   return (
     <NavigationContainer ref={navigationRef}>
@@ -78,43 +84,19 @@ function Root() {
         screenOptions={{
           headerShown:  false,
           animation:    'fade',
-          contentStyle: { backgroundColor: '#050d1a' },
+          contentStyle: { backgroundColor:'#050d1a' },
         }}
       >
         <Stack.Screen name="Splash"           component={SplashScreen} />
         <Stack.Screen name="Login"            component={LoginScreen} />
-        <Stack.Screen name="VillageHome"      component={VillageHomeScreen} />
         <Stack.Screen name="HospitalHome"     component={HospitalHomeScreen} />
-        <Stack.Screen
-          name="RegisterBirth"
-          component={RegisterBirthScreen}
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="RecordDeath"
-          component={RecordDeathScreen}
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="IssueCertificate"
-          component={IssueCertificateScreen}
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="ViewRecords"
-          component={ViewRecordsScreen}
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="PendingCases"
-          component={PendingCasesScreen}
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="SyncData"
-          component={SyncDataScreen}
-          options={{ animation: 'slide_from_bottom' }}
-        />
+        <Stack.Screen name="VillageHome"      component={VillageHomeScreen} />
+        <Stack.Screen name="RegisterBirth"    component={RegisterBirthScreen}    options={{ animation:'slide_from_right' }} />
+        <Stack.Screen name="RecordDeath"      component={RecordDeathScreen}      options={{ animation:'slide_from_right' }} />
+        <Stack.Screen name="IssueCertificate" component={IssueCertificateScreen} options={{ animation:'slide_from_right' }} />
+        <Stack.Screen name="ViewRecords"      component={ViewRecordsScreen}      options={{ animation:'slide_from_right' }} />
+        <Stack.Screen name="PendingCases"     component={PendingCasesScreen}     options={{ animation:'slide_from_right' }} />
+        <Stack.Screen name="SyncData"         component={SyncDataScreen}         options={{ animation:'slide_from_bottom' }} />
       </Stack.Navigator>
     </NavigationContainer>
   )

@@ -27,6 +27,10 @@
         "projectId": "805ae45f-2a9e-477d-bb33-d341a6733fb6"
       }
     },
-    "owner": "mangentechnologies-026"
+    "owner": "mangentechnologies-026",
+    "plugins": [
+      "expo-asset",
+      "expo-sqlite"
+    ]
   }
 }

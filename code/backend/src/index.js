@@ -23,6 +23,7 @@ const { helmetConfig, corsConfig, globalLimiter } = require('./middleware/securi
 const healthRouter    = require('./routes/health')
 const authRouter      = require('./routes/auth')
 const dashboardRouter = require('./routes/dashboard')
+const syncRouter     = require('./routes/syncRoutes')
 
 const app  = express()
 const PORT = process.env.PORT || 5000
@@ -38,7 +39,8 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 // ── API routes ────────────────────────────────────────────────────────────────
 app.use('/api/health',  healthRouter)
 app.use('/api/auth',    authRouter)
-app.use('/api/officer', dashboardRouter)   // ← NEW: officer dashboard, records, sync
+app.use('/api/officer', dashboardRouter)
+app.use('/api/officer', syncRouter)   // ← NEW: officer dashboard, records, sync
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
