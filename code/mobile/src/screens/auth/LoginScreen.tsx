@@ -617,20 +617,15 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   }, [])
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleOtpAuthorized = (role: string) => {
+  // FIX 1: geofencing removed — OTP authorised → mark device active → show login
+  const handleOtpAuthorized = async (role: string) => {
     setPendingRole(role)
-    setOnboardingStep('geo')
-  }
-
-  const handleGeoComplete = () => {
-    setShowRegModal(true)
-    setOnboardingStep('reg')
-  }
-
-  const handleRegDone = () => {
-    setShowRegModal(false)
+    await AsyncStorage.multiSet([
+      [DEVICE_ACTIVE_KEY, 'true'],
+      ['adlcs_pending_role', role],
+    ])
     setOnboardingStep('done')
-    Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start()
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start()
   }
 
   const handleLogin = async () => {
@@ -718,13 +713,6 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   return (
     <View style={s.screen}>
 
-      {/* Registration modal — Step 3 */}
-      <RegistrationModal
-        visible={showRegModal}
-        role={pendingRole}
-        onDone={handleRegDone}
-      />
-
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
@@ -741,13 +729,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               <OtpAuthPage onAuthorized={handleOtpAuthorized} />
             )}
 
-            {/* ═══════ NEW DEVICE: STEP 2 — GEO/FINGERPRINT ═══════ */}
-            {(onboardingStep === 'geo' || onboardingStep === 'reg') && (
-              <GeoProcessingPage
-                role={pendingRole}
-                onComplete={handleGeoComplete}
-              />
-            )}
+            {/* GEO/FINGERPRINT step removed — see FIX 1 */}
 
             {/* ═══════ RETURNING OFFICER — LOGIN FORM ═══════ */}
             {onboardingStep === 'done' && (

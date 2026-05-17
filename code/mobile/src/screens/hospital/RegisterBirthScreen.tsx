@@ -449,7 +449,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
             />
             <TouchableOpacity
               style={{ borderRadius:10, paddingHorizontal:16, alignItems:'center', justifyContent:'center', minWidth:76, backgroundColor:accent, opacity:isNINComplete(nid)?1:0.4 }}
-              onPress={()=>lookupParent(nid, role)} disabled={!isNINComplete(nid)||loading} activeOpacity={0.8}
+              onPress={()=>lookupParent(nid.toUpperCase(), role)} disabled={!isNINComplete(nid)||loading} activeOpacity={0.8}
             >
               {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontSize:13, fontWeight:'700', color:'#fff' }}>Search</Text>}
             </TouchableOpacity>
@@ -519,7 +519,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
               {[{label:'First Name *', val:childFirst, setVal:setChildFirst, placeholder:'e.g. Amani'},{label:'Middle Name (from father)', val:childMiddle, setVal:setChildMiddle, placeholder:fatherData?.middleName??'Optional'},{label:'Surname * (from father)', val:childSurname, setVal:setChildSurname, placeholder:fatherData?.surname??'e.g. Makonde'}].map(({label,val,setVal,placeholder})=>(
                 <View key={label}>
                   <Text style={{ fontSize:12, fontWeight:'600', color:T.textSub, marginBottom:6 }}>{label}</Text>
-                  <TextInput style={{ backgroundColor:T.card2, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14, paddingVertical:12, color:T.text, fontSize:14 }} value={val} onChangeText={setVal} placeholder={placeholder} placeholderTextColor={T.textDim} autoCapitalize="words" returnKeyType="next" blurOnSubmit={false} />
+                  <TextInput style={{ backgroundColor:T.card2, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14, paddingVertical:12, color:T.text, fontSize:14 }} value={val} onChangeText={setVal} placeholder={placeholder} placeholderTextColor={T.textDim} autoCapitalize="characters" returnKeyType="next" blurOnSubmit={false} />
                 </View>
               ))}
               <View>

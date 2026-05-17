@@ -126,6 +126,7 @@ const StableField = React.memo(function StableField({
         value={value} onChangeText={onChangeText}
         placeholder={placeholder??''} placeholderTextColor={dc}
         multiline={multiline} textAlignVertical={multiline?'top':'center'}
+        autoCapitalize="characters"
         returnKeyType={returnKeyType} blurOnSubmit={false}
         onSubmitEditing={onSubmitEditing}
       />
@@ -495,7 +496,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                 <View style={{ flexDirection:'row', gap:8 }}>
                   <TextInput
                     style={[sf.input, { flex:1, backgroundColor:T.card2, borderColor:T.border, color:T.text }]}
-                    value={lookupId} onChangeText={setLookupId}
+                    value={lookupId} onChangeText={t=>setLookupId(t.toUpperCase())}
                     placeholder="National ID or full name" placeholderTextColor={T.textDim}
                     returnKeyType="search" blurOnSubmit={false} onSubmitEditing={lookupCitizen}
                   />

@@ -110,4 +110,66 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 })
 
+
+// ── POST /api/auth/change-password ────────────────────────────────────────────
+// Allows any authenticated officer or admin to change their own password.
+// Body: { currentPassword: string, newPassword: string }
+router.post('/change-password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: 'currentPassword and newPassword are required' })
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ success: false, message: 'New password must be at least 8 characters' })
+  }
+
+  try {
+    const bcrypt = require('bcryptjs')
+    const { id, role } = req.user
+    let record = null
+
+    if (role === 'hospital_officer') {
+      record = await prisma.hospitalOfficer.findUnique({
+        where: { id }, select: { id: true, passwordHash: true },
+      })
+    } else if (role === 'village_officer') {
+      record = await prisma.villageOfficer.findUnique({
+        where: { id }, select: { id: true, passwordHash: true },
+      })
+    } else if (['super_admin', 'admin', 'district_admin', 'regional_admin'].includes(role)) {
+      record = await prisma.admin.findUnique({
+        where: { id }, select: { id: true, passwordHash: true },
+      })
+    } else {
+      return res.status(403).json({ success: false, message: 'Role not permitted to change password via this endpoint' })
+    }
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'User record not found' })
+    }
+
+    const valid = await bcrypt.compare(currentPassword, record.passwordHash)
+    if (!valid) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' })
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12)
+
+    if (role === 'hospital_officer') {
+      await prisma.hospitalOfficer.update({ where: { id }, data: { passwordHash: newHash } })
+    } else if (role === 'village_officer') {
+      await prisma.villageOfficer.update({ where: { id }, data: { passwordHash: newHash } })
+    } else {
+      await prisma.admin.update({ where: { id }, data: { passwordHash: newHash } })
+    }
+
+    console.log(`[change-password] Officer ${id} (${role}) changed password`)
+    return res.json({ success: true, message: 'Password changed successfully' })
+  } catch (err) {
+    console.error('[change-password]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
 module.exports = router
