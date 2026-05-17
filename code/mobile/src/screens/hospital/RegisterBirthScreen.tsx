@@ -30,11 +30,11 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import {
-  saveBirth, generateBirthCertNo, generateNationalId,
+  generateBirthCertNo, generateNewbornNationalId,
   updateBirthCertPath, LocalBirth,
 } from '../../services/localDb'
 import { generateBirthPdf, sharePdf } from '../../services/certificateService'
-import { triggerSync } from '../../services/syncService'
+import { triggerSync, saveAndSyncBirth } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
@@ -302,11 +302,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const [pdfPath, setPdfPath] = useState('')
   const [downloading, setDownloading] = useState(false)
 
-  // Auto-fill child names from father
+  // Auto-fill child names from father — only if user hasn't typed them yet in Step 1
   useEffect(() => {
     if (fatherData) {
-      setChildMiddle(fatherData.middleName ?? '')
-      setChildSurname(fatherData.surname ?? '')
+      if (!childMiddle.trim()) setChildMiddle(fatherData.middleName ?? '')
+      if (!childSurname.trim()) setChildSurname(fatherData.surname ?? '')
     }
   }, [fatherData])
 
@@ -361,11 +361,13 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       })() : null
 
       const certNo     = generateBirthCertNo()
-      const nationalId = generateNationalId(childDOB)
+      const nationalId = generateNewbornNationalId(childDOB)  // Spec §2.7 Step 4: TZ-YYYYMMDD-XXXXX
       const fatherName = fatherData ? `${fatherData.firstName} ${fatherData.middleName ?? ''} ${fatherData.surname}`.replace(/\s+/g,' ').trim() : ''
       const motherName = motherData ? `${motherData.firstName} ${motherData.middleName ?? ''} ${motherData.surname}`.replace(/\s+/g,' ').trim() : ''
 
-      const birth = await saveBirth({
+      // Spec §2.7: if online → save directly to remote DB; if offline → save to
+      // local SQLite (synced=0) and push automatically when device reconnects
+      const { birth, syncedRemote } = await saveAndSyncBirth({
         certNo, nationalId,
         childFirstName:   childFirst.trim(),
         childMiddleName:  childMiddle.trim(),
@@ -384,14 +386,14 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       setSavedBirth(birth)
       setShowSuccess(true)
 
-      // Background: generate PDF + try sync
+      // Background: generate PDF; only bulk-sync if immediate push failed
       ;(async () => {
         try {
           const pdf = await generateBirthPdf(birth)
           await updateBirthCertPath(birth.id, pdf)
           setPdfPath(pdf)
         } catch (e) { console.warn('PDF gen failed:', e) }
-        await triggerSync()
+        if (!syncedRemote) await triggerSync()
       })()
     } catch (e) {
       Alert.alert('Error', 'Failed to save registration. Please try again.')
@@ -413,10 +415,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
     setDownloading(false)
   }
 
-  const STEP_LABELS = ['Father','Mother','Child Info','Review']
-  const step1Valid = isNINComplete(fatherNid) && !!fatherData
-  const step2Valid = isNINComplete(motherNid) && !!motherData
-  const step3Valid = !!childFirst.trim() && !!childSurname.trim() && !!childGender && childDOB.length >= 8
+  const STEP_LABELS = ['Child Info','Father','Mother','Review']
+  // Spec §2.7: Step 1 = Child Info, Step 2 = Father NID, Step 3 = Mother NID
+  const step1Valid = !!childFirst.trim() && !!childSurname.trim() && !!childGender && childDOB.length >= 8
+  const step2Valid = isNINComplete(fatherNid) && !!fatherData
+  const step3Valid = isNINComplete(motherNid) && !!motherData
   const canNext    = [step1Valid, step2Valid, step3Valid, true][step-1]
 
   const renderNIDStep = (role: 'father'|'mother') => {
@@ -508,9 +511,8 @@ export default function RegisterBirthScreen({ navigation }: Props) {
 
       <KeyboardAvoidingView style={{ flex:1 }} behavior={Platform.OS==='ios'?'padding':undefined}>
         <ScrollView style={{ flex:1 }} contentContainerStyle={{ padding:16, paddingBottom:120 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {step===1 && renderNIDStep('father')}
-          {step===2 && renderNIDStep('mother')}
-          {step===3 && (
+          {/* Spec §2.7 Step 1: Child birth details */}
+          {step===1 && (
             <View style={{ gap:14 }}>
               <Text style={{ fontSize:18, fontWeight:'800', color:T.text }}>Child Information</Text>
               <Text style={{ fontSize:12, color:T.textSub, lineHeight:18 }}>Details will appear exactly as on the birth certificate. Surname and middle name are pre-filled from father's record.</Text>
@@ -544,6 +546,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
               </View>
             </View>
           )}
+          {/* Spec §2.7 Step 2: Father NID validation */}
+          {step===2 && renderNIDStep('father')}
+          {/* Spec §2.7 Step 2: Mother NID validation */}
+          {step===3 && renderNIDStep('mother')}
+          {/* Spec §2.7 Step 4: Review before final submission */}
           {step===4 && (
             <View style={{ gap:12 }}>
               <Text style={{ fontSize:18, fontWeight:'800', color:T.text }}>Review & Confirm</Text>
