@@ -172,7 +172,7 @@ export function buildDeathCertHtml(d: LocalDeath): string {
   .watermark {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%,-50%) rotate(-35deg);
-    font-size: 80pt; color: rgba(180,100,0,0.04);
+    font-size: 80pt; color: rgba(180,100,0.04);
     font-weight: 900; white-space: nowrap; pointer-events: none; z-index: 0;
   }
   .content { position: relative; z-index: 1; }

@@ -17,7 +17,7 @@ type Props = { navigation: NativeStackNavigationProp<RootStack, 'PendingCases'> 
 
 interface PendingRow { id: string; type: 'birth'|'death'; certNo: string; name: string; date: string; reasons: string[] }
 
-const REASON_LABELS: Record<string,string> = {
+const REASON_LABELS: Record<string> = {
   no_certificate: 'Certificate PDF not generated',
   rita_unsynced:  'Not synced to Central Database',
 }

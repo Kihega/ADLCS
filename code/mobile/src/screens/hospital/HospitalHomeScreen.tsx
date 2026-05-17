@@ -18,8 +18,8 @@ import {
   Share, Dimensions, InteractionManager,
 } from 'react-native'
 import AsyncStorage        from '@react-native-async-storage/async-storage'
-import { SafeAreaView }    from 'react-native-safe-area-context'
-import { LinearGradient }  from 'expo-linear-gradient'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import {
   Baby, Cross, FileText, Clock, Sun, Moon, Bell, LogOut,
   MapPin, RefreshCw, ChevronRight, Shield, Building2,
@@ -36,7 +36,7 @@ import {
   fetchOfficerProfile, ConnQuality,
 } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
-import { useGeofence }  from '../../context/GeofenceContext'
+import { useGeofence } from '../../context/GeofenceContext'
 
 type RootStack = {
   Splash: undefined; Login: undefined; VillageHome: undefined; HospitalHome: undefined
@@ -107,7 +107,7 @@ function OfficerIdCard({ visible, onClose, officer }: {
               <View style={ic.detailsCol}>
                 <Text style={ic.officerName}>{officer.officerName ?? '—'}</Text>
                 <Text style={ic.officerRole}>Health Facility Officer</Text>
-                <View style={{ height:1, backgroundColor:'rgba(0,0,0,0.08)', marginVertical:8 }} />
+                <View style={{ height:1, backgroundColor:'rgba(0,0.08)', marginVertical:8 }} />
                 {[
                   ['Employee ID',  officer.employeeId   ?? `NBS-HO-${Date.now().toString().slice(-6)}`],
                   ['Facility',     officer.facilityName ?? '—'],
@@ -223,7 +223,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <TouchableWithoutFeedback onPress={() => closeAndNavigate(() => {})}>
-        <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor:'rgba(0,0,0,0.55)', opacity:bg }]} />
+        <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor:'rgba(0,0.55)', opacity:bg }]} />
       </TouchableWithoutFeedback>
 
       <Animated.View style={[s.drawer, { backgroundColor:T.card, transform:[{translateX:tx}] }]}>
@@ -245,7 +245,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
               </View>
             </View>
             <TouchableOpacity onPress={()=>closeAndNavigate(()=>{})} style={{ padding:4 }}>
-              <X size={18} color="rgba(255,255,255,0.70)" />
+              <X size={18} color="rgba(255,255,0.70)" />
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -260,7 +260,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
                   style={[s.drawerItem, { borderBottomColor:T.border }]}
                   onPress={item.onPress} activeOpacity={0.7}
                 >
-                  <View style={[s.drawerItemIcon, { backgroundColor:(item as any).danger?'rgba(239,68,68,0.12)':`${H.primary}14` }]}>
+                  <View style={[s.drawerItemIcon, { backgroundColor:(item as any).danger?'rgba(239,68,0.12)':`${H.primary}14` }]}>
                     {item.icon}
                   </View>
                   <Text style={[s.drawerItemLabel, { color:(item as any).danger?'#f87171':T.text }]}>{item.label}</Text>
@@ -458,26 +458,26 @@ export default function HospitalHomeScreen({ navigation }: Props) {
           <View style={{ flex:1, alignItems:'center' }}>
             <Text style={{ fontSize:17, fontWeight:'900', color:'#fff', letterSpacing:2, textTransform:'uppercase' }}>NBS-CENSUS</Text>
             <View style={{ height:2, width:44, backgroundColor:TZ.yellow, borderRadius:1, marginVertical:4 }} />
-            <Text style={{ fontSize:9, color:'rgba(255,255,255,0.72)', letterSpacing:1.1, textTransform:'uppercase' }}>Census for Development</Text>
+            <Text style={{ fontSize:9, color:'rgba(255,255,0.72)', letterSpacing:1.1, textTransform:'uppercase' }}>Census for Development</Text>
           </View>
           <View style={{ alignItems:'center', width:56 }}>
             <View style={s.coatCircle}><Image source={require('../../../public/assets/court_of_arm.png')} style={{ width:42, height:42 }} resizeMode="contain" /></View>
-            <Text style={{ fontSize:7, fontWeight:'700', color:'rgba(255,255,255,0.60)', letterSpacing:1.2, marginTop:3 }}>TANZANIA</Text>
+            <Text style={{ fontSize:7, fontWeight:'700', color:'rgba(255,255,0.60)', letterSpacing:1.2, marginTop:3 }}>TANZANIA</Text>
           </View>
         </View>
         <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:12, paddingBottom:12, paddingTop:2, gap:8 }}>
           <TouchableOpacity style={s.iconBtn} onPress={() => setSidebarOpen(true)} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
-            <Menu size={17} color="rgba(255,255,255,0.90)" />
+            <Menu size={17} color="rgba(255,255,0.90)" />
           </TouchableOpacity>
           <View style={{ flex:1 }}>
             <Text style={{ fontSize:11, fontWeight:'800', color:'#fff' }} numberOfLines={1}>{officer.facilityName}</Text>
-            <Text style={{ fontSize:9, color:'rgba(255,255,255,0.55)', marginTop:2 }} numberOfLines={1}>📍 {officer.facilityRegion}, {officer.facilityDistrict}</Text>
+            <Text style={{ fontSize:9, color:'rgba(255,255,0.55)', marginTop:2 }} numberOfLines={1}>📍 {officer.facilityRegion}, {officer.facilityDistrict}</Text>
           </View>
           <TouchableOpacity style={s.iconBtn} onPress={toggleTheme}>
             {isDark ? <Sun size={14} color={TZ.yellow}/> : <Moon size={14} color={TZ.yellow}/>}
           </TouchableOpacity>
           <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('PendingCases')}>
-            <Bell size={15} color="rgba(255,255,255,0.80)" />
+            <Bell size={15} color="rgba(255,255,0.80)" />
             {unread > 0 && <View style={s.badge}><Text style={{ fontSize:8, fontWeight:'800', color:'#fff' }}>{unread}</Text></View>}
           </TouchableOpacity>
           <View style={s.avatarRing}>
@@ -500,7 +500,7 @@ export default function HospitalHomeScreen({ navigation }: Props) {
             <Text style={{ fontSize:10, color:T.textDim, marginTop:3 }}>{new Date().toLocaleDateString('en-TZ',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</Text>
           </View>
           <View style={{ alignItems:'flex-end', gap:6 }}>
-            <View style={[s.zoneBadge, { borderColor:inZone?`${H.primary}60`:'rgba(239,68,68,0.38)', backgroundColor:inZone?`${H.primary}18`:'rgba(239,68,68,0.12)' }]}>
+            <View style={[s.zoneBadge, { borderColor:inZone?`${H.primary}60`:'rgba(239,68,0.38)', backgroundColor:inZone?`${H.primary}18`:'rgba(239,68,0.12)' }]}>
               {inZone ? <MapPin size={9} color={H.primaryL}/> : <AlertTriangle size={9} color="#f87171"/>}
               <Text style={[s.zoneTxt, { color:inZone?H.primaryL:'#f87171' }]}>
                 {inZone ? `✓ In Zone · ${distanceKm!=null?distanceKm.toFixed(2):'0.00'} km` : `⚠ Out · ${distanceKm!=null?distanceKm.toFixed(2):'—'} km`}
@@ -617,7 +617,7 @@ export default function HospitalHomeScreen({ navigation }: Props) {
                   <TouchableOpacity style={[s.dlBtn, { backgroundColor:`${TZ.green}18`, borderColor:`${TZ.green}40` }]} onPress={()=>downloadReport(period,'births')}>
                     <Download size={10} color={TZ.green}/><Text style={{ fontSize:9, fontWeight:'700', color:TZ.green }}>Births</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[s.dlBtn, { backgroundColor:'rgba(248,113,113,0.14)', borderColor:'rgba(248,113,113,0.30)' }]} onPress={()=>downloadReport(period,'deaths')}>
+                  <TouchableOpacity style={[s.dlBtn, { backgroundColor:'rgba(248,113,0.14)', borderColor:'rgba(248,113,0.30)' }]} onPress={()=>downloadReport(period,'deaths')}>
                     <Download size={10} color="#f87171"/><Text style={{ fontSize:9, fontWeight:'700', color:'#f87171' }}>Deaths</Text>
                   </TouchableOpacity>
                 </View>
@@ -645,7 +645,7 @@ export default function HospitalHomeScreen({ navigation }: Props) {
 
 // ─── ID Card Styles ────────────────────────────────────────────────────────────
 const ic = StyleSheet.create({
-  overlay:      { flex:1, backgroundColor:'rgba(0,0,0,0.65)', justifyContent:'flex-end' },
+  overlay:      { flex:1, backgroundColor:'rgba(0,0.65)', justifyContent:'flex-end' },
   sheet:        { backgroundColor:'#f8fafc', borderTopLeftRadius:24, borderTopRightRadius:24, padding:20, paddingBottom:36 },
   sheetHandle:  { width:40, height:4, borderRadius:2, alignSelf:'center', marginBottom:16 },
   card:         { borderRadius:16, overflow:'hidden', shadowColor:'#000', shadowOffset:{width:0,height:8}, shadowOpacity:0.35, shadowRadius:16, elevation:16 },
@@ -653,7 +653,7 @@ const ic = StyleSheet.create({
   headerFlag:   { flexDirection:'row', height:5 },
   headerContent:{ flexDirection:'row', alignItems:'center', paddingHorizontal:14, paddingTop:12, paddingBottom:8, gap:10 },
   headerTitle:  { fontSize:8, fontWeight:'900', color:'#fff', letterSpacing:1.5, textAlign:'center' },
-  headerSub:    { fontSize:7, color:'rgba(255,255,255,0.75)', textAlign:'center', marginTop:2 },
+  headerSub:    { fontSize:7, color:'rgba(255,255,0.75)', textAlign:'center', marginTop:2 },
   headerRole:   { fontSize:10, fontWeight:'900', color:TZ.yellow, letterSpacing:2, textAlign:'center', marginTop:4 },
   cardBody:     { flexDirection:'row', backgroundColor:'#fff', padding:14, gap:12 },
   photoCol:     { alignItems:'center', gap:8 },
@@ -668,7 +668,7 @@ const ic = StyleSheet.create({
   detailVal:    { fontSize:9, fontWeight:'700', color:'#0f172a', flex:1 },
   cardFooter:   { backgroundColor:'#1e293b', paddingHorizontal:14, paddingVertical:10, alignItems:'center', gap:6 },
   barcodeArea:  { flexDirection:'row', alignItems:'center', height:32 },
-  footerNote:   { fontSize:7, color:'rgba(255,255,255,0.50)', textAlign:'center' },
+  footerNote:   { fontSize:7, color:'rgba(255,255,0.50)', textAlign:'center' },
   closeBtn:     { backgroundColor:'#0891b2', borderRadius:12, paddingVertical:13, alignItems:'center', marginTop:14 },
 })
 
@@ -679,7 +679,7 @@ const s = StyleSheet.create({
   drawerAvatar:     { width:52, height:52, borderRadius:26, backgroundColor:'#22d3ee', alignItems:'center', justifyContent:'center', borderWidth:2, borderColor:TZ.yellow },
   drawerAvatarText: { fontSize:18, fontWeight:'900', color:'#003087' },
   drawerName:       { fontSize:14, fontWeight:'800', color:'#fff', marginBottom:3 },
-  drawerFac:        { fontSize:11, color:'rgba(255,255,255,0.65)' },
+  drawerFac:        { fontSize:11, color:'rgba(255,255,0.65)' },
   drawerSection:    { paddingVertical:8, borderBottomWidth:1 },
   drawerSectionLabel:{ fontSize:9, fontWeight:'700', letterSpacing:1, paddingHorizontal:16, paddingVertical:8 },
   drawerItem:       { flexDirection:'row', alignItems:'center', gap:12, paddingHorizontal:16, paddingVertical:14, borderBottomWidth:StyleSheet.hairlineWidth },
@@ -687,9 +687,9 @@ const s = StyleSheet.create({
   drawerItemLabel:  { flex:1, fontSize:14, fontWeight:'600' },
   drawerFooter:     { paddingVertical:14, paddingHorizontal:16, borderTopWidth:1 },
   drawerFooterText: { fontSize:9 },
-  logoCircle:       { width:46, height:46, borderRadius:23, backgroundColor:'rgba(255,255,255,0.12)', borderWidth:1.5, borderColor:'rgba(252,209,22,0.55)', alignItems:'center', justifyContent:'center' },
-  coatCircle:       { width:50, height:50, borderRadius:25, backgroundColor:'rgba(255,255,255,0.10)', borderWidth:1.5, borderColor:'rgba(252,209,22,0.48)', alignItems:'center', justifyContent:'center' },
-  iconBtn:          { width:30, height:30, borderRadius:8, backgroundColor:'rgba(255,255,255,0.08)', alignItems:'center', justifyContent:'center' },
+  logoCircle:       { width:46, height:46, borderRadius:23, backgroundColor:'rgba(255,255,0.12)', borderWidth:1.5, borderColor:'rgba(252,209,22,0.55)', alignItems:'center', justifyContent:'center' },
+  coatCircle:       { width:50, height:50, borderRadius:25, backgroundColor:'rgba(255,255,0.10)', borderWidth:1.5, borderColor:'rgba(252,209,22,0.48)', alignItems:'center', justifyContent:'center' },
+  iconBtn:          { width:30, height:30, borderRadius:8, backgroundColor:'rgba(255,255,0.08)', alignItems:'center', justifyContent:'center' },
   badge:            { position:'absolute', top:-4, right:-4, width:14, height:14, borderRadius:7, backgroundColor:'#ef4444', alignItems:'center', justifyContent:'center' },
   avatarRing:       { width:34, height:34, borderRadius:17, borderWidth:2, borderColor:TZ.yellow, padding:2 },
   avatar:           { flex:1, borderRadius:15, alignItems:'center', justifyContent:'center' },

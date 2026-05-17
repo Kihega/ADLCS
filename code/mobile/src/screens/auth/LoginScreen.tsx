@@ -307,7 +307,7 @@ function OtpAuthPage({ onAuthorized }: OtpAuthProps) {
         keyboard="default"
       />
 
-      <Text style={[s.countdown, countdown < 120 && { color: C.red }]}>
+      <Text style={[s.countdown < 120 && { color: C.red }]}>
         {countdown > 0
           ? `⏱ OTP expires in ${fmt(countdown)}`
           : '⚠ OTP expired — contact your District Administrator'}
@@ -861,12 +861,12 @@ const s = StyleSheet.create({
   nbsBox:    { width: 52, alignItems: 'center', gap: 3 },
   nbsLabel:  { fontSize: 8, fontWeight: '800', color: C.yellow, letterSpacing: 1.2 },
   coaBox:    { width: 52, alignItems: 'center', gap: 3 },
-  coaLabel:  { fontSize: 8, fontWeight: '700', color: 'rgba(255,255,255,0.5)', letterSpacing: 1 },
+  coaLabel:  { fontSize: 8, fontWeight: '700', color: 'rgba(255,255,0.5)', letterSpacing: 1 },
   topCenter: { flex: 1, alignItems: 'center' },
   topGov:    { fontSize: 7, fontWeight: '800', color: C.yellow, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
   topTitle:  { fontSize: 18, fontWeight: '900', color: C.white, letterSpacing: 2, marginTop: 3 },
   topDivider:{ height: 2, width: 40, backgroundColor: C.yellow, borderRadius: 1, marginVertical: 4 },
-  topSub:    { fontSize: 9, color: 'rgba(255,255,255,0.7)', letterSpacing: 1, textTransform: 'uppercase' },
+  topSub:    { fontSize: 9, color: 'rgba(255,255,0.7)', letterSpacing: 1, textTransform: 'uppercase' },
   tagline:   { fontSize: 9, fontStyle: 'italic', color: 'rgba(252,209,22,0.7)', textAlign: 'center', paddingVertical: 6 },
 
   // ── Auth cards ─────────────────────────────────────────────────────────────
@@ -918,7 +918,7 @@ const s = StyleSheet.create({
   footerTxt2: { fontSize: 9, color: C.border, textAlign: 'center', marginTop: 3 },
 
   // ── Registration modal ─────────────────────────────────────────────────────
-  modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.80)', justifyContent: 'flex-end' },
+  modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0.80)', justifyContent: 'flex-end' },
   regCard:       { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
                    paddingBottom: 40, overflow: 'hidden' },
   regTopBar:     { height: 6 },
