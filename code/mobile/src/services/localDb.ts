@@ -149,15 +149,34 @@ export function generateDeathCertNo(): string {
   return `TZ-D-${seq} A`
 }
 
-export function generateNewbornNationalId(dob: string): string {
-  // Spec §2.7 Step 4 — format: TZ-YYYYMMDD-XXXXX
-  const parts    = dob.split('/')
+export function generateNewbornNationalId(
+  dob: string,
+  regionCode    = '07',  // Default: Dar es Salaam
+  districtCode  = '03',  // Default: Kinondoni
+  wardCode      = '1',
+): string {
+  // Per CERTIFICATE_AND_ID_FORMATS.txt:
+  // Format: YYYYMMDD-LLLLL-SSSSS-CC  (23 chars incl. dashes)
+  // Breakdown: DOB(8) + dash + Location(5) + dash + Sequence(5) + dash + Check(2)
+  const parts    = dob.split('/')          // expects DD/MM/YYYY
   const day      = (parts[0] ?? '01').padStart(2, '0')
   const month    = (parts[1] ?? '01').padStart(2, '0')
-  const year     = parts[2] ?? new Date().getFullYear().toString()
-  const datePart = `${year}${month}${day}`
-  const seq      = String(Math.floor(Math.random() * 90000) + 10000).padStart(5, '0')
-  return `TZ-${datePart}-${seq}`
+  const year     = parts[2] ?? String(new Date().getFullYear())
+  const datePart = `${year}${month}${day}` // YYYYMMDD
+
+  // Location code: region(2) + district(2) + ward(1) = 5 digits
+  const rr       = regionCode.padStart(2,  '0')
+  const dd       = districtCode.padStart(2, '0')
+  const w        = wardCode.padStart(1, '0')
+  const locPart  = `${rr}${dd}${w}`        // e.g. 07031
+
+  // Sequence: random 5-digit number (real system queries DB for next seq)
+  const seqPart  = String(Math.floor(Math.random() * 89999) + 10001).padStart(5, '0')
+
+  // Check digits: 2-digit suffix
+  const cc       = String(Math.floor(Math.random() * 89) + 10)
+
+  return `${datePart}-${locPart}-${seqPart}-${cc}` // e.g. 20240315-07031-10042-15
 }
 
 export function generateNationalId(dob: string, regionCode = '07', districtCode = '03', wardCode = '1'): string {

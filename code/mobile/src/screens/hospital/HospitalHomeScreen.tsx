@@ -11,7 +11,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator,
   Image, ImageBackground, RefreshControl,
   Animated, Modal, TouchableWithoutFeedback,
@@ -25,7 +25,7 @@ import {
   MapPin, RefreshCw, ChevronRight, Shield, Building2,
   Wifi, WifiOff, AlertTriangle, BarChart3, User, Lock,
   Menu, X, Download, WifiLow, Stethoscope, IdCard,
-  Calendar, BadgeCheck,
+  Calendar, BadgeCheck, Eye, EyeOff,
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
@@ -45,9 +45,144 @@ type RootStack = {
 }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'HospitalHome'> }
 
-const H  = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
-const W  = Dimensions.get('window').width
+const H       = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
+const W       = Dimensions.get('window').width
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
 const CONN_COLORS: Record<ConnQuality, string> = { Good: '#4ade80', Fair: '#fbbf24', Offline: '#f87171' }
+
+// ─── Change Password Modal ─────────────────────────────────────────────────────
+function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { theme: T } = useTheme()
+  const [currentPwd,  setCurrentPwd]  = useState('')
+  const [newPwd,      setNewPwd]      = useState('')
+  const [confirmPwd,  setConfirmPwd]  = useState('')
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
+  const [showCurrent, setShowCurrent] = useState(false)
+  const [showNew,     setShowNew]     = useState(false)
+
+  const reset = () => { setCurrentPwd(''); setNewPwd(''); setConfirmPwd(''); setError('') }
+
+  const handleClose = () => { reset(); onClose() }
+
+  const handleSubmit = async () => {
+    if (!currentPwd)          { setError('Enter your current password'); return }
+    if (newPwd.length < 8)    { setError('New password must be at least 8 characters'); return }
+    if (newPwd !== confirmPwd) { setError('Passwords do not match'); return }
+    setError(''); setLoading(true)
+    try {
+      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const res   = await fetch(`${API_BASE}/auth/change-password`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
+        signal:  AbortSignal.timeout(12_000),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.message ?? 'Failed to change password'); return }
+      Alert.alert('Success ✓', 'Your password has been changed. Please use your new password next time you sign in.')
+      reset()
+      onClose()
+    } catch {
+      setError('Connection failed. Check your internet and try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.65)', justifyContent:'flex-end' }}>
+        <View style={{ backgroundColor:T.card, borderTopLeftRadius:24, borderTopRightRadius:24, padding:24, paddingBottom:40 }}>
+          {/* Handle */}
+          <View style={{ width:40, height:4, borderRadius:2, backgroundColor:T.border, alignSelf:'center', marginBottom:16 }} />
+
+          {/* Title row */}
+          <View style={{ flexDirection:'row', alignItems:'center', gap:12, marginBottom:4 }}>
+            <View style={{ width:40, height:40, borderRadius:10, backgroundColor:`${H.primary}18`, alignItems:'center', justifyContent:'center' }}>
+              <Lock size={18} color={H.primaryL} />
+            </View>
+            <View>
+              <Text style={{ fontSize:16, fontWeight:'800', color:T.text }}>Change Password</Text>
+              <Text style={{ fontSize:11, color:T.textSub, marginTop:2 }}>Update your account password</Text>
+            </View>
+          </View>
+
+          {/* Error banner */}
+          {!!error && (
+            <View style={{ flexDirection:'row', alignItems:'center', gap:8, backgroundColor:'rgba(239,68,68,0.10)', borderRadius:10, padding:12, marginTop:14, borderWidth:1, borderColor:'rgba(239,68,68,0.28)' }}>
+              <AlertTriangle size={13} color="#f87171" />
+              <Text style={{ fontSize:11, color:'#f87171', flex:1 }}>{error}</Text>
+            </View>
+          )}
+
+          {/* Current Password */}
+          <Text style={{ fontSize:10, color:T.textDim, fontWeight:'700', letterSpacing:1, textTransform:'uppercase', marginTop:16, marginBottom:6 }}>Current Password</Text>
+          <View style={{ flexDirection:'row', alignItems:'center', backgroundColor:T.bg, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14 }}>
+            <TextInput
+              style={{ flex:1, color:T.text, fontSize:13, paddingVertical:12 }}
+              value={currentPwd} onChangeText={t=>{ setCurrentPwd(t); setError('') }}
+              secureTextEntry={!showCurrent} placeholder="Current password"
+              placeholderTextColor={T.textDim} autoCapitalize="none" autoCorrect={false}
+            />
+            <TouchableOpacity onPress={()=>setShowCurrent(!showCurrent)} style={{ padding:4 }}>
+              {showCurrent ? <EyeOff size={16} color={T.textDim}/> : <Eye size={16} color={T.textDim}/>}
+            </TouchableOpacity>
+          </View>
+
+          {/* New Password */}
+          <Text style={{ fontSize:10, color:T.textDim, fontWeight:'700', letterSpacing:1, textTransform:'uppercase', marginTop:14, marginBottom:6 }}>New Password</Text>
+          <View style={{ flexDirection:'row', alignItems:'center', backgroundColor:T.bg, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14 }}>
+            <TextInput
+              style={{ flex:1, color:T.text, fontSize:13, paddingVertical:12 }}
+              value={newPwd} onChangeText={t=>{ setNewPwd(t); setError('') }}
+              secureTextEntry={!showNew} placeholder="Min. 8 characters"
+              placeholderTextColor={T.textDim} autoCapitalize="none" autoCorrect={false}
+            />
+            <TouchableOpacity onPress={()=>setShowNew(!showNew)} style={{ padding:4 }}>
+              {showNew ? <EyeOff size={16} color={T.textDim}/> : <Eye size={16} color={T.textDim}/>}
+            </TouchableOpacity>
+          </View>
+
+          {/* Confirm New Password */}
+          <Text style={{ fontSize:10, color:T.textDim, fontWeight:'700', letterSpacing:1, textTransform:'uppercase', marginTop:14, marginBottom:6 }}>Confirm New Password</Text>
+          <View style={{ backgroundColor:T.bg, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14 }}>
+            <TextInput
+              style={{ color:T.text, fontSize:13, paddingVertical:12 }}
+              value={confirmPwd} onChangeText={t=>{ setConfirmPwd(t); setError('') }}
+              secureTextEntry placeholder="Repeat new password"
+              placeholderTextColor={T.textDim} autoCapitalize="none" autoCorrect={false}
+            />
+          </View>
+
+          {/* Strength hint */}
+          {newPwd.length > 0 && newPwd.length < 8 && (
+            <Text style={{ fontSize:10, color:'#f97316', marginTop:4 }}>⚠ Password too short ({newPwd.length}/8 chars)</Text>
+          )}
+
+          {/* Buttons */}
+          <View style={{ flexDirection:'row', gap:10, marginTop:20 }}>
+            <TouchableOpacity
+              style={{ flex:1, borderRadius:12, borderWidth:1, borderColor:T.border, paddingVertical:13, alignItems:'center' }}
+              onPress={handleClose}
+            >
+              <Text style={{ fontSize:13, fontWeight:'700', color:T.textSub }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex:2, borderRadius:12, backgroundColor:H.primary, paddingVertical:13, alignItems:'center', opacity:loading?0.6:1 }}
+              onPress={handleSubmit} disabled={loading}
+            >
+              {loading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={{ fontSize:13, fontWeight:'800', color:'#fff' }}>Change Password</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
 
 // ─── Officer ID Card Modal ─────────────────────────────────────────────────────
 function OfficerIdCard({ visible, onClose, officer }: {
@@ -148,10 +283,10 @@ function OfficerIdCard({ visible, onClose, officer }: {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 // Key fix: animation completes BEFORE navigation, preventing app stack freeze.
-function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, navigation }: {
+function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, onChangePwd, navigation }: {
   open: boolean; onClose: () => void
   officer: Record<string,any>; onLogout: () => void; loggingOut: boolean
-  onShowProfile: () => void
+  onShowProfile: () => void; onChangePwd: () => void
   navigation: Props['navigation']
 }) {
   const { theme: T } = useTheme()
@@ -207,8 +342,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
         { icon: <User   size={15} color={H.primaryL}/>,  label: 'View Profile',
           onPress: () => closeAndNavigate(() => onShowProfile())},
         { icon: <Lock   size={15} color={H.primaryL}/>,  label: 'Change Password',
-          onPress: () => closeAndNavigate(() => Alert.alert('Change Password',
-            'Use the NBS web admin panel to change your password.'))},
+          onPress: () => closeAndNavigate(() => onChangePwd())},
       ]
     },
     {
@@ -310,8 +444,9 @@ export default function HospitalHomeScreen({ navigation }: Props) {
   const [loading,      setLoading]     = useState(true)
   const [refreshing,   setRefreshing]  = useState(false)
   const [loggingOut,   setLoggingOut]  = useState(false)
-  const [sidebarOpen,  setSidebarOpen] = useState(false)
-  const [profileOpen,  setProfileOpen] = useState(false)
+  const [sidebarOpen,  setSidebarOpen]  = useState(false)
+  const [profileOpen,  setProfileOpen]  = useState(false)
+  const [changePwdOpen,setChangePwdOpen]= useState(false)
   const [unread,       setUnread]      = useState(0)
   const [connQuality,  setConnQuality] = useState<ConnQuality>('Offline')
   const [activity,     setActivity]    = useState<any[]>([])
@@ -436,11 +571,15 @@ export default function HospitalHomeScreen({ navigation }: Props) {
         open={sidebarOpen} onClose={() => setSidebarOpen(false)}
         officer={officer} onLogout={handleLogout} loggingOut={loggingOut}
         onShowProfile={() => setProfileOpen(true)}
+        onChangePwd={() => setChangePwdOpen(true)}
         navigation={navigation}
       />
 
       {/* Officer ID Card */}
       <OfficerIdCard visible={profileOpen} onClose={() => setProfileOpen(false)} officer={officer} />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal visible={changePwdOpen} onClose={() => setChangePwdOpen(false)} />
 
       {/* Header */}
       <ImageBackground source={require('../../../public/assets/flag.jpg')} style={{ overflow:'hidden' }} blurRadius={2} resizeMode="cover">
@@ -617,8 +756,8 @@ export default function HospitalHomeScreen({ navigation }: Props) {
                   <TouchableOpacity style={[s.dlBtn, { backgroundColor:`${TZ.green}18`, borderColor:`${TZ.green}40` }]} onPress={()=>downloadReport(period,'births')}>
                     <Download size={10} color={TZ.green}/><Text style={{ fontSize:9, fontWeight:'700', color:TZ.green }}>Births</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[s.dlBtn, { backgroundColor:'rgba(248,113,0.14)', borderColor:'rgba(248,113,0.30)' }]} onPress={()=>downloadReport(period,'deaths')}>
-                    <Download size={10} color="#f87171"/><Text style={{ fontSize:9, fontWeight:'700', color:'#f87171' }}>Deaths</Text>
+                  <TouchableOpacity style={[s.dlBtn, { backgroundColor:'rgba(220,38,38,0.22)', borderColor:'rgba(220,38,38,0.50)' }]} onPress={()=>downloadReport(period,'deaths')}>
+                    <Download size={10} color="#f87171"/><Text style={{ fontSize:9, fontWeight:'700', color:'#ef4444' }}>Deaths</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -689,7 +828,7 @@ const s = StyleSheet.create({
   drawerFooterText: { fontSize:9 },
   logoCircle:       { width:46, height:46, borderRadius:23, backgroundColor:'rgba(255,255,0.12)', borderWidth:1.5, borderColor:'rgba(252,209,22,0.55)', alignItems:'center', justifyContent:'center' },
   coatCircle:       { width:50, height:50, borderRadius:25, backgroundColor:'rgba(255,255,0.10)', borderWidth:1.5, borderColor:'rgba(252,209,22,0.48)', alignItems:'center', justifyContent:'center' },
-  iconBtn:          { width:30, height:30, borderRadius:8, backgroundColor:'rgba(255,255,0.08)', alignItems:'center', justifyContent:'center' },
+  iconBtn:          { width:30, height:30, borderRadius:8, backgroundColor:'rgba(255,255,255,0.20)', alignItems:'center', justifyContent:'center' },
   badge:            { position:'absolute', top:-4, right:-4, width:14, height:14, borderRadius:7, backgroundColor:'#ef4444', alignItems:'center', justifyContent:'center' },
   avatarRing:       { width:34, height:34, borderRadius:17, borderWidth:2, borderColor:TZ.yellow, padding:2 },
   avatar:           { flex:1, borderRadius:15, alignItems:'center', justifyContent:'center' },

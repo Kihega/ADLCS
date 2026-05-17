@@ -44,7 +44,11 @@ let _networkState: NetInfoState | null = null
 // ─── Network state accessors ───────────────────────────────────────────────────
 export function isOnline(): boolean {
   if (!_networkState) return false
-  return !!(_networkState.isConnected && _networkState.isInternetReachable)
+  if (!_networkState.isConnected) return false
+  // On Android, isInternetReachable may be null while still being determined.
+  // Treat null as 'online' when the device reports isConnected=true so records
+  // are not incorrectly queued as offline-only during normal operation.
+  return _networkState.isInternetReachable !== false
 }
 
 export function getConnQuality(): ConnQuality {
