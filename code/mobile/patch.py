@@ -1,24 +1,54 @@
-#!/usr/bin/env python3
-
 from pathlib import Path
+import re
 
-# Path to the file
-file_path = Path("src/screens/village/VillageReportsScreen.tsx")
+src_dir = Path("src")
 
-# Read file content
-content = file_path.read_text(encoding="utf-8")
+for file in src_dir.rglob("*.*"):
+    if file.suffix not in [".ts", ".tsx"]:
+        continue
 
-# Fix invalid JSX prop syntax
-old = """{ icon:<Cross   size={20} color:'#dc2626'  />, label:'Deaths',    value:stats!.totalDeaths,   color:'#dc2626'},"""
+    try:
+        content = file.read_text(encoding="utf-8")
+        lines = content.splitlines()
 
-new = """{ icon:<Cross   size={20} color="#dc2626" />, label:'Deaths',    value:stats!.totalDeaths,   color:'#dc2626'},"""
+        new_lines = []
+        imported_names = set()
 
-if old in content:
-    content = content.replace(old, new)
+        for line in lines:
+            # Match import { ... } from '...'
+            match = re.match(r"import\s*{([^}]*)}\s*from\s*['\"]([^'\"]+)['\"]", line)
 
-    # Write updated content back
-    file_path.write_text(content, encoding="utf-8")
+            if match:
+                names = [x.strip() for x in match.group(1).split(",")]
+                module = match.group(2)
 
-    print("✅ Patch applied successfully.")
-else:
-    print("⚠️ Target code not found. File may already be fixed or formatted differently.")
+                unique = []
+
+                for n in names:
+                    # Remove aliases spacing issues
+                    clean = n.strip()
+
+                    if clean not in imported_names:
+                        imported_names.add(clean)
+                        unique.append(clean)
+
+                # Skip empty imports
+                if unique:
+                    newline = f"import {{ {', '.join(unique)} }} from '{module}'"
+                    new_lines.append(newline)
+
+            else:
+                new_lines.append(line)
+
+        fixed = "\n".join(new_lines)
+
+        # Fix repeated imports inside same line
+        fixed = re.sub(r'\b(\w+)\s*,\s*\1\b', r'\1', fixed)
+
+        file.write_text(fixed, encoding="utf-8")
+        print(f"Fixed: {file}")
+
+    except Exception as e:
+        print(f"Error in {file}: {e}")
+
+print("All duplicate imports fixed.")

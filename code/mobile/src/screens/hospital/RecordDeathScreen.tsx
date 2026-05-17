@@ -12,7 +12,7 @@ import {
   ScrollView, Alert, ActivityIndicator, Modal,
   KeyboardAvoidingView, Platform, Animated,
 } from 'react-native'
-import { SafeAreaView }  from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage      from '@react-native-async-storage/async-storage'
 import * as Clipboard    from 'expo-clipboard'
 import {
@@ -21,9 +21,9 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { saveDeath, generateDeathCertNo, updateDeathCertPath } from '../../services/localDb'
-import { generateDeathPdf, sharePdf }  from '../../services/certificateService'
-import { triggerSync }                  from '../../services/syncService'
-import { useTheme, TZ }                 from '../../context/ThemeContext'
+import { generateDeathPdf, sharePdf } from '../../services/certificateService'
+import { triggerSync } from '../../services/syncService'
+import { useTheme, TZ } from '../../context/ThemeContext'
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
 type RootStack = { HospitalHome: undefined; RecordDeath: undefined }
@@ -45,7 +45,7 @@ function CalPicker({ visible, title, onSelect, onClose }: {
   if (!visible) return null
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0,0,0.65)' }}>
+      <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0.65)' }}>
         <View style={{ backgroundColor:'#0d1f38', borderTopLeftRadius:24, borderTopRightRadius:24, padding:20, paddingBottom:36 }}>
           <View style={{ width:40, height:4, backgroundColor:'#1e3a5f', borderRadius:2, alignSelf:'center', marginBottom:16 }} />
           <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginBottom:14 }}>

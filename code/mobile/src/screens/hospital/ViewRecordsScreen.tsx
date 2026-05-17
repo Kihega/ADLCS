@@ -12,8 +12,8 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, RefreshControl, Modal, ScrollView,
 } from 'react-native'
-import { SafeAreaView }    from 'react-native-safe-area-context'
-import { useFocusEffect }  from '@react-navigation/native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useFocusEffect } from '@react-navigation/native'
 import {
   ArrowLeft, Search, Baby, Cross, FileText,
   ChevronRight, X, WifiOff, CheckCircle2, Clock,
@@ -226,7 +226,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
 
       {/* Detail Modal */}
       <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
-        <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0,0,0.55)' }}>
+        <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0.55)' }}>
           <View style={[s.modalSheet, { backgroundColor:T.card }]}>
             <View style={[s.sheetHandle, { backgroundColor:T.border }]}/>
             <View style={{ flexDirection:'row', alignItems:'center', marginBottom:16 }}>

@@ -18,7 +18,7 @@ import {
   Animated, Dimensions, KeyboardAvoidingView, Platform,
   Image, ImageBackground,
 } from 'react-native'
-import { SafeAreaView }   from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Clipboard     from 'expo-clipboard'
 import AsyncStorage       from '@react-native-async-storage/async-storage'
@@ -34,7 +34,7 @@ import {
   updateBirthCertPath, LocalBirth,
 } from '../../services/localDb'
 import { generateBirthPdf, sharePdf } from '../../services/certificateService'
-import { triggerSync }  from '../../services/syncService'
+import { triggerSync } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
@@ -73,7 +73,7 @@ function CalPicker({ visible, title, onSelect, onClose }: { visible:boolean; tit
   if (!visible) return null
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0,0,0.65)' }}>
+      <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0.65)' }}>
         <View style={{ backgroundColor:T.card, borderTopLeftRadius:24, borderTopRightRadius:24, padding:20, paddingBottom:36 }}>
           <View style={{ width:40, height:4, backgroundColor:T.border, borderRadius:2, alignSelf:'center', marginBottom:16 }} />
           <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginBottom:14 }}>
@@ -175,14 +175,14 @@ function SuccessModal({ visible, onClose, birth, pdfPath, onDownload, downloadin
 
   return (
     <Modal visible={visible} transparent animationType="none">
-      <Animated.View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.75)', alignItems:'center', justifyContent:'center', padding:20, opacity:fade }}>
+      <Animated.View style={{ flex:1, backgroundColor:'rgba(0,0.75)', alignItems:'center', justifyContent:'center', padding:20, opacity:fade }}>
         <Animated.View style={{ width:'100%', borderRadius:20, overflow:'hidden', backgroundColor:T.card, shadowColor:'#000', shadowOffset:{width:0,height:12}, shadowOpacity:0.60, shadowRadius:24, elevation:24, transform:[{scale}] }}>
           <LinearGradient colors={['#064e3b','#065f46']} style={{ alignItems:'center', padding:24, gap:10 }}>
             <View style={{ width:64, height:64, borderRadius:32, backgroundColor:'rgba(74,222,128,0.15)', alignItems:'center', justifyContent:'center' }}>
               <CheckCircle2 size={36} color="#4ade80" />
             </View>
             <Text style={{ fontSize:22, fontWeight:'900', color:'#fff' }}>Birth Registered!</Text>
-            <Text style={{ fontSize:12, color:'rgba(255,255,255,0.65)', textAlign:'center' }}>Record successfully added to NBS Central Database</Text>
+            <Text style={{ fontSize:12, color:'rgba(255,255,0.65)', textAlign:'center' }}>Record successfully added to NBS Central Database</Text>
           </LinearGradient>
 
           <View style={{ padding:20, gap:12 }}>
@@ -456,7 +456,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
         {!!error && (
-          <View style={{ flexDirection:'row', gap:8, backgroundColor:'rgba(239,68,68,0.12)', borderRadius:10, padding:12, borderWidth:1, borderColor:'rgba(239,68,68,0.35)' }}>
+          <View style={{ flexDirection:'row', gap:8, backgroundColor:'rgba(239,68,0.12)', borderRadius:10, padding:12, borderWidth:1, borderColor:'rgba(239,68,0.35)' }}>
             <AlertCircle size={14} color="#f87171" />
             <Text style={{ fontSize:12, color:'#f87171', flex:1, lineHeight:17 }}>{error}</Text>
           </View>
@@ -477,14 +477,14 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           <View style={{ flex:3, backgroundColor:TZ.blue }} />
         </View>
         <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:14, paddingTop:10, paddingBottom:10, gap:10 }}>
-          <TouchableOpacity style={{ width:36, height:36, borderRadius:10, backgroundColor:'rgba(255,255,255,0.12)', alignItems:'center', justifyContent:'center' }} onPress={()=>step>1?setStep(s=>(s-1) as any):navigation.goBack()}>
+          <TouchableOpacity style={{ width:36, height:36, borderRadius:10, backgroundColor:'rgba(255,255,0.12)', alignItems:'center', justifyContent:'center' }} onPress={()=>step>1?setStep(s=>(s-1) as any):navigation.goBack()}>
             <ChevronLeft size={20} color="#fff" />
           </TouchableOpacity>
           <View style={{ flex:1, alignItems:'center' }}>
             <Text style={{ fontSize:16, fontWeight:'800', color:'#fff', letterSpacing:0.5 }}>Register Birth</Text>
-            <Text style={{ fontSize:9, color:'rgba(255,255,255,0.60)', marginTop:2 }}>NBS · Births & Deaths Registration Act</Text>
+            <Text style={{ fontSize:9, color:'rgba(255,255,0.60)', marginTop:2 }}>NBS · Births & Deaths Registration Act</Text>
           </View>
-          <View style={{ width:38, height:38, borderRadius:19, backgroundColor:'rgba(255,255,255,0.10)', alignItems:'center', justifyContent:'center' }}>
+          <View style={{ width:38, height:38, borderRadius:19, backgroundColor:'rgba(255,255,0.10)', alignItems:'center', justifyContent:'center' }}>
             <Image source={require('../../../public/assets/court_of_arm.png')} style={{ width:32, height:32 }} resizeMode="contain" />
           </View>
         </View>
@@ -492,16 +492,16 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:28, paddingBottom:8, paddingTop:4 }}>
           {[1,2,3,4].map((n,i)=>(
             <React.Fragment key={n}>
-              <View style={{ width:22, height:22, borderRadius:11, alignItems:'center', justifyContent:'center', borderWidth:1.5, backgroundColor:n<step?TZ.green:n===step?H.primary:'rgba(255,255,255,0.12)', borderColor:n===step?H.primaryL:'transparent' }}>
-                {n<step ? <Check size={10} color="#fff" /> : <Text style={{ fontSize:10, fontWeight:'700', color:n===step?'#fff':'rgba(255,255,255,0.40)' }}>{n}</Text>}
+              <View style={{ width:22, height:22, borderRadius:11, alignItems:'center', justifyContent:'center', borderWidth:1.5, backgroundColor:n<step?TZ.green:n===step?H.primary:'rgba(255,255,0.12)', borderColor:n===step?H.primaryL:'transparent' }}>
+                {n<step ? <Check size={10} color="#fff" /> : <Text style={{ fontSize:10, fontWeight:'700', color:n===step?'#fff':'rgba(255,255,0.40)' }}>{n}</Text>}
               </View>
-              {i<3 && <View style={{ flex:1, height:2, borderRadius:1, backgroundColor:n<step?TZ.green:'rgba(255,255,255,0.15)' }} />}
+              {i<3 && <View style={{ flex:1, height:2, borderRadius:1, backgroundColor:n<step?TZ.green:'rgba(255,255,0.15)' }} />}
             </React.Fragment>
           ))}
         </View>
         <View style={{ flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16, paddingBottom:12 }}>
           {STEP_LABELS.map((l,i)=>(
-            <Text key={l} style={{ fontSize:9, color:i+1===step?H.primaryL:'rgba(255,255,255,0.45)', width:(W-32)/4, textAlign:'center' }}>{l}</Text>
+            <Text key={l} style={{ fontSize:9, color:i+1===step?H.primaryL:'rgba(255,255,0.45)', width:(W-32)/4, textAlign:'center' }}>{l}</Text>
           ))}
         </View>
       </ImageBackground>
@@ -608,4 +608,3 @@ export default function RegisterBirthScreen({ navigation }: Props) {
     </SafeAreaView>
   )
 }
-
