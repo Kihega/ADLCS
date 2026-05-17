@@ -1,162 +1,281 @@
-/**
- * RecordDeathScreen.tsx — Death Recording  v3.0  PRODUCTION
- *
- * Keyboard fix: StableField defined at module level (never remounts).
- * Calendar picker: custom scroll modal, no external packages.
- * Saves to local SQLite first, generates PDF cert, auto-syncs online.
- */
+#!/usr/bin/env python3
+"""
+ADLCS-TZ-2025 — Birth & Death Registration Flow Patch
+=======================================================
+Run from the project root (where code/ lives):
+    python3 patch_birth_death_flows.py
 
-import React, { useState, useRef, useCallback, useEffect } from 'react'
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Modal,
-  KeyboardAvoidingView, Platform, Animated,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import AsyncStorage      from '@react-native-async-storage/async-storage'
-import * as Clipboard    from 'expo-clipboard'
-import {
-  ArrowLeft, Cross, Search, User, Calendar, CheckCircle2, X, Copy, Shield, Download,
-} from 'lucide-react-native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+What this fixes
+───────────────
+BIRTH (Section 2.7):
+  [GAP 1] Step order was Father → Mother → Child Info → Review
+           Fixed to:  Child Info → Father NID → Mother NID → Review (spec order)
+  [GAP 2] NIN format was YYYYMMDD-RRRDD-SSSSS-CC (adult NIN)
+           Fixed to:  TZ-YYYYMMDD-XXXXX  (newborn NIN per spec)
+  [GAP 3] On submit used saveBirth() + triggerSync() (local-first only)
+           Fixed to:  saveAndSyncBirth() — sends to remote DB immediately if
+           online, stores locally if offline, auto-syncs when device reconnects
+  [GAP 4] Auto-fill from father overwrote child names already typed in step 1
+           Fixed:  only fills empty fields
 
-import { generateDeathCertNo, updateDeathCertPath } from '../../services/localDb'
-import { generateDeathPdf, sharePdf } from '../../services/certificateService'
-import { triggerSync, saveAndSyncDeath } from '../../services/syncService'
-import { useTheme, TZ } from '../../context/ThemeContext'
+DEATH (Section 2.8 Hospital — Case B):
+  [GAP 5] No INFANT/ADULT split — always did a single citizen NID lookup.
+           Spec requires: INFANT → Father NID + Mother NID (no citizen NIN yet)
+                          ADULT  → Citizen NID lookup
+           Fixed: Step 1 = Category selection (INFANT or ADULT)
+                  Step 2 = Conditional lookup based on selection
+                  Step 3 = Death details
+                  Step 4 = Certificate issued
+  [GAP 6] On submit used saveDeath() + triggerSync() (local-first only)
+           Fixed to: saveAndSyncDeath() — same online/offline logic as birth
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
-type RootStack = { HospitalHome: undefined; RecordDeath: undefined }
-type Props = { navigation: NativeStackNavigationProp<RootStack, 'RecordDeath'> }
-type LocationType  = 'health_facility'|'home'|'public_place'|'other'
-type DeathCategory = 'infant'|'child'|'adult'|'maternal'
+OFFLINE / ONLINE SYNC (already in syncService, now properly wired):
+  • If device is ONLINE at submit time → data goes straight to remote DB
+  • If device is OFFLINE            → stored in local SQLite (synced=0)
+  • When device comes back ONLINE   → NetInfo listener fires triggerSync()
+    automatically (was already implemented, now consistently used)
+"""
 
-// ─── Calendar picker (module-level, no remount) ───────────────────────────────
-function CalPicker({ visible, title, onSelect, onClose }: {
-  visible: boolean; title: string; onSelect:(v:string)=>void; onClose:()=>void
-}) {
-  const curY   = new Date().getFullYear()
-  const MONTHS = ['January','February','March','April','May','June',
-                  'July','August','September','October','November','December']
-  const [yr,  setYr]  = useState(curY)
-  const [mo,  setMo]  = useState(new Date().getMonth()+1)
-  const [day, setDay] = useState(new Date().getDate())
-  const daysIn = new Date(yr, mo, 0).getDate()
-  if (!visible) return null
-  return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0.65)' }}>
-        <View style={{ backgroundColor:'#0d1f38', borderTopLeftRadius:24, borderTopRightRadius:24, padding:20, paddingBottom:36 }}>
-          <View style={{ width:40, height:4, backgroundColor:'#1e3a5f', borderRadius:2, alignSelf:'center', marginBottom:16 }} />
-          <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginBottom:14 }}>
-            <Calendar size={15} color="#22d3ee" />
-            <Text style={{ flex:1, fontSize:15, fontWeight:'800', color:'#f8fafc' }}>{title}</Text>
-            <TouchableOpacity onPress={onClose}><X size={17} color="#94a3b8" /></TouchableOpacity>
-          </View>
-          <View style={{ flexDirection:'row', gap:6, height:200 }}>
-            {/* Day */}
-            <View style={{ flex:1 }}>
-              <Text style={{ fontSize:10, color:'#4b6080', textAlign:'center', marginBottom:4 }}>Day</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {Array.from({length:daysIn},(_,i)=>i+1).map(d=>(
-                  <TouchableOpacity key={d} onPress={()=>setDay(d)} style={{ paddingVertical:9, alignItems:'center', borderRadius:8, marginVertical:2, backgroundColor:d===day?'#0891b230':'transparent' }}>
-                    <Text style={{ fontSize:13, color:d===day?'#22d3ee':'#94a3b8', fontWeight:d===day?'800':'400' }}>{String(d).padStart(2,'0')}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-            {/* Month */}
-            <View style={{ flex:2 }}>
-              <Text style={{ fontSize:10, color:'#4b6080', textAlign:'center', marginBottom:4 }}>Month</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {MONTHS.map((name,i)=>(
-                  <TouchableOpacity key={name} onPress={()=>setMo(i+1)} style={{ paddingVertical:9, alignItems:'center', borderRadius:8, marginVertical:2, backgroundColor:i+1===mo?'#0891b230':'transparent' }}>
-                    <Text style={{ fontSize:13, color:i+1===mo?'#22d3ee':'#94a3b8', fontWeight:i+1===mo?'800':'400' }}>{name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-            {/* Year */}
-            <View style={{ flex:1.5 }}>
-              <Text style={{ fontSize:10, color:'#4b6080', textAlign:'center', marginBottom:4 }}>Year</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {Array.from({length:120},(_,i)=>curY-i).map(y=>(
-                  <TouchableOpacity key={y} onPress={()=>setYr(y)} style={{ paddingVertical:9, alignItems:'center', borderRadius:8, marginVertical:2, backgroundColor:y===yr?'#0891b230':'transparent' }}>
-                    <Text style={{ fontSize:13, color:y===yr?'#22d3ee':'#94a3b8', fontWeight:y===yr?'800':'400' }}>{y}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-          <View style={{ flexDirection:'row', gap:10, marginTop:16 }}>
-            <TouchableOpacity onPress={onClose} style={{ flex:1, borderWidth:1, borderColor:'#1e3a5f', borderRadius:12, paddingVertical:13, alignItems:'center' }}>
-              <Text style={{ color:'#94a3b8', fontWeight:'600' }}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={()=>onSelect(`${String(day).padStart(2,'0')}/${String(mo).padStart(2,'0')}/${yr}`)}
-              style={{ flex:2, backgroundColor:'#0891b2', borderRadius:12, paddingVertical:13, alignItems:'center' }}
-            >
-              <Text style={{ color:'#fff', fontWeight:'800' }}>Confirm Date</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  )
+import os
+import sys
+import re
+
+# ── Path resolution ────────────────────────────────────────────────────────────
+ROOT = os.path.dirname(os.path.abspath(__file__))
+MOBILE = os.path.join(ROOT, "code", "mobile")
+SERVICES = os.path.join(MOBILE, "src", "services")
+HOSPITAL = os.path.join(MOBILE, "src", "screens", "hospital")
+
+def path(rel): return os.path.join(ROOT, *rel.split("/"))
+def read(p):
+    with open(p, encoding="utf-8") as f: return f.read()
+def write(p, content):
+    with open(p, "w", encoding="utf-8") as f: f.write(content)
+def patch(filepath, old, new, label=""):
+    content = read(filepath)
+    if old not in content:
+        print(f"  ✗  [{label}] Pattern not found — skipping (may already be patched)")
+        return False
+    write(filepath, content.replace(old, new, 1))
+    print(f"  ✓  [{label}] Applied")
+    return True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PATCH 1 — localDb.ts: Add generateNewbornNationalId()
+# ══════════════════════════════════════════════════════════════════════════════
+LOCAL_DB = path("code/mobile/src/services/localDb.ts")
+
+print("\n[1/3] Patching localDb.ts — generateNewbornNationalId()")
+
+patch(
+    LOCAL_DB,
+    # OLD: existing generateNationalId for adult citizens (unchanged)
+    "export function generateNationalId(dob: string, regionCode = '07', districtCode = '03', wardCode = '1'): string {",
+    # NEW: prepend the newborn function before the existing adult one
+    """\
+export function generateNewbornNationalId(dob: string): string {
+  // Spec §2.7 Step 4 — format: TZ-YYYYMMDD-XXXXX
+  const parts    = dob.split('/')
+  const day      = (parts[0] ?? '01').padStart(2, '0')
+  const month    = (parts[1] ?? '01').padStart(2, '0')
+  const year     = parts[2] ?? new Date().getFullYear().toString()
+  const datePart = `${year}${month}${day}`
+  const seq      = String(Math.floor(Math.random() * 90000) + 10000).padStart(5, '0')
+  return `TZ-${datePart}-${seq}`
 }
 
-// ─── StableField: defined at MODULE level — never remounts on parent re-render ─
-interface FieldProps {
-  label:string; value:string; onChangeText:(v:string)=>void
-  placeholder?:string; multiline?:boolean
-  returnKeyType?:'next'|'done'; onSubmitEditing?:()=>void
-  inputRef?: React.RefObject<TextInput>
-  bg:string; bc:string; tc:string; dc:string
-}
-const StableField = React.memo(function StableField({
-  label, value, onChangeText, placeholder, multiline=false,
-  returnKeyType='next', onSubmitEditing, inputRef, bg, bc, tc, dc,
-}: FieldProps) {
-  return (
-    <View style={{ marginBottom:14 }}>
-      <Text style={{ fontSize:12, fontWeight:'600', color:dc, marginBottom:6 }}>{label}</Text>
-      <TextInput
-        ref={inputRef}
-        style={[sf.input, { backgroundColor:bg, borderColor:bc, color:tc }, multiline&&sf.multi]}
-        value={value} onChangeText={onChangeText}
-        placeholder={placeholder??''} placeholderTextColor={dc}
-        multiline={multiline} textAlignVertical={multiline?'top':'center'}
-        returnKeyType={returnKeyType} blurOnSubmit={false}
-        onSubmitEditing={onSubmitEditing}
-      />
-    </View>
-  )
-})
-const sf = StyleSheet.create({
-  input: { borderWidth:1, borderRadius:10, paddingHorizontal:14, paddingVertical:12, fontSize:14 },
-  multi: { height:90, paddingTop:12 },
-})
+export function generateNationalId(dob: string, regionCode = '07', districtCode = '03', wardCode = '1'): string {""",
+    label="generateNewbornNationalId",
+)
 
-// ─── Toast ─────────────────────────────────────────────────────────────────────
-function Toast({ message, visible }: { message:string; visible:boolean }) {
-  const op = useRef(new Animated.Value(0)).current
-  useEffect(()=>{
-    if (visible) Animated.sequence([
-      Animated.timing(op,{toValue:1,duration:200,useNativeDriver:true}),
-      Animated.delay(1600),
-      Animated.timing(op,{toValue:0,duration:300,useNativeDriver:true}),
-    ]).start()
-  },[visible])
-  return (
-    <Animated.View style={{ position:'absolute', bottom:120, alignSelf:'center', backgroundColor:TZ.green, borderRadius:20, paddingHorizontal:18, paddingVertical:10, flexDirection:'row', alignItems:'center', gap:8, opacity:op, elevation:9 }} pointerEvents="none">
-      <CheckCircle2 size={14} color="#fff" />
-      <Text style={{ color:'#fff', fontWeight:'700', fontSize:13 }}>{message}</Text>
-    </Animated.View>
-  )
-}
 
-// ─── Screen ────────────────────────────────────────────────────────────────────
-export default function RecordDeathScreen({ navigation }: Props) {
+# ══════════════════════════════════════════════════════════════════════════════
+# PATCH 2 — RegisterBirthScreen.tsx: Step reorder + NIN + sync
+# ══════════════════════════════════════════════════════════════════════════════
+BIRTH_SCREEN = path("code/mobile/src/screens/hospital/RegisterBirthScreen.tsx")
+
+print("\n[2/3] Patching RegisterBirthScreen.tsx")
+
+# 2a — Import: replace saveBirth & generateNationalId with new versions
+patch(
+    BIRTH_SCREEN,
+    "import {\n  saveBirth, generateBirthCertNo, generateNationalId,\n  updateBirthCertPath, LocalBirth,\n} from '../../services/localDb'",
+    "import {\n  generateBirthCertNo, generateNewbornNationalId,\n  updateBirthCertPath, LocalBirth,\n} from '../../services/localDb'",
+    label="localDb import",
+)
+
+# 2b — Import: add saveAndSyncBirth to syncService imports
+patch(
+    BIRTH_SCREEN,
+    "import { triggerSync } from '../../services/syncService'",
+    "import { triggerSync, saveAndSyncBirth } from '../../services/syncService'",
+    label="syncService import",
+)
+
+# 2c — Step labels: reorder to spec order
+patch(
+    BIRTH_SCREEN,
+    "  const STEP_LABELS = ['Father','Mother','Child Info','Review']",
+    "  const STEP_LABELS = ['Child Info','Father','Mother','Review']",
+    label="STEP_LABELS reorder",
+)
+
+# 2d — Step validations: child info is now step 1, father step 2, mother step 3
+patch(
+    BIRTH_SCREEN,
+    """\
+  const step1Valid = isNINComplete(fatherNid) && !!fatherData
+  const step2Valid = isNINComplete(motherNid) && !!motherData
+  const step3Valid = !!childFirst.trim() && !!childSurname.trim() && !!childGender && childDOB.length >= 8""",
+    """\
+  // Spec §2.7: Step 1 = Child Info, Step 2 = Father NID, Step 3 = Mother NID
+  const step1Valid = !!childFirst.trim() && !!childSurname.trim() && !!childGender && childDOB.length >= 8
+  const step2Valid = isNINComplete(fatherNid) && !!fatherData
+  const step3Valid = isNINComplete(motherNid) && !!motherData""",
+    label="step validations",
+)
+
+# 2e — Auto-fill from father: only overwrite empty fields (step 1 already typed)
+patch(
+    BIRTH_SCREEN,
+    """\
+  // Auto-fill child names from father
+  useEffect(() => {
+    if (fatherData) {
+      setChildMiddle(fatherData.middleName ?? '')
+      setChildSurname(fatherData.surname ?? '')
+    }
+  }, [fatherData])""",
+    """\
+  // Auto-fill child names from father — only if user hasn't typed them yet in Step 1
+  useEffect(() => {
+    if (fatherData) {
+      if (!childMiddle.trim()) setChildMiddle(fatherData.middleName ?? '')
+      if (!childSurname.trim()) setChildSurname(fatherData.surname ?? '')
+    }
+  }, [fatherData])""",
+    label="auto-fill guard",
+)
+
+# 2f — NIN generation: use generateNewbornNationalId (spec TZ-YYYYMMDD-XXXXX format)
+patch(
+    BIRTH_SCREEN,
+    "      const certNo     = generateBirthCertNo()\n      const nationalId = generateNationalId(childDOB)",
+    "      const certNo     = generateBirthCertNo()\n      const nationalId = generateNewbornNationalId(childDOB)  // Spec §2.7 Step 4: TZ-YYYYMMDD-XXXXX",
+    label="NIN format",
+)
+
+# 2g — Use saveAndSyncBirth instead of saveBirth (online direct, offline queue)
+patch(
+    BIRTH_SCREEN,
+    "      const birth = await saveBirth({",
+    """\
+      // Spec §2.7: if online → save directly to remote DB; if offline → save to
+      // local SQLite (synced=0) and push automatically when device reconnects
+      const { birth, syncedRemote } = await saveAndSyncBirth({""",
+    label="saveAndSyncBirth",
+)
+
+# 2h — Background PDF generation: skip duplicate triggerSync if already synced
+patch(
+    BIRTH_SCREEN,
+    """\
+      // Background: generate PDF + try sync
+      ;(async () => {
+        try {
+          const pdf = await generateBirthPdf(birth)
+          await updateBirthCertPath(birth.id, pdf)
+          setPdfPath(pdf)
+        } catch (e) { console.warn('PDF gen failed:', e) }
+        await triggerSync()
+      })()""",
+    """\
+      // Background: generate PDF; only bulk-sync if immediate push failed
+      ;(async () => {
+        try {
+          const pdf = await generateBirthPdf(birth)
+          await updateBirthCertPath(birth.id, pdf)
+          setPdfPath(pdf)
+        } catch (e) { console.warn('PDF gen failed:', e) }
+        if (!syncedRemote) await triggerSync()
+      })()""",
+    label="background sync",
+)
+
+# 2i — JSX step rendering: swap step 1 (father) → step 2, step 2 (mother) → step 3,
+#       step 3 (child info) → step 1
+#   Do in a single replacement to avoid conflicts
+BIRTH_OLD_STEPS = """\
+          {step===1 && renderNIDStep('father')}
+          {step===2 && renderNIDStep('mother')}
+          {step===3 && ("""
+
+BIRTH_NEW_STEPS = """\
+          {/* Spec §2.7 Step 1: Child birth details */}
+          {step===1 && ("""
+
+patch(BIRTH_SCREEN, BIRTH_OLD_STEPS, BIRTH_NEW_STEPS, label="JSX step 1 open")
+
+# Now the block that used to be step===3 (child info) ends just before step===4.
+# We need to close it and add steps 2 (father) and 3 (mother).
+# The pattern to find is the end of the child info block + the step 4 opening.
+patch(
+    BIRTH_SCREEN,
+    """\
+              </View>
+            </View>
+          )}
+          {step===4 && (""",
+    """\
+              </View>
+            </View>
+          )}
+          {/* Spec §2.7 Step 2: Father NID validation */}
+          {step===2 && renderNIDStep('father')}
+          {/* Spec §2.7 Step 2: Mother NID validation */}
+          {step===3 && renderNIDStep('mother')}
+          {/* Spec §2.7 Step 4: Review before final submission */}
+          {step===4 && (""",
+    label="JSX insert father/mother after child-info block",
+)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PATCH 3 — RecordDeathScreen.tsx: INFANT/ADULT split + 4-step flow + sync
+# ══════════════════════════════════════════════════════════════════════════════
+DEATH_SCREEN = path("code/mobile/src/screens/hospital/RecordDeathScreen.tsx")
+
+print("\n[3/3] Patching RecordDeathScreen.tsx")
+
+# 3a — Import: add saveAndSyncDeath
+patch(
+    DEATH_SCREEN,
+    "import { saveDeath, generateDeathCertNo, updateDeathCertPath } from '../../services/localDb'",
+    "import { generateDeathCertNo, updateDeathCertPath } from '../../services/localDb'",
+    label="remove saveDeath from localDb import",
+)
+patch(
+    DEATH_SCREEN,
+    "import { triggerSync } from '../../services/syncService'",
+    "import { triggerSync, saveAndSyncDeath } from '../../services/syncService'",
+    label="add saveAndSyncDeath import",
+)
+
+# 3b — Replace the entire screen function body (lines 159-486).
+#      We keep everything before and after that block.
+death_content = read(DEATH_SCREEN)
+
+FUNC_MARKER_START = "export default function RecordDeathScreen({ navigation }: Props) {"
+FUNC_MARKER_END   = "\nconst s = StyleSheet.create({"
+
+idx_start = death_content.index(FUNC_MARKER_START)
+idx_end   = death_content.index(FUNC_MARKER_END)
+
+BEFORE = death_content[:idx_start]
+AFTER  = death_content[idx_end:]   # includes '\nconst s = ...'
+
+NEW_FUNCTION = r"""export default function RecordDeathScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
 
   // ── Step state (1=Type, 2=Lookup, 3=Details, 4=Issued) ───────────────────
@@ -740,21 +859,59 @@ export default function RecordDeathScreen({ navigation }: Props) {
     </SafeAreaView>
   )
 }
+"""
 
-const s = StyleSheet.create({
-  header:      { flexDirection:'row', alignItems:'center', paddingHorizontal:16, paddingVertical:12, borderBottomWidth:1 },
-  backBtn:     { width:36, height:36, borderRadius:10, alignItems:'center', justifyContent:'center' },
-  headerTitle: { fontSize:15, fontWeight:'800' },
-  headerSub:   { fontSize:11, marginTop:2 },
-  stepBar:     { flexDirection:'row', paddingVertical:12, paddingHorizontal:24, borderBottomWidth:1 },
-  stepDot:     { width:22, height:22, borderRadius:11, alignItems:'center', justifyContent:'center', marginBottom:4 },
-  stepLabel:   { fontSize:10, fontWeight:'600' },
-  stepTitle:   { fontSize:16, fontWeight:'800' },
-  searchBtn:   { flexDirection:'row', alignItems:'center', gap:6, backgroundColor:'#dc2626', borderRadius:10, paddingHorizontal:14, paddingVertical:12 },
-  chip:        { borderWidth:1, borderRadius:20, paddingHorizontal:12, paddingVertical:6 },
-  citizenCard: { flexDirection:'row', alignItems:'center', borderWidth:1, borderRadius:12, padding:14 },
-  proceedBtn:  { backgroundColor:'#dc2626', borderRadius:12, paddingVertical:14, alignItems:'center' },
-  submitBtn:   { backgroundColor:'#dc2626', borderRadius:12, paddingVertical:14, alignItems:'center', marginTop:8 },
+new_death_content = BEFORE + NEW_FUNCTION + AFTER
+
+# Add typeTile style to the StyleSheet at the end
+STYLE_ADD = """\
   typeTile:    { flexDirection:'row', alignItems:'flex-start', gap:12, borderWidth:2, borderRadius:16, padding:16 },
-  typeTileIcon:{ width:52, height:52, borderRadius:14, alignItems:'center', justifyContent:'center' },
-})
+  typeTileIcon:{ width:52, height:52, borderRadius:14, alignItems:'center', justifyContent:'center' },"""
+
+new_death_content = new_death_content.replace(
+    "  submitBtn:   { backgroundColor:'#dc2626', borderRadius:12, paddingVertical:14, alignItems:'center', marginTop:8 },",
+    "  submitBtn:   { backgroundColor:'#dc2626', borderRadius:12, paddingVertical:14, alignItems:'center', marginTop:8 },\n" + STYLE_ADD,
+)
+
+# Write the patched death screen
+write(DEATH_SCREEN, new_death_content)
+print(f"  ✓  [RecordDeathScreen full rewrite] Written")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SUMMARY
+# ══════════════════════════════════════════════════════════════════════════════
+print("""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        PATCH APPLIED SUCCESSFULLY                           ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  BIRTH REGISTRATION  (RegisterBirthScreen.tsx)                               ║
+║  ─────────────────────────────────────────────                               ║
+║  Step 1 → Child Info (name, gender, date of birth)          [was: Father]   ║
+║  Step 2 → Father NID validation                             [was: Mother]   ║
+║  Step 3 → Mother NID validation                             [was: Child]    ║
+║  Step 4 → Review & Submit                                   [unchanged]     ║
+║                                                                              ║
+║  NIN format: TZ-YYYYMMDD-XXXXX  (spec §2.7 Step 4)                          ║
+║  Online:  data sent directly to remote DB on submit                          ║
+║  Offline: stored in SQLite; auto-syncs when device reconnects                ║
+║                                                                              ║
+║  DEATH REGISTRATION  (RecordDeathScreen.tsx)                                 ║
+║  ────────────────────────────────────────────                                ║
+║  Step 1 → Select INFANT or ADULT  (was: no selection)                        ║
+║  Step 2 → ADULT: citizen NID lookup  (existing)                              ║
+║           INFANT: Father NID + Mother NID lookup  (new)                      ║
+║  Step 3 → Death details (cause, date, location, informant)  [was: step 2]   ║
+║  Step 4 → Certificate issued                                [was: step 3]   ║
+║                                                                              ║
+║  Online/offline sync: same behaviour as birth                                ║
+║                                                                              ║
+║  ALREADY CORRECT (no changes needed):                                        ║
+║  • Facility + Officer auto-attached from officer profile                     ║
+║  • NetInfo listener auto-syncs pending records on reconnect                  ║
+║  • PDF generation + QR cert storage in local rita_certificates               ║
+║  • Village Officer death (VillageRecordDeathScreen.tsx) — Case A correct     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+""")
+

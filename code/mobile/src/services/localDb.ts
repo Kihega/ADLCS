@@ -149,6 +149,17 @@ export function generateDeathCertNo(): string {
   return `TZ-D-${seq} A`
 }
 
+export function generateNewbornNationalId(dob: string): string {
+  // Spec §2.7 Step 4 — format: TZ-YYYYMMDD-XXXXX
+  const parts    = dob.split('/')
+  const day      = (parts[0] ?? '01').padStart(2, '0')
+  const month    = (parts[1] ?? '01').padStart(2, '0')
+  const year     = parts[2] ?? new Date().getFullYear().toString()
+  const datePart = `${year}${month}${day}`
+  const seq      = String(Math.floor(Math.random() * 90000) + 10000).padStart(5, '0')
+  return `TZ-${datePart}-${seq}`
+}
+
 export function generateNationalId(dob: string, regionCode = '07', districtCode = '03', wardCode = '1'): string {
   // Parse DD/MM/YYYY
   const parts  = dob.split('/')
