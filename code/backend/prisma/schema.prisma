@@ -14,6 +14,36 @@ enum Jurisdiction {
   zanzibar
 }
 
+// village = mainland rural, street = urban / Zanzibar shehia
+enum VillageType {
+  village
+  street
+}
+
+// village = mainland rural, street = urban / Zanzibar shehia
+enum VillageType {
+  village
+  street
+}
+
+// village = mainland rural, street = urban / Zanzibar shehia
+enum VillageType {
+  village
+  street
+}
+
+// village = mainland rural, street = urban / Zanzibar shehia
+enum VillageType {
+  village
+  street
+}
+
+// village = mainland rural, street = urban / Zanzibar shehia
+enum VillageType {
+  village
+  street
+}
+
 enum AdminStatus {
   pending
   active
@@ -208,9 +238,10 @@ model District {
   region    Region   @relation(fields: [regionId], references: [id])
   wards     Ward[]
   districtAdmins DistrictAdmin[]
-  villageOfficers VillageOfficer[]
+  villageOfficers  VillageOfficer[]
   hospitalOfficers HospitalOfficer[]
-  snapshots PopulationSnapshot[]
+  facilities       HealthFacility[]
+  snapshots        PopulationSnapshot[]
 
   @@map("districts")
 }
@@ -223,17 +254,19 @@ model Ward {
 
   district   District @relation(fields: [districtId], references: [id])
   villages   Village[]
-  villageOfficers VillageOfficer[]
-  snapshots  PopulationSnapshot[]
+  villageOfficers  VillageOfficer[]
+  facilities       HealthFacility[]
+  snapshots        PopulationSnapshot[]
 
   @@map("wards")
 }
 
 model Village {
-  id        Int      @id @default(autoincrement())
-  wardId    Int      @map("ward_id")
-  name      String   @db.VarChar(80)
-  createdAt DateTime @default(now()) @map("created_at")
+  id        Int         @id @default(autoincrement())
+  wardId    Int         @map("ward_id")
+  name      String      @db.VarChar(80)
+  type      VillageType @default(village)
+  createdAt DateTime    @default(now()) @map("created_at")
 
   ward      Ward     @relation(fields: [wardId], references: [id])
   officers  VillageOfficer[]
@@ -600,6 +633,8 @@ model HealthFacility {
   facilityType    FacilityType      @map("facility_type")
   facilityGrade   FacilityGrade     @map("facility_grade")
   villageId       Int?              @map("village_id")
+  wardId          Int?              @map("ward_id")       -- direct ward link
+  districtId      Int?              @map("district_id")   -- direct district link
   ownershipType   FacilityOwnership @map("ownership_type")
   gpsLat          Decimal?          @map("gps_lat") @db.Decimal(10, 8)
   gpsLng          Decimal?          @map("gps_lng") @db.Decimal(11, 8)
@@ -608,6 +643,8 @@ model HealthFacility {
   officers        HospitalOfficer[]
   births          Birth[]
   deaths          Death[]
+  ward            Ward?             @relation(fields: [wardId],     references: [id])
+  district        District?         @relation(fields: [districtId], references: [id])
 
   @@map("health_facilities")
 }
