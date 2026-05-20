@@ -322,7 +322,9 @@ export default function RegisterBirthScreen({ navigation }: Props) {
     try {
       const token = await AsyncStorage.getItem('adlcs_access_token')
       if (token) {
-        const res = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(nid.trim())}`, { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+        const _bc = new AbortController(); const _bt = setTimeout(() => _bc.abort(), 5000)
+        const res = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(nid.trim())}`, { headers:{ Authorization:`Bearer ${token}` }, signal: _bc.signal })
+        clearTimeout(_bt)
         const json = await res.json()
         if (json.success && json.data) {
           setData({ ...json.data, firstName: json.data.firstName, middleName: json.data.middleName ?? '', surname: json.data.surname, gender: json.data.gender?.toUpperCase(), dateOfBirth: json.data.dateOfBirth, age: 0, region:'Tanzania', district:'—', occupation:'—', vitalStatus: json.data.vitalStatus?.toUpperCase() ?? 'ALIVE' })
@@ -354,7 +356,9 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       const token      = await AsyncStorage.getItem('adlcs_access_token')
       const cache      = token ? await (async () => {
         try {
-          const r = await fetch(`${API_BASE}/officer/dashboard`, { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+          const _bdc = new AbortController(); const _bdt = setTimeout(() => _bdc.abort(), 5000)
+          const r = await fetch(`${API_BASE}/officer/dashboard`, { headers:{ Authorization:`Bearer ${token}` }, signal: _bdc.signal })
+          clearTimeout(_bdt)
           const j = await r.json()
           return j.success ? j.data : null
         } catch { return null }

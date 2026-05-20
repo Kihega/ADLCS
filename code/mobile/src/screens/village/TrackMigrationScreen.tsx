@@ -185,7 +185,7 @@ export default function TrackMigrationScreen({ navigation }: Props) {
       const token = await AsyncStorage.getItem('adlcs_access_token')
       if (token && isOnline()) {
         const r = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(citizenNid.trim())}`,
-          { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+          { headers:{ Authorization:`Bearer ${token}` }, signal: (()=>{const __c=new AbortController();setTimeout(()=>__c.abort(),5000);return __c.signal})() })
         const j = await r.json()
         if (j.success && j.data) { setCitizenData(j.data); setSearching(false); return }
       }

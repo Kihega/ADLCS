@@ -186,7 +186,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
       const token = await AsyncStorage.getItem('adlcs_access_token')
       if (token && isOnline()) {
         const r = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
-          { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+          { headers:{ Authorization:`Bearer ${token}` }, signal: (()=>{const __c=new AbortController();setTimeout(()=>__c.abort(),5000);return __c.signal})() })
         const j = await r.json()
         if (j.success && j.data) { setCitizen(j.data); setStep(2); setLookupLoad(false); return }
       }
@@ -210,7 +210,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
       let officerName='', facilityName=''
       if (token && isOnline()) {
         try {
-          const r = await fetch(`${API_BASE}/officer/dashboard`,{ headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+          const r = await fetch(`${API_BASE}/officer/dashboard`,{ headers:{ Authorization:`Bearer ${token}` }, signal: (()=>{const __c=new AbortController();setTimeout(()=>__c.abort(),5000);return __c.signal})() })
           const j = await r.json()
           if (j.success) { officerName=j.data.officerName; facilityName=j.data.villageName??j.data.facilityName }
         } catch {}

@@ -162,7 +162,7 @@ async function lookupCitizen(nid: string, token: string|null): Promise<any|null>
   if (!token || !isOnline()) return null
   try {
     const r = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(nid)}`,
-      { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+      { headers:{ Authorization:`Bearer ${token}` }, signal: (()=>{const __c=new AbortController();setTimeout(()=>__c.abort(),5000);return __c.signal})() })
     const j = await r.json()
     return j.success ? j.data : null
   } catch { return null }
