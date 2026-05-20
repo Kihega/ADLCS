@@ -29,12 +29,13 @@ import {
   Menu, X, Download, WifiLow, UserPlus, Navigation,
   Landmark, IdCard, Home,
 } from 'lucide-react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { getLocalStats, getCachedOfficerData, cacheOfficerData } from '../../services/localDb'
 import {
   fetchRemoteDashboard, fetchRemoteActivity,
-  isOnline, getConnQuality, ConnQuality,
+  isOnline, getConnQuality, checkConnQuality, ConnQuality,
 } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { useGeofence } from '../../context/GeofenceContext'
@@ -311,44 +312,45 @@ export default function VillageHomeScreen({ navigation }: Props) {
     const token = await AsyncStorage.getItem('adlcs_access_token')
     if (!token) { navigation.replace('Login'); return }
 
-    const localStats = await getLocalStats()
-    setStats(localStats)
-    setUnread(localStats.pendingSync)
-    if (!silent) setLoading(false)
+    if (!silent) setLoading(true)
 
-    const cached = await getCachedOfficerData()
-    if (cached.officerName) setOfficer(prev => ({
-      ...prev, ...cached as any,
-      villageName: (cached as any).villageName ?? cached.facilityName ?? prev.villageName,
-    }))
+    // Real connection quality ping
+    checkConnQuality().then(setConnQuality)
 
-    setConnQuality(getConnQuality())
+    // Fetch live data from Supabase (via backend)
     const [remote, acts] = await Promise.all([fetchRemoteDashboard(), fetchRemoteActivity()])
-    setConnQuality(getConnQuality())
 
     if (acts.length > 0) setActivity(acts)
     if (remote) {
-      const merged = {
-        officerName:    remote.officerName    ?? cached.officerName    ?? 'Village Officer',
-        villageName:    remote.villageName    ?? (cached as any).villageName ?? 'My Village',
-        wardName:       remote.wardName       ?? '—',
-        totalCitizens:  remote.totalCitizens  ?? 0,
-        employeeId:     remote.employeeId     ?? '',
-      }
-      setOfficer(merged)
-      await cacheOfficerData({ ...merged, facilityName: merged.villageName })
-      setStats(prev => ({
-        ...prev,
-        monthBirths: Math.max(prev.monthBirths, remote.monthBirths ?? 0),
-        monthDeaths: Math.max(prev.monthDeaths, remote.monthDeaths ?? 0),
-      }))
+      setOfficer({
+        officerName:   remote.officerName   ?? 'Village Officer',
+        villageName:   remote.villageName   ?? 'My Village',
+        wardName:      remote.wardName      ?? '—',
+        totalCitizens: remote.totalCitizens ?? 0,
+        employeeId:    remote.employeeId    ?? '',
+      })
+      // Stats directly from PostgreSQL
+      setStats({
+        todayBirths: remote.todayBirths  ?? 0,
+        todayDeaths: remote.todayDeaths  ?? 0,
+        monthBirths: remote.monthBirths  ?? 0,
+        monthDeaths: remote.monthDeaths  ?? 0,
+        pendingSync: remote.pendingCases ?? 0,
+        totalBirths: 0,
+        totalDeaths: 0,
+      })
+      setUnread(remote.pendingCases ?? 0)
     }
+    setLoading(false)
     setRefreshing(false)
   }, [navigation])
 
+  // Refresh on focus (picks up new citizen/death registrations immediately)
+  useFocusEffect(useCallback(() => { loadData() }, [loadData]))
+
+  // Background poll every 60s
   useEffect(() => {
-    loadData()
-    pollRef.current = setInterval(()=>{ setConnQuality(getConnQuality()); loadData(true) }, 30_000)
+    pollRef.current = setInterval(() => loadData(true), 60_000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [loadData])
 

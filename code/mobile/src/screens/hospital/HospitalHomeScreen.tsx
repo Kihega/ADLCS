@@ -27,12 +27,13 @@ import {
   Menu, X, Download, WifiLow, Stethoscope, IdCard,
   Calendar, BadgeCheck, Eye, EyeOff,
 } from 'lucide-react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { getLocalStats, getCachedOfficerData, cacheOfficerData } from '../../services/localDb'
 import {
   fetchRemoteDashboard, fetchRemoteActivity,
-  isOnline, getConnQuality, triggerSync,
+  isOnline, getConnQuality, checkConnQuality, triggerSync,
   fetchOfficerProfile, ConnQuality,
 } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
@@ -457,54 +458,54 @@ export default function HospitalHomeScreen({ navigation }: Props) {
     const token = await AsyncStorage.getItem('adlcs_access_token')
     if (!token) { navigation.replace('Login'); return }
 
-    // 1. Local DB (instant)
-    const localStats = await getLocalStats()
-    setStats(localStats)
-    setUnread(localStats.pendingSync)
-    if (!silent) setLoading(false)
+    if (!silent) setLoading(true)
 
-    // 2. Cached officer info
-    const cached = await getCachedOfficerData()
-    if (cached.officerName) setOfficer(prev => ({ ...prev, ...cached as any }))
+    // Real connection quality — async ping to backend /api/health
+    checkConnQuality().then(setConnQuality)
 
-    // 3. Remote (non-blocking)
-    setConnQuality(getConnQuality())
+    // Fetch live stats + officer info from Supabase (via backend)
     const [remote, acts] = await Promise.all([fetchRemoteDashboard(), fetchRemoteActivity()])
-    setConnQuality(getConnQuality()) // re-check after requests complete
 
     if (acts.length > 0) setActivity(acts)
     if (remote) {
-      const merged = {
-        officerName:      remote.officerName      ?? cached.officerName      ?? 'Officer',
-        facilityName:     remote.facilityName     ?? cached.facilityName     ?? 'Facility',
-        facilityType:     remote.facilityType     ?? cached.facilityType     ?? 'hospital',
-        facilityGrade:    remote.facilityGrade    ?? cached.facilityGrade    ?? '',
-        facilityRegion:   remote.facilityRegion   ?? cached.facilityRegion   ?? '—',
-        facilityDistrict: remote.facilityDistrict ?? cached.facilityDistrict ?? '—',
-        facilityGpsLat:   String(remote.facilityGpsLat  ?? cached.facilityGpsLat  ?? ''),
-        facilityGpsLng:   String(remote.facilityGpsLng  ?? cached.facilityGpsLng  ?? ''),
+      setOfficer({
+        officerName:        remote.officerName        ?? 'Officer',
+        facilityName:       remote.facilityName       ?? 'Facility',
+        facilityType:       remote.facilityType       ?? 'hospital',
+        facilityGrade:      remote.facilityGrade      ?? '',
+        facilityRegion:     remote.facilityRegion     ?? '—',
+        facilityDistrict:   remote.facilityDistrict   ?? '—',
+        facilityGpsLat:     String(remote.facilityGpsLat  ?? ''),
+        facilityGpsLng:     String(remote.facilityGpsLng  ?? ''),
         facilityCertIssued: Number(remote.facilityCertIssued ?? 0),
         facilityDeliveries: Number(remote.facilityDeliveries ?? 0),
-      }
-      setOfficer(merged)
-      await cacheOfficerData(merged)
+      })
       if (remote.facilityGpsLat && remote.facilityGpsLng) {
         setGeofenceConfig({ gps: { lat: Number(remote.facilityGpsLat), lng: Number(remote.facilityGpsLng) }, role: 'hospital_officer' })
       }
-      setStats(prev => ({
-        ...prev,
-        todayBirths: Math.max(prev.todayBirths, remote.todayBirths ?? 0),
-        todayDeaths: Math.max(prev.todayDeaths, remote.todayDeaths ?? 0),
-        monthBirths: Math.max(prev.monthBirths, remote.monthBirths ?? 0),
-        monthDeaths: Math.max(prev.monthDeaths, remote.monthDeaths ?? 0),
-      }))
+      // All counts come directly from PostgreSQL — no local merge needed
+      setStats({
+        todayBirths: remote.todayBirths  ?? 0,
+        todayDeaths: remote.todayDeaths  ?? 0,
+        monthBirths: remote.monthBirths  ?? 0,
+        monthDeaths: remote.monthDeaths  ?? 0,
+        pendingSync: remote.pendingCases ?? 0,
+        totalBirths: 0,
+        totalDeaths: 0,
+      })
+      // Bell badge = births/deaths that still need certificates
+      setUnread(remote.pendingCases ?? 0)
     }
+    setLoading(false)
     setRefreshing(false)
   }, [navigation, setGeofenceConfig])
 
+  // ← Refresh whenever screen comes back into focus (e.g. after RegisterBirth)
+  useFocusEffect(useCallback(() => { loadData() }, [loadData]))
+
+  // Background poll every 60s
   useEffect(() => {
-    loadData()
-    pollRef.current = setInterval(() => { setConnQuality(getConnQuality()); loadData(true) }, 30_000)
+    pollRef.current = setInterval(() => loadData(true), 60_000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [loadData])
 
