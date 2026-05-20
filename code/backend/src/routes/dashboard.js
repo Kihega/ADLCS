@@ -451,14 +451,22 @@ router.get('/citizen-lookup', async (req, res) => {
   const q = req.query.q?.toString().trim()
   if (!q) return res.status(400).json({ success: false, message: 'Query required' })
   try {
-    const citizen = await prisma.citizen.findFirst({
-      where: { OR: [
-        { nationalId: { contains: q, mode: 'insensitive' } },
-        { firstName:  { contains: q, mode: 'insensitive' } },
-        { surname:    { contains: q, mode: 'insensitive' } },
-      ]},
+    // Try exact NID match first (most common mobile use-case: scan/type NID)
+    let citizen = await prisma.citizen.findFirst({
+      where: { nationalId: q },
       select: { id: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true, dateOfBirth: true, vitalStatus: true },
     })
+    // Fallback: partial name search (if not an exact NID query)
+    if (!citizen) {
+      citizen = await prisma.citizen.findFirst({
+        where: { OR: [
+          { nationalId: { contains: q, mode: 'insensitive' } },
+          { firstName:  { contains: q, mode: 'insensitive' } },
+          { surname:    { contains: q, mode: 'insensitive' } },
+        ]},
+        select: { id: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true, dateOfBirth: true, vitalStatus: true },
+      })
+    }
     if (!citizen) return res.json({ success: false, message: 'Not found' })
     return res.json({
       success: true,

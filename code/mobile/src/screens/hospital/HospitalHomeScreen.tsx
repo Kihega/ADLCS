@@ -76,7 +76,6 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
-        signal:  AbortSignal.timeout(12_000),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message ?? 'Failed to change password'); return }

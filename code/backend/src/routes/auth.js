@@ -15,6 +15,7 @@ const authService              = require('../services/auth.service')
 const { requireAuth,
         requireMfaTemp }       = require('../middleware/auth')
 const { verifyRefresh }        = require('../lib/jwt')
+const { prisma }               = require('../lib/prisma')
 const { authLimiter }          = require('../middleware/security')
 
 const router = Router()

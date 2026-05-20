@@ -228,8 +228,10 @@ export default function RecordDeathScreen({ navigation }: Props) {
     try {
       const token = await AsyncStorage.getItem('adlcs_access_token')
       if (token) {
+        const _c1 = new AbortController(); const _t1 = setTimeout(() => _c1.abort(), 5000)
         const res  = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
-          { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+          { headers:{ Authorization:`Bearer ${token}` }, signal: _c1.signal })
+        clearTimeout(_t1)
         const json = await res.json()
         if (json.success && json.data) { setCitizen(json.data); setLookupLoad(false); return }
       }
@@ -251,8 +253,10 @@ export default function RecordDeathScreen({ navigation }: Props) {
     try {
       const token = await AsyncStorage.getItem('adlcs_access_token')
       if (token) {
+        const _c2 = new AbortController(); const _t2 = setTimeout(() => _c2.abort(), 5000)
         const res  = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(nid.trim())}`,
-          { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+          { headers:{ Authorization:`Bearer ${token}` }, signal: _c2.signal })
+        clearTimeout(_t2)
         const json = await res.json()
         if (json.success && json.data) {
           const d = json.data
@@ -278,7 +282,9 @@ export default function RecordDeathScreen({ navigation }: Props) {
       let officerName = '', facilityName = ''
       if (token) {
         try {
-          const r = await fetch(`${API_BASE}/officer/dashboard`, { headers:{ Authorization:`Bearer ${token}` }, signal: AbortSignal.timeout(5000) })
+          const _dc = new AbortController(); const _dt = setTimeout(() => _dc.abort(), 5000)
+          const r = await fetch(`${API_BASE}/officer/dashboard`, { headers:{ Authorization:`Bearer ${token}` }, signal: _dc.signal })
+          clearTimeout(_dt)
           const j = await r.json()
           if (j.success) { officerName=j.data.officerName; facilityName=j.data.facilityName }
         } catch {}
