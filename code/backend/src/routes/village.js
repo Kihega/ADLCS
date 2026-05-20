@@ -44,9 +44,15 @@ router.get('/dashboard', async (req, res) => {
     const vid        = officer.villageId ?? -1
     const monthStart = startOfMonth()
 
-    const [totalCitizens, monthDeaths] = await Promise.all([
+    const dayStart   = new Date(); dayStart.setHours(0,0,0,0)
+    const dayEnd     = new Date(); dayEnd.setHours(23,59,59,999)
+
+    const [totalCitizens, monthDeaths, todayDeaths, todayCitizens, pendingCases] = await Promise.all([
       prisma.citizen.count({ where:{ currentVillageId:vid } }),
       prisma.death.count({ where:{ villageOfficerId:id, createdAt:{ gte:monthStart } } }).catch(()=>0),
+      prisma.death.count({ where:{ villageOfficerId:id, createdAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
+      prisma.citizen.count({ where:{ registeredById:id, createdAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
+      prisma.citizen.count({ where:{ currentVillageId:vid, vitalStatus:'alive', idCardIssued:null } }).catch(()=>0),
     ])
 
     return res.json({
@@ -57,9 +63,11 @@ router.get('/dashboard', async (req, res) => {
         villageName:    officer.village?.name ?? 'Unknown Village',
         wardName:       officer.ward?.name    ?? 'Unknown Ward',
         totalCitizens,
+        todayBirths:    todayCitizens,
+        todayDeaths,
         monthBirths:    0,
         monthDeaths,
-        pendingCases:   0,
+        pendingCases,
       },
     })
   } catch (err) {

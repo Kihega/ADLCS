@@ -1,20 +1,11 @@
 /**
- * syncService.ts  v8.0  ONLINE-ONLY
+ * syncService.ts  v9.0  ONLINE-ONLY — real backend API
  *
- * All data goes directly to backend (https://adlcs-backend.onrender.com).
- * No offline SQLite queue — every call is a live API request.
+ * Every function that reads or writes data goes to
+ *   https://adlcs-backend.onrender.com  →  Supabase PostgreSQL
  *
- * AbortSignal.timeout() is NOT used (Hermes incompatible).
- * Timeouts use AbortController + setTimeout instead.
- *
- * Exports:
- *   apiGet / apiPost          — authenticated HTTP helpers
- *   isOnline / getConnQuality — always-online stubs
- *   saveAndSyncBirth/Death    — POST directly to backend
- *   fetchRemoteDashboard/Activity/Records/OfficerProfile
- *   checkConnQuality          — real ping to /api/health
- *   getSyncStatus             — stub (no local queue)
- *   triggerSync / init / stop — no-ops
+ * No SQLite, no NetInfo, no offline queue.
+ * AbortSignal.timeout() NOT used (Hermes-incompatible); uses makeSignal() instead.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -25,23 +16,23 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onren
 export type ConnQuality = 'Good' | 'Fair' | 'Offline'
 export interface SyncResult { synced: number; failed: number; offline: boolean }
 
-// ─── Online status — always true in online-only mode ──────────────────────────
+// ── Always online in online-only mode ─────────────────────────────────────────
 export function isOnline(): boolean { return true }
 export function getConnQuality(): ConnQuality { return 'Good' }
 
-// ─── Abort-controller timeout helper (Hermes-safe) ────────────────────────────
+// ── Hermes-safe abort helper ───────────────────────────────────────────────────
 function makeSignal(ms: number): { signal: AbortSignal; clear: () => void } {
   const ctrl  = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), ms)
   return { signal: ctrl.signal, clear: () => clearTimeout(timer) }
 }
 
-// ─── Auth token ───────────────────────────────────────────────────────────────
+// ── Token ─────────────────────────────────────────────────────────────────────
 async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem('adlcs_access_token')
 }
 
-// ─── HTTP helpers ─────────────────────────────────────────────────────────────
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
 export async function apiPost(endpoint: string, body: object): Promise<any> {
   const token = await getToken()
   if (!token) throw new Error('No auth token')
@@ -74,18 +65,19 @@ export async function apiGet(endpoint: string): Promise<any> {
   } catch (e) { clear(); throw e }
 }
 
-// ─── Connection quality check ──────────────────────────────────────────────────
+// ── Connection quality — real ping ────────────────────────────────────────────
 export async function checkConnQuality(): Promise<ConnQuality> {
-  const { signal, clear } = makeSignal(3000)
+  const { signal, clear } = makeSignal(4000)
   try {
     const t = Date.now()
-    await fetch(`${API_BASE}/health`, { signal })
+    const res = await fetch(`${API_BASE}/health`, { signal })
     clear()
-    return Date.now() - t < 700 ? 'Good' : 'Fair'
+    if (!res.ok) return 'Fair'
+    return Date.now() - t < 800 ? 'Good' : 'Fair'
   } catch { clear(); return 'Offline' }
 }
 
-// ─── Save birth → POST directly to backend ────────────────────────────────────
+// ── Save birth → POST directly to backend → Supabase ─────────────────────────
 export async function saveAndSyncBirth(
   data: Omit<LocalBirth, 'id'|'registeredAt'|'synced'|'certPdfPath'>
 ): Promise<{ birth: LocalBirth; syncedRemote: boolean }> {
@@ -116,7 +108,7 @@ export async function saveAndSyncBirth(
   return { birth, syncedRemote: false }
 }
 
-// ─── Save death → POST directly to backend ────────────────────────────────────
+// ── Save death → POST directly to backend → Supabase ─────────────────────────
 export async function saveAndSyncDeath(
   data: Omit<LocalDeath, 'id'|'registeredAt'|'synced'|'certPdfPath'>
 ): Promise<{ death: LocalDeath; syncedRemote: boolean }> {
@@ -145,7 +137,7 @@ export async function saveAndSyncDeath(
   return { death, syncedRemote: false }
 }
 
-// ─── Remote data fetchers ──────────────────────────────────────────────────────
+// ── Remote data fetchers ──────────────────────────────────────────────────────
 export async function fetchRemoteDashboard(): Promise<any | null> {
   try {
     const json = await apiGet('/officer/dashboard')
@@ -165,7 +157,8 @@ export async function fetchRemoteRecords(
 ): Promise<{ data: any[]; total: number } | null> {
   try {
     const params = new URLSearchParams({
-      type, page: String(page), limit: '30', ...(query ? { q: query } : {})
+      type, page: String(page), limit: '30',
+      ...(query ? { q: query } : {}),
     })
     const json = await apiGet(`/officer/records?${params}`)
     return json.success ? { data: json.data, total: json.total ?? json.data.length } : null
@@ -179,15 +172,37 @@ export async function fetchOfficerProfile(): Promise<any | null> {
   } catch { return null }
 }
 
-// ─── Sync status — no local queue in online-only mode ─────────────────────────
+// ── Sync status — from real backend ──────────────────────────────────────────
 export async function getSyncStatus() {
+  try {
+    const json = await apiGet('/officer/sync/status')
+    if (json.success && json.data) {
+      await AsyncStorage.setItem('adlcs_last_sync', json.data.lastSyncAt ?? new Date().toISOString())
+      return {
+        unsyncedBirths: json.data.unsyncedBirths ?? 0,
+        unsyncedDeaths: json.data.unsyncedDeaths ?? 0,
+        lastSyncAt:     json.data.lastSyncAt     ?? null,
+      }
+    }
+  } catch {}
   const lastSync = await AsyncStorage.getItem('adlcs_last_sync')
   return { unsyncedBirths: 0, unsyncedDeaths: 0, lastSyncAt: lastSync }
 }
 
-// ─── No-ops (API compatibility with existing screen imports) ──────────────────
+// ── Trigger sync — marks all pending records as synced in DB ─────────────────
 export async function triggerSync(): Promise<SyncResult> {
-  return { synced: 0, failed: 0, offline: false }
+  try {
+    const json = await apiPost('/officer/sync/trigger', {})
+    return {
+      synced:  json.data?.synced  ?? 0,
+      failed:  0,
+      offline: false,
+    }
+  } catch {
+    return { synced: 0, failed: 0, offline: false }
+  }
 }
+
+// ── No-ops (API compatibility) ────────────────────────────────────────────────
 export async function init(_getter?: () => Promise<string|null>): Promise<void> {}
 export function stop(): void {}

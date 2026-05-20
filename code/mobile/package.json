@@ -13,7 +13,6 @@
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/native": "^7.1.6",
     "@react-navigation/native-stack": "^7.3.10",
-    "eslint-config-expo": "~10.0.0",
     "expo": "~54.0.33",
     "expo-asset": "~12.0.13",
     "expo-clipboard": "~8.0.8",
@@ -30,8 +29,7 @@
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-svg": "15.12.1",
-    "typescript": "~5.9.2"
+    "react-native-svg": "15.12.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
@@ -39,8 +37,8 @@
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.0",
-    "eslint-config-expo": "~8.0.0",
-    "typescript": "~5.3.3"
+    "eslint-config-expo": "~10.0.0",
+    "typescript": "~5.9.2"
   },
   "private": true
 }

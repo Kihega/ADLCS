@@ -9,7 +9,8 @@ import { useFocusEffect } from '@react-navigation/native'
 import { ArrowLeft, Clock, Baby, Cross, FileText, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { getPendingBirths, getPendingDeaths, LocalBirth, LocalDeath } from '../../services/localDb'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; PendingCases: undefined; IssueCertificate: undefined }
@@ -30,20 +31,32 @@ export default function PendingCasesScreen({ navigation }: Props) {
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
-    const [births, deaths] = await Promise.all([getPendingBirths(), getPendingDeaths()])
-    const br: PendingRow[] = births.map(b => ({
-      id: b.id, type: 'birth', certNo: b.certNo,
-      name: [b.childFirstName, b.childSurname].join(' ').toUpperCase(),
-      date: new Date(b.registeredAt).toLocaleDateString('en-TZ'),
-      reasons: [...(!b.certPdfPath?['no_certificate']:[]), 'rita_unsynced'],
-    }))
-    const dr: PendingRow[] = deaths.map(d => ({
-      id: d.id, type: 'death', certNo: d.certNo,
-      name: d.deceasedName.toUpperCase() || d.nationalId || '—',
-      date: new Date(d.registeredAt).toLocaleDateString('en-TZ'),
-      reasons: [...(!d.certPdfPath?['no_certificate']:[]), 'rita_unsynced'],
-    }))
-    setRows([...br, ...dr])
+    try {
+      const token = await AsyncStorage.getItem('adlcs_access_token')
+      if (!token) { setLoading(false); setRefreshing(false); return }
+      const { signal, clear } = (() => {
+        const c = new AbortController()
+        const t = setTimeout(() => c.abort(), 8000)
+        return { signal: c.signal, clear: () => clearTimeout(t) }
+      })()
+      const res  = await fetch(`${API_BASE}/officer/records/pending`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      })
+      clear()
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        const rows: PendingRow[] = json.data.map((r: any) => ({
+          id:      r.id,
+          type:    r.type    as 'birth'|'death',
+          certNo:  r.certNo  ?? '—',
+          name:    r.name    ?? 'Unknown',
+          date:    r.date    ?? '—',
+          reasons: Array.isArray(r.reasons) ? r.reasons : ['rita_unsynced'],
+        }))
+        setRows(rows)
+      }
+    } catch (e) { console.warn('[PendingCases]', e) }
     setLoading(false); setRefreshing(false)
   }, [])
 

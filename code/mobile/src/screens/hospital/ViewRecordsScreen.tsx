@@ -72,7 +72,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
     if (isOnline()) {
       setOffline(false)
       const remote = await fetchRemoteRecords(filter, 1, q)
-      if (remote && remote.data.length > 0) {
+      if (remote) {
         const remoteRows: DisplayRecord[] = remote.data.map((r: any) => ({
           id:    `remote-${r.id}`, type: r.type,
           certNo: r.certNo, name: r.name, date: r.date,

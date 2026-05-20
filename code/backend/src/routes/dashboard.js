@@ -215,22 +215,32 @@ router.get('/activity', async (req, res) => {
       }
     }
     if (role === 'village_officer') {
-      const citizens = await prisma.citizen.findMany({
-        where:   { registeredById: id },
-        orderBy: { createdAt: 'desc' },
-        take:    limit,
-        select:  { id: true, firstName: true, surname: true, createdAt: true },
-      })
+      const [citizens, deaths] = await Promise.all([
+        prisma.citizen.findMany({
+          where: { registeredById: id },
+          orderBy: { createdAt: 'desc' }, take: limit,
+          select: { id: true, firstName: true, surname: true, createdAt: true },
+        }),
+        prisma.death.findMany({
+          where: { villageOfficerId: id },
+          orderBy: { createdAt: 'desc' }, take: limit,
+          select: { id: true, deathCertNo: true, causeOfDeath: true, createdAt: true },
+        }).catch(() => []),
+      ])
       for (const c of citizens) {
-        items.push({
-          id:    `citizen-${c.id}`,
-          icon:  '👤',
-          label: 'Citizen registered',
-          name:  `${c.firstName} ${c.surname}`,
-          time:  new Date(c.createdAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
-          color: '#00a3dd',
-        })
+        items.push({ id: `citizen-${c.id}`, icon: '👤', label: 'Citizen registered',
+          name: `${c.firstName} ${c.surname}`,
+          time: new Date(c.createdAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+          color: '#00a3dd' })
       }
+      for (const d of deaths) {
+        items.push({ id: `death-${d.id}`, icon: '✝', label: 'Death recorded',
+          name: d.causeOfDeath ?? 'Cause unknown',
+          time: new Date(d.createdAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+          color: '#dc2626' })
+      }
+      // Sort by time desc
+      items.sort((a, b) => b.time.localeCompare(a.time))
     }
     return res.json({ success: true, data: items.slice(0, limit) })
   } catch (err) {
@@ -241,12 +251,48 @@ router.get('/activity', async (req, res) => {
 
 // ── GET /api/officer/records ──────────────────────────────────────────────────
 router.get('/records', async (req, res) => {
-  const { id } = req.user
+  const { id, role } = req.user
   const type   = req.query.type  || 'all'
   const page   = Math.max(parseInt(req.query.page) || 1, 1)
   const limit  = Math.min(parseInt(req.query.limit) || 20, 50)
   const q      = req.query.q?.toString().trim() || ''
   const skip   = (page - 1) * limit
+
+  // Village officers use the dedicated village/records endpoint
+  if (role === 'village_officer') {
+    try {
+      const out = []
+      const deaths = await prisma.death.findMany({
+        where: { villageOfficerId: id },
+        orderBy: { createdAt: 'desc' }, take: limit, skip,
+        select: { id: true, deathCertNo: true, nationalId: true, causeOfDeath: true, createdAt: true, ritaSynced: true },
+      })
+      for (const d of deaths) {
+        out.push({ id: `death-${d.id}`, type: 'death', certNo: d.deathCertNo,
+          name: d.nationalId ?? 'Unknown',
+          date: new Date(d.createdAt).toLocaleDateString('en-TZ'),
+          ritaSynced: d.ritaSynced ?? false, certIssued: false })
+      }
+      const citizens = await prisma.citizen.findMany({
+        where: { registeredById: id },
+        orderBy: { createdAt: 'desc' }, take: limit, skip,
+        select: { id: true, firstName: true, surname: true, nationalId: true, createdAt: true },
+      })
+      for (const c of citizens) {
+        out.push({ id: `citizen-${c.id}`, type: 'birth', certNo: c.nationalId ?? '—',
+          name: `${c.firstName} ${c.surname}`,
+          date: new Date(c.createdAt).toLocaleDateString('en-TZ'),
+          ritaSynced: true, certIssued: false })
+      }
+      out.sort((a, b) => new Date(b.date) - new Date(a.date))
+      return res.json({ success: true, data: out.slice(0, limit), total: out.length, page })
+    } catch (err) {
+      console.error('[records/village]', err)
+      return res.status(500).json({ success: false, message: 'Internal server error' })
+    }
+  }
+
+  // Hospital officer
   try {
     const results = []
     if (type === 'all' || type === 'birth') {
