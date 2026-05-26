@@ -59,6 +59,8 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders:   false,
   message: {
+    success:    false,
+    message:    'Too many requests. Please try again in 15 minutes.',
     error:      'Too many requests. Please try again later.',
     retryAfter: '15 minutes',
   },
@@ -74,6 +76,8 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders:   false,
   message: {
+    success:    false,
+    message:    'Too many login attempts. Please wait 15 minutes before trying again.',
     error:      'Too many authentication attempts. Please try again later.',
     retryAfter: '15 minutes',
   },

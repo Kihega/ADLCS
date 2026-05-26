@@ -40,7 +40,7 @@ import { useTheme, TZ } from '../../context/ThemeContext'
 type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const { width: W } = Dimensions.get('window')
 

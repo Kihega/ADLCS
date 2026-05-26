@@ -157,7 +157,7 @@ function ScreenHeader({ title, sub, icon, iconBg, onBack }: {
 type VStack = { VillageHome:undefined; VillageRecordDeath:undefined }
 type Props  = { navigation: NativeStackNavigationProp<VStack,'VillageRecordDeath'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 
 export default function VillageRecordDeathScreen({ navigation }: Props) {
   const { theme:T } = useTheme()

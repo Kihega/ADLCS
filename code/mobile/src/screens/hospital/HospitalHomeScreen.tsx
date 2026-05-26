@@ -48,7 +48,7 @@ type Props = { navigation: NativeStackNavigationProp<RootStack, 'HospitalHome'> 
 
 const H       = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const W       = Dimensions.get('window').width
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 const CONN_COLORS: Record<ConnQuality, string> = { Good: '#4ade80', Fair: '#fbbf24', Offline: '#f87171' }
 
 // ─── Change Password Modal ─────────────────────────────────────────────────────

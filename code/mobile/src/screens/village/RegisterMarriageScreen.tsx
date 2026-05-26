@@ -156,7 +156,7 @@ function ScreenHeader({ title, sub, icon, iconBg, onBack }: {
 type VStack = { VillageHome:undefined; RegisterMarriage:undefined }
 type Props  = { navigation: NativeStackNavigationProp<VStack,'RegisterMarriage'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 
 async function lookupCitizen(nid: string, token: string|null): Promise<any|null> {
   if (!token || !isOnline()) return null

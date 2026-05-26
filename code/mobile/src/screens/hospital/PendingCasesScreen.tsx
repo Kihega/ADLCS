@@ -10,7 +10,7 @@ import { ArrowLeft, Clock, Baby, Cross, FileText, AlertTriangle, CheckCircle2, C
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; PendingCases: undefined; IssueCertificate: undefined }

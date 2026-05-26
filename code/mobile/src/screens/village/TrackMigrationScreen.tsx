@@ -157,7 +157,7 @@ function ScreenHeader({ title, sub, icon, iconBg, onBack }: {
 type VStack = { VillageHome:undefined; TrackMigration:undefined }
 type Props  = { navigation: NativeStackNavigationProp<VStack,'TrackMigration'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 const REASONS  = ['Employment','Marriage','Education','Family Reunion','Farming','Business','Healthcare','Retirement','Other']
 const REGIONS  = ['Arusha','Dar es Salaam','Dodoma','Geita','Iringa','Kagera','Katavi','Kigoma','Kilimanjaro','Lindi','Manyara','Mara','Mbeya','Morogoro','Mtwara','Mwanza','Njombe','Pemba North','Pemba South','Pwani','Rukwa','Ruvuma','Shinyanga','Simiyu','Singida','Songwe','Tabora','Tanga','Unguja North','Unguja South']
 

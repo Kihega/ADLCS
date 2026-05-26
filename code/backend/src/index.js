@@ -68,6 +68,16 @@ app.use((err, req, res, next) => {
 
 // ── Server start ──────────────────────────────────────────────────────────────
 async function startServer() {
+  // Warn early if required env vars are missing
+  if (!process.env.DATABASE_URL_POOLER) {
+    console.warn('⚠️  DATABASE_URL_POOLER is not set — Prisma pooler connection will fail!')
+    console.warn('   Set DATABASE_URL_POOLER in Render environment variables.')
+    console.warn('   Tip: use your Supabase Transaction pooler connection string.')
+  }
+  if (!process.env.JWT_ACCESS_SECRET) {
+    console.error('❌  JWT_ACCESS_SECRET is not set — authentication will fail!')
+    process.exit(1)
+  }
   try {
     connectRedis()
     await connectDB()

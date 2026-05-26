@@ -101,9 +101,9 @@ router.get('/dashboard', async (req, res) => {
         location,
       ] = await Promise.all([
         prisma.birth.count({ where: { officerId: id, registeredAt: { gte: today, lt: tmrw } } }),
-        prisma.death.count({ where: { hospitalOfficerId: id, createdAt: { gte: today, lt: tmrw } } }),
+        prisma.death.count({ where: { hospitalOfficerId: id, registeredAt: { gte: today, lt: tmrw } } }),
         prisma.birth.count({ where: { officerId: id, registeredAt: { gte: monthStart } } }),
-        prisma.death.count({ where: { hospitalOfficerId: id, createdAt: { gte: monthStart } } }),
+        prisma.death.count({ where: { hospitalOfficerId: id, registeredAt: { gte: monthStart } } }),
         prisma.birth.count({ where: { officerId: id, certPdfUrl: null } }),
         prisma.birth.count({ where: { facilityId: fid, certPdfUrl: { not: null } } }),
         prisma.birth.count({ where: { facilityId: fid } }),
@@ -156,9 +156,9 @@ router.get('/dashboard', async (req, res) => {
         prisma.birth.count({
           where: { registeredAt: { gte: monthStart }, child: { currentVillageId: vid } },
         }),
-        prisma.death.count({ where: { createdAt: { gte: monthStart }, villageOfficerId: id } }),
+        prisma.death.count({ where: { registeredAt: { gte: monthStart }, villageOfficerId: id } }),
         prisma.migration?.count?.({
-          where: { createdAt: { gte: monthStart }, OR: [{ sourceOfficerId: id }, { targetOfficerId: id }] },
+          where: { OR: [{ sourceOfficerId: id }, { targetOfficerId: id }] },
         }).catch(() => 0) ?? Promise.resolve(0),
         prisma.citizen.count({ where: { currentVillageId: vid, vitalStatus: 'alive', idCardIssued: null } })
           .catch(() => 0),
@@ -218,25 +218,25 @@ router.get('/activity', async (req, res) => {
       const [citizens, deaths] = await Promise.all([
         prisma.citizen.findMany({
           where: { registeredById: id },
-          orderBy: { createdAt: 'desc' }, take: limit,
-          select: { id: true, firstName: true, surname: true, createdAt: true },
+          orderBy: { registeredAt: 'desc' }, take: limit,
+          select: { id: true, firstName: true, surname: true, registeredAt: true },
         }),
         prisma.death.findMany({
           where: { villageOfficerId: id },
-          orderBy: { createdAt: 'desc' }, take: limit,
-          select: { id: true, deathCertNo: true, causeOfDeath: true, createdAt: true },
+          orderBy: { registeredAt: 'desc' }, take: limit,
+          select: { id: true, deathCertNo: true, causeOfDeath: true, registeredAt: true },
         }).catch(() => []),
       ])
       for (const c of citizens) {
         items.push({ id: `citizen-${c.id}`, icon: '👤', label: 'Citizen registered',
           name: `${c.firstName} ${c.surname}`,
-          time: new Date(c.createdAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(c.registeredAt ?? new Date()).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
           color: '#00a3dd' })
       }
       for (const d of deaths) {
         items.push({ id: `death-${d.id}`, icon: '✝', label: 'Death recorded',
           name: d.causeOfDeath ?? 'Cause unknown',
-          time: new Date(d.createdAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(d.registeredAt ?? new Date()).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
           color: '#dc2626' })
       }
       // Sort by time desc
@@ -264,24 +264,24 @@ router.get('/records', async (req, res) => {
       const out = []
       const deaths = await prisma.death.findMany({
         where: { villageOfficerId: id },
-        orderBy: { createdAt: 'desc' }, take: limit, skip,
-        select: { id: true, deathCertNo: true, nationalId: true, causeOfDeath: true, createdAt: true, ritaSynced: true },
+        orderBy: { registeredAt: 'desc' }, take: limit, skip,
+        select: { id: true, deathCertNo: true, nationalId: true, causeOfDeath: true, registeredAt: true, ritaSynced: true },
       })
       for (const d of deaths) {
         out.push({ id: `death-${d.id}`, type: 'death', certNo: d.deathCertNo,
           name: d.nationalId ?? 'Unknown',
-          date: new Date(d.createdAt).toLocaleDateString('en-TZ'),
+          date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
           ritaSynced: d.ritaSynced ?? false, certIssued: false })
       }
       const citizens = await prisma.citizen.findMany({
         where: { registeredById: id },
-        orderBy: { createdAt: 'desc' }, take: limit, skip,
-        select: { id: true, firstName: true, surname: true, nationalId: true, createdAt: true },
+        orderBy: { registeredAt: 'desc' }, take: limit, skip,
+        select: { id: true, firstName: true, surname: true, nationalId: true, registeredAt: true },
       })
       for (const c of citizens) {
         out.push({ id: `citizen-${c.id}`, type: 'birth', certNo: c.nationalId ?? '—',
           name: `${c.firstName} ${c.surname}`,
-          date: new Date(c.createdAt).toLocaleDateString('en-TZ'),
+          date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
           ritaSynced: true, certIssued: false })
       }
       out.sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -324,13 +324,13 @@ router.get('/records', async (req, res) => {
             { nationalId:  { contains: q, mode: 'insensitive' } },
           ]} : {}),
         },
-        orderBy: { createdAt: 'desc' }, take: limit, skip,
-        select: { id: true, deathCertNo: true, nationalId: true, createdAt: true, ritaSynced: true, certPdfUrl: true },
+        orderBy: { registeredAt: 'desc' }, take: limit, skip,
+        select: { id: true, deathCertNo: true, nationalId: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
       })
       for (const d of deaths) {
         results.push({ id: `death-${d.id}`, type: 'death', certNo: d.deathCertNo,
           name: d.nationalId ?? 'Unknown',
-          date: new Date(d.createdAt).toLocaleDateString('en-TZ'),
+          date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
           ritaSynced: d.ritaSynced ?? false, certIssued: !!d.certPdfUrl })
       }
     }
@@ -442,7 +442,7 @@ router.post('/certificate/issue', async (req, res) => {
   const { type, recordId } = req.body
   if (!type || !recordId) return res.status(400).json({ success: false, message: 'type and recordId required' })
   try {
-    const pdfUrl = `https://adlcs-backend.onrender.com/certificates/${type}/${recordId}.pdf`
+    const pdfUrl = `https://adlcs.onrender.com/certificates/${type}/${recordId}.pdf`
     if (type === 'birth')       await prisma.birth.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
     else if (type === 'death')  await prisma.death.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
     return res.json({ success: true, data: { pdfUrl } })
@@ -560,15 +560,15 @@ router.get('/report', async (req, res) => {
       }))
     } else {
       const deaths = await prisma.death.findMany({
-        where:   { hospitalOfficerId: id, createdAt: { gte: from, lte: endOfDay(now) } },
-        orderBy: { createdAt: 'desc' },
-        select:  { deathCertNo: true, nationalId: true, causeOfDeath: true, createdAt: true, ritaSynced: true },
+        where:   { hospitalOfficerId: id, registeredAt: { gte: from, lte: endOfDay(now) } },
+        orderBy: { registeredAt: 'desc' },
+        select:  { deathCertNo: true, nationalId: true, causeOfDeath: true, registeredAt: true, ritaSynced: true },
       })
       records = deaths.map(d => ({
         certNo:  d.deathCertNo,
         name:    d.nationalId ?? 'Unknown',
         cause:   d.causeOfDeath,
-        date:    new Date(d.createdAt).toLocaleDateString('en-TZ'),
+        date:    new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
         synced:  d.ritaSynced ?? false,
       }))
     }
