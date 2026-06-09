@@ -22,7 +22,7 @@ router.use(requireAuth)
 router.post('/birth/sync', async (req, res) => {
   const { id: officerId } = req.user
   const {
-    localId, birthCertNo, nationalId,
+    localId, birthCertNo, birthId,
     childFirstName, childMiddleName, childSurname,
     gender, dateOfBirth,
     fatherNid, motherNid,
@@ -63,7 +63,7 @@ router.post('/birth/sync', async (req, res) => {
     const birth = await prisma.birth.create({
       data: {
         birthCertNo,
-        nationalId:       nationalId || undefined,
+        birthId:          birthId || undefined,
         childFirstName,
         childMiddleName:  childMiddleName || '',
         childSurname,
@@ -131,12 +131,11 @@ router.post('/death/sync', async (req, res) => {
         nationalId:        nationalId || undefined,
         causeOfDeath,
         dateOfDeath:       dateOfDeath ? new Date(dateOfDeath.replace(/(\d{2})\/(\d{2})\/(\d{4})/,'$3-$2-$1')) : new Date(),
-        locationType:      locationType ?? 'health_facility',
-        category:          category ?? 'adult',
+        locationType:      ({'hospital':'hospital','outside':'outside','health_facility':'hospital','home':'outside','public_place':'outside','other':'outside'}[locationType] ?? 'outside'),
+        category:          ({'infant':'infant','child':'infant','adult':'adult','maternal':'adult'}[category] ?? 'adult'),
         informantName:     informantName || undefined,
         hospitalOfficerId: officerId,
         facilityId:        officer?.facilityId || undefined,
-        createdAt:         registeredAt ? new Date(registeredAt) : new Date(),
         ritaSynced:        false,
       },
       select: { id: true, deathCertNo: true },

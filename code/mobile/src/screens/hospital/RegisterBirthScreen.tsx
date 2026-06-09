@@ -4,11 +4,11 @@
  * Flow: Father NID → Mother NID → Child Info → Review → Submit
  *
  * On Submit:
- *  1. Generate NIN + cert number
+ *  1. Generate Birth Registration ID (BID) + cert number
  *  2. Save to local SQLite (works offline)
  *  3. Generate PDF certificate (expo-print)
  *  4. If online → auto-sync to backend
- *  5. Show success modal with NIN + cert no + copy icons
+ *  5. Show success modal with Birth ID + cert no + copy icons
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react'
@@ -30,7 +30,7 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import {
-  generateBirthCertNo, generateNewbornNationalId,
+  generateBirthCertNo, generateBirthId,
   updateBirthCertPath, LocalBirth,
 } from '../../services/localDb'
 import { generateBirthPdf, sharePdf } from '../../services/certificateService'
@@ -40,7 +40,7 @@ import { useTheme, TZ } from '../../context/ThemeContext'
 type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const { width: W } = Dimensions.get('window')
 
@@ -190,16 +190,16 @@ function SuccessModal({ visible, onClose, birth, pdfPath, onDownload, downloadin
             <Text style={{ fontSize:12, color:T.textSub, textAlign:'center', marginTop:-6 }}>New Citizen of Tanzania</Text>
             <View style={{ height:1, backgroundColor:T.border }} />
 
-            {/* NIN */}
+            {/* Birth Registration ID */}
             <View style={{ gap:6 }}>
-              <Text style={{ fontSize:11, color:T.textDim, fontWeight:'600', textTransform:'uppercase', letterSpacing:0.5 }}>Generated National ID (NIN)</Text>
+              <Text style={{ fontSize:11, color:T.textDim, fontWeight:'600', textTransform:'uppercase', letterSpacing:0.5 }}>Birth Registration ID</Text>
               <View style={{ borderRadius:10, borderWidth:1, borderColor:`${H.primary}50`, backgroundColor:`${H.primary}10`, padding:12, flexDirection:'row', alignItems:'center' }}>
-                <Text style={{ fontSize:13, fontWeight:'900', color:H.primaryL, flex:1, letterSpacing:0.5 }}>{birth.nationalId}</Text>
-                <TouchableOpacity onPress={()=>copy(birth.nationalId,'National ID')} style={{ padding:4 }}>
+                <Text style={{ fontSize:13, fontWeight:'900', color:H.primaryL, flex:1, letterSpacing:0.5 }}>{birth.birthId}</Text>
+                <TouchableOpacity onPress={()=>copy(birth.birthId,'Birth Registration ID')} style={{ padding:4 }}>
                   <Copy size={15} color={H.primaryL} />
                 </TouchableOpacity>
               </View>
-              <Text style={{ fontSize:10, color:T.textDim, fontStyle:'italic' }}>Child collects physical ID card at age 18 from Village Officer</Text>
+              <Text style={{ fontSize:10, color:T.textDim, fontStyle:'italic' }}>Keep this ID safe — required at age 18 when the child registers with a Village Officer to obtain their National ID (NIN)</Text>
             </View>
 
             {/* Cert no */}
@@ -364,15 +364,16 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         } catch { return null }
       })() : null
 
-      const certNo     = generateBirthCertNo()
-      const nationalId = generateNewbornNationalId(childDOB)  // Spec §2.7 Step 4: TZ-YYYYMMDD-XXXXX
+      const certNo  = generateBirthCertNo()
+      // Birth ID — NIN is NOT issued at birth; Village Officer handles this at age 18
+      const birthId = generateBirthId(childDOB)
       const fatherName = fatherData ? `${fatherData.firstName} ${fatherData.middleName ?? ''} ${fatherData.surname}`.replace(/\s+/g,' ').trim() : ''
       const motherName = motherData ? `${motherData.firstName} ${motherData.middleName ?? ''} ${motherData.surname}`.replace(/\s+/g,' ').trim() : ''
 
       // Spec §2.7: if online → save directly to remote DB; if offline → save to
       // local SQLite (synced=0) and push automatically when device reconnects
       const { birth, syncedRemote } = await saveAndSyncBirth({
-        certNo, nationalId,
+        certNo, birthId,
         childFirstName:   childFirst.trim(),
         childMiddleName:  childMiddle.trim(),
         childSurname:     childSurname.trim(),
@@ -546,7 +547,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
               </View>
               <View style={{ flexDirection:'row', gap:8, backgroundColor:`${H.primary}10`, borderRadius:10, padding:12, borderWidth:1, borderColor:`${H.primary}30` }}>
                 <AlertCircle size={13} color={H.primaryL} />
-                <Text style={{ fontSize:11, color:T.textSub, flex:1, lineHeight:17 }}>A unique National ID will be auto-generated. The child collects their physical ID card at age 18 from the Village Officer.</Text>
+                <Text style={{ fontSize:11, color:T.textSub, flex:1, lineHeight:17 }}>A Birth Registration ID (BID) will be generated and recorded. No National ID is issued at birth — the child will present this Birth ID to a Village Officer at age 18 to obtain their NIN.</Text>
               </View>
             </View>
           )}

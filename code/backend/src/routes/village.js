@@ -49,9 +49,9 @@ router.get('/dashboard', async (req, res) => {
 
     const [totalCitizens, monthDeaths, todayDeaths, todayCitizens, pendingCases] = await Promise.all([
       prisma.citizen.count({ where:{ currentVillageId:vid } }),
-      prisma.death.count({ where:{ villageOfficerId:id, createdAt:{ gte:monthStart } } }).catch(()=>0),
-      prisma.death.count({ where:{ villageOfficerId:id, createdAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
-      prisma.citizen.count({ where:{ registeredById:id, createdAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
+      prisma.death.count({ where:{ villageOfficerId:id, registeredAt:{ gte:monthStart } } }).catch(()=>0),
+      prisma.death.count({ where:{ villageOfficerId:id, registeredAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
+      prisma.citizen.count({ where:{ registeredById:id, registeredAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
       prisma.citizen.count({ where:{ currentVillageId:vid, vitalStatus:'alive', idCardIssued:null } }).catch(()=>0),
     ])
 
@@ -76,6 +76,17 @@ router.get('/dashboard', async (req, res) => {
   }
 })
 
+// ── national-id generator (23-char NIDA format YYYYMMDD-LLLLL-SSSSS-CC) ────────
+function genNationalId(dob) {
+  const d = dob ? parseDDMMYYYY(dob) : new Date()
+  const y  = d.getFullYear()
+  const mo = String(d.getMonth()+1).padStart(2,'0')
+  const dy = String(d.getDate()).padStart(2,'0')
+  const seq = String(Math.floor(Math.random()*89999)+10001).padStart(5,'0')
+  const cc  = String(Math.floor(Math.random()*89)+10)
+  return `${y}${mo}${dy}-07031-${seq}-${cc}`
+}
+
 // ── POST /api/village/citizen ─────────────────────────────────────────────────
 router.post('/citizen', async (req, res) => {
   const { id:officerId } = req.user
@@ -92,7 +103,7 @@ router.post('/citizen', async (req, res) => {
         surname:     surname.trim(),
         gender:      gender.toLowerCase(),
         dateOfBirth: dateOfBirth ? parseDDMMYYYY(dateOfBirth) : null,
-        nationalId:  nationalId ?? undefined,
+        nationalId:  nationalId ?? genNationalId(dateOfBirth),
         currentVillageId: officer?.villageId ?? undefined,
         registeredById:   officerId,
         vitalStatus:      'alive',
@@ -120,17 +131,22 @@ router.post('/death', async (req, res) => {
       : null
     if (existing) return res.json({ success:true, duplicate:true, serverId:existing.id })
 
+    // Map mobile enum values to schema enums
+    // DeathLocationType: hospital | outside
+    // DeathCategory:     infant   | adult
+    const locMap = { health_facility:'hospital', hospital:'hospital', home:'outside', public_place:'outside', other:'outside' }
+    const catMap = { infant:'infant', child:'infant', adult:'adult', maternal:'adult' }
+
     const death = await prisma.death.create({
       data:{
         deathCertNo:      deathCertNo ?? `VD-${Date.now()}`,
         nationalId:       nationalId  ?? undefined,
         causeOfDeath,
         dateOfDeath:      parseDDMMYYYY(dateOfDeath),
-        locationType:     locationType ?? 'home',
-        category:         category     ?? 'adult',
+        locationType:     locMap[locationType]  ?? 'outside',
+        category:         catMap[category]      ?? 'adult',
         informantName:    informantName ?? undefined,
-        hospitalOfficerId: officerId,
-        villageOfficerId:  officerId,
+        villageOfficerId: officerId,   // village officer FK only — no hospitalOfficerId
       },
       select:{ id:true, deathCertNo:true },
     })
@@ -156,37 +172,43 @@ router.post('/marriage', async (req, res) => {
       if (existing) return res.json({ success:true, duplicate:true })
     }
 
-    // Try to use Marriage model if it exists in schema, else log to audit
-    const record = await prisma.marriage?.create?.({
-      data:{
-        certNo:      certNo ?? `TZ-MAR-${Date.now()}`,
-        husbandNid:  husbandNid ?? undefined,
-        husbandName: husbandName ?? husbandNid,
-        wifeNid:     wifeNid    ?? undefined,
-        wifeName:    wifeName   ?? wifeNid,
-        marriageDate: parseDDMMYYYY(marriageDate),
-        marriageType: marriageType ?? 'customary',
-        witness1:    witness1 ?? undefined,
-        witness2:    witness2 ?? undefined,
-        bridePrice:  bridePrice ?? undefined,
-        officerId,
-      },
-      select:{ id:true },
-    }).catch(()=>null)
+    // Look up both citizens by NID — both must be registered
+    const husband = husbandNid ? await prisma.citizen.findFirst({ where:{ nationalId:husbandNid }, select:{ id:true, dateOfBirth:true } }) : null
+    const wife    = wifeNid    ? await prisma.citizen.findFirst({ where:{ nationalId:wifeNid    }, select:{ id:true, dateOfBirth:true } }) : null
 
-    // Fallback: audit log
-    if (!record) {
-      await prisma.auditLog?.create?.({
-        data:{
-          action:     'MARRIAGE_REGISTERED',
-          entityType: 'Marriage',
-          details:    JSON.stringify({ certNo, husbandName:husbandName??husbandNid, wifeName:wifeName??wifeNid, marriageDate, marriageType }),
-          officerId,
-        },
-      }).catch(()=>{})
+    if (!husband || !wife) {
+      return res.status(422).json({ success:false, message:'Both spouses must be registered citizens. Please use Register Citizen for each spouse first.' })
     }
 
-    return res.json({ success:true, data:{ certNo, serverId:record?.id ?? null } })
+    function ageFrom(dob) {
+      if (!dob) return 18
+      return Math.max(Math.floor((Date.now() - new Date(dob)) / 31557600000), 18)
+    }
+
+    const relMap = { islamic:'islamic', christian:'christian', customary:'customary', civil:'civil' }
+    const marriageCertNo = certNo ?? `TZ-MAR-${Date.now()}`
+
+    const record = await prisma.marriage.create({
+      data:{
+        marriageCertNo,
+        husbandId:        husband.id,
+        wifeId:           wife.id,
+        husbandNid:       husbandNid,
+        wifeNid:          wifeNid,
+        husbandAge:       ageFrom(husband.dateOfBirth),
+        wifeAge:          ageFrom(wife.dateOfBirth),
+        husbandStatusPrev:'single',
+        wifeStatusPrev:   'single',
+        marriageDate:     parseDDMMYYYY(marriageDate),
+        marriagePlace:    marriagePlace ?? 'Tanzania',
+        religion:         relMap[marriageType] ?? 'customary',
+        kindOfMarriage:   'monogamous',
+        registeredById:   officerId,
+      },
+      select:{ id:true },
+    })
+
+    return res.json({ success:true, data:{ certNo:marriageCertNo, serverId:record.id } })
   } catch (err) {
     console.error('[village/marriage]', err)
     return res.status(500).json({ success:false, message:'Internal server error' })
@@ -200,37 +222,29 @@ router.post('/building', async (req, res) => {
           occupants, ownerName, ownerNid, notes, referenceNo } = req.body
   if (!name) return res.status(400).json({ success:false, message:'Building name required' })
   try {
-    const record = await prisma.building?.create?.({
-      data:{
-        name:         name.trim(),
-        buildingType: buildingType ?? 'Residential',
-        floors:       floors       ?? 1,
-        yearBuilt:    yearBuilt    ?? undefined,
-        material:     material     ?? undefined,
-        condition:    condition    ?? undefined,
-        occupants:    occupants    ?? undefined,
-        ownerName:    ownerName    ?? undefined,
-        ownerNid:     ownerNid     ?? undefined,
-        notes:        notes        ?? undefined,
-        referenceNo:  referenceNo  ?? `BLDG-${Date.now()}`,
-        officerId,
-      },
-      select:{ id:true, referenceNo:true },
-    }).catch(()=>null)
-
-    // Fallback to audit log
-    if (!record) {
-      await prisma.auditLog?.create?.({
-        data:{
-          action:'BUILDING_REGISTERED', entityType:'Building',
-          details: JSON.stringify({ name, buildingType, referenceNo }),
-          officerId,
-        },
-      }).catch(()=>{})
+    const officer = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
+    const bldgTypeMap = {
+      residential:'residential', business:'business', hotel:'hotel',
+      hospital:'hospital', school:'school', college:'college',
+      university:'university', industry:'industry', government:'government',
+      police:'police', military:'military', training:'training', other:'other',
     }
-
-    return res.json({ success:true, data:{ referenceNo, serverId:record?.id ?? null } })
+    const bldgId = (referenceNo ?? `BLDG-${Date.now()}`).slice(0, 20)
+    const record = await prisma.building.create({
+      data:{
+        id:            bldgId,
+        buildingType:  bldgTypeMap[(buildingType ?? '').toLowerCase()] ?? 'other',
+        streetLocation: name ?? 'Unknown',
+        villageId:     officer?.villageId ?? 1,
+        owners:        [{ name: ownerName ?? 'Unknown', nid: ownerNid ?? null, floors: floors ?? 1 }],
+        ownershipType: 'private',
+        registeredById: officerId,
+      },
+      select:{ id:true },
+    })
+    return res.json({ success:true, data:{ referenceNo:bldgId, serverId:record.id } })
   } catch (err) {
+    if (err.code === 'P2002') return res.json({ success:true, duplicate:true })
     console.error('[village/building]', err)
     return res.status(500).json({ success:false, message:'Internal server error' })
   }
@@ -243,33 +257,22 @@ router.post('/infrastructure', async (req, res) => {
           yearBuilt, manager, notes, referenceNo } = req.body
   if (!name) return res.status(400).json({ success:false, message:'Infrastructure name required' })
   try {
-    const record = await prisma.publicInfrastructure?.create?.({
-      data:{
-        name:        name.trim(),
-        infraType:   infraType ?? 'Other',
-        status:      status    ?? 'Operational',
-        condition:   condition ?? undefined,
-        capacity:    capacity  ?? undefined,
-        yearBuilt:   yearBuilt ?? undefined,
-        manager:     manager   ?? undefined,
-        notes:       notes     ?? undefined,
-        referenceNo: referenceNo ?? `INFRA-${Date.now()}`,
-        officerId,
-      },
-      select:{ id:true, referenceNo:true },
-    }).catch(()=>null)
-
-    if (!record) {
-      await prisma.auditLog?.create?.({
-        data:{
-          action:'INFRASTRUCTURE_REGISTERED', entityType:'PublicInfrastructure',
-          details: JSON.stringify({ name, infraType, referenceNo }),
-          officerId,
-        },
-      }).catch(()=>{})
+    const officer = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
+    // InfraType enum: road | railway | station | port | bus_stand
+    const infraMap = {
+      road:'road', railway:'railway', station:'station', port:'port', bus_stand:'bus_stand',
+      school:'road', hospital:'road', water:'road', electricity:'road', other:'road',
     }
-
-    return res.json({ success:true, data:{ referenceNo, serverId:record?.id ?? null } })
+    const record = await prisma.publicInfrastructure.create({
+      data:{
+        infraType:     infraMap[(infraType ?? '').toLowerCase()] ?? 'road',
+        name:          name.trim(),
+        villageId:     officer?.villageId ?? 1,
+        registeredById: officerId,
+      },
+      select:{ id:true },
+    })
+    return res.json({ success:true, data:{ referenceNo: referenceNo ?? `INFRA-${record.id}`, serverId:record.id } })
   } catch (err) {
     console.error('[village/infrastructure]', err)
     return res.status(500).json({ success:false, message:'Internal server error' })
@@ -283,29 +286,33 @@ router.post('/migration', async (req, res) => {
           toVillage, toRegion, reason, moveDate, notes, referenceNo } = req.body
   if (!citizenName) return res.status(400).json({ success:false, message:'citizenName required' })
   try {
-    const record = await prisma.migration?.create?.({
-      data:{
-        citizenName, nationalId:nationalId??undefined, direction:direction??'departing',
-        fromVillage:fromVillage??undefined, fromRegion:fromRegion??undefined,
-        toVillage:toVillage??undefined,   toRegion:toRegion??undefined,
-        reason:reason??undefined, moveDate:moveDate?parseDDMMYYYY(moveDate):new Date(),
-        notes:notes??undefined, referenceNo:referenceNo??`MIG-${Date.now()}`,
-        officerId,
-      },
-      select:{ id:true },
-    }).catch(()=>null)
+    const officer  = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
+    const citizen  = nationalId ? await prisma.citizen.findFirst({ where:{ nationalId }, select:{ id:true } }) : null
 
-    if (!record) {
-      await prisma.auditLog?.create?.({
-        data:{
-          action:'MIGRATION_RECORDED', entityType:'Migration',
-          details: JSON.stringify({ citizenName, direction, reason, referenceNo }),
-          officerId,
-        },
-      }).catch(()=>{})
+    if (!citizen) {
+      return res.status(422).json({ success:false, message:'Citizen not found. Register the citizen first using their National ID, then record their migration.' })
     }
 
-    return res.json({ success:true, data:{ referenceNo, serverId:record?.id ?? null } })
+    const fromVid  = officer?.villageId ?? 1
+    let   toVid    = fromVid
+    if (toVillage) {
+      const dest = await prisma.village.findFirst({ where:{ name:{ contains:toVillage, mode:'insensitive' } }, select:{ id:true } }).catch(()=>null)
+      if (dest) toVid = dest.id
+    }
+
+    const expiry   = new Date(); expiry.setDate(expiry.getDate() + 30)
+    const record   = await prisma.migration.create({
+      data:{
+        citizenId:       citizen.id,
+        fromVillageId:   fromVid,
+        toVillageId:     toVid,
+        reason:          reason ?? 'Voluntary relocation',
+        expiryDate:      expiry,
+        sourceOfficerId: officerId,
+      },
+      select:{ id:true },
+    })
+    return res.json({ success:true, data:{ referenceNo: referenceNo ?? `MIG-${record.id}`, serverId:record.id } })
   } catch (err) {
     console.error('[village/migration]', err)
     return res.status(500).json({ success:false, message:'Internal server error' })
@@ -321,25 +328,25 @@ router.get('/records', async (req, res) => {
     // Deaths
     const deaths = await prisma.death.findMany({
       where:{ villageOfficerId:officerId },
-      orderBy:{ createdAt:'desc' }, take:30,
-      select:{ id:true, deathCertNo:true, nationalId:true, causeOfDeath:true, createdAt:true },
+      orderBy:{ registeredAt:'desc' }, take:30,
+      select:{ id:true, deathCertNo:true, nationalId:true, causeOfDeath:true, registeredAt:true },
     }).catch(()=>[])
     for (const d of deaths) {
       out.push({ id:`d-${d.id}`, type:'deaths', icon:'✝', color:'#dc2626',
         label: d.nationalId || 'Unknown', sub:`Cert: ${d.deathCertNo}`,
-        date: new Date(d.createdAt).toLocaleDateString('en-TZ') })
+        date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
     }
 
     // Citizens
     const citizens = await prisma.citizen.findMany({
       where:{ registeredById:officerId },
-      orderBy:{ createdAt:'desc' }, take:30,
-      select:{ id:true, firstName:true, surname:true, nationalId:true, createdAt:true },
+      orderBy:{ registeredAt:'desc' }, take:30,
+      select:{ id:true, firstName:true, surname:true, nationalId:true, registeredAt:true },
     }).catch(()=>[])
     for (const c of citizens) {
       out.push({ id:`c-${c.id}`, type:'citizens', icon:'👤', color:'#0891b2',
         label:`${c.firstName} ${c.surname}`, sub:c.nationalId||'—',
-        date: new Date(c.createdAt).toLocaleDateString('en-TZ') })
+        date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
     }
 
     return res.json({ success:true, data:out })

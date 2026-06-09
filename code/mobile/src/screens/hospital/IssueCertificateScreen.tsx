@@ -21,7 +21,10 @@ import {
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { getAllBirths, getAllDeaths, LocalBirth, LocalDeath } from '../../services/localDb'
+import { LocalBirth, LocalDeath } from '../../services/localDb'
+import { apiGet } from '../../services/syncService'
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 import {
   generateBirthPdf, generateDeathPdf,
   sharePdf, printHtml,
@@ -62,24 +65,42 @@ export default function IssueCertificateScreen({ navigation }: Props) {
   const loadCerts = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const [births, deaths] = await Promise.all([getAllBirths(), getAllDeaths()])
-      const birthRows: CertRow[] = births.map(b => ({
-        id: b.id, type: 'birth', certNo: b.certNo,
-        name: [b.childFirstName, b.childMiddleName, b.childSurname].filter(Boolean).join(' ').toUpperCase(),
-        date: new Date(b.registeredAt).toLocaleDateString('en-TZ', { day: '2-digit', month: 'short', year: 'numeric' }),
-        synced: b.synced === 1, certPdfPath: b.certPdfPath, raw: b,
-      }))
-      const deathRows: CertRow[] = deaths.map(d => ({
-        id: d.id, type: 'death', certNo: d.certNo,
-        name: d.deceasedName.toUpperCase() || d.nationalId || '—',
-        date: new Date(d.registeredAt).toLocaleDateString('en-TZ', { day: '2-digit', month: 'short', year: 'numeric' }),
-        synced: d.synced === 1, certPdfPath: d.certPdfPath, raw: d,
-      }))
-      const all = [...birthRows, ...deathRows].sort((a, b) =>
-        new Date((b.raw as any).registeredAt).getTime() - new Date((a.raw as any).registeredAt).getTime()
-      )
-      setRows(all)
-    } catch (e) { console.warn('loadCerts error', e) }
+      // Fetch all records directly from PostgreSQL via backend API
+      const json = await apiGet('/officer/records?type=all&limit=100')
+      if (json.success && Array.isArray(json.data)) {
+        const birthRows: CertRow[] = json.data
+          .filter((r: any) => r.type === 'birth')
+          .map((r: any) => ({
+            id:          r.id,
+            type:        'birth' as const,
+            certNo:      r.certNo  ?? '—',
+            name:        r.name    ?? '—',
+            date:        r.date    ?? '—',
+            synced:      r.ritaSynced ?? true,
+            certPdfPath: r.certIssued ? 'issued' : '',
+            raw:         r as any,
+          }))
+        const deathRows: CertRow[] = json.data
+          .filter((r: any) => r.type === 'death')
+          .map((r: any) => ({
+            id:          r.id,
+            type:        'death' as const,
+            certNo:      r.certNo  ?? '—',
+            name:        r.name    ?? '—',
+            date:        r.date    ?? '—',
+            synced:      r.ritaSynced ?? true,
+            certPdfPath: r.certIssued ? 'issued' : '',
+            raw:         r as any,
+          }))
+        // API already returns in date-desc order
+        setRows([...birthRows, ...deathRows])
+      } else {
+        setRows([])
+      }
+    } catch (e) {
+      console.warn('loadCerts error', e)
+      setRows([])
+    }
     finally { setLoading(false); setRefreshing(false) }
   }, [])
 
@@ -89,39 +110,27 @@ export default function IssueCertificateScreen({ navigation }: Props) {
 
   // ── Download PDF ──────────────────────────────────────────────────────────
   const handleDownload = async (row: CertRow) => {
-    setActionId(row.id)
-    try {
-      let path = row.certPdfPath
-      if (!path) {
-        if (row.type === 'birth') {
-          path = await generateBirthPdf(row.raw as LocalBirth)
-          await updateBirthCertPath(row.id, path)
-        } else {
-          path = await generateDeathPdf(row.raw as LocalDeath)
-          await _updateDeathCertPath(row.id, path)
-        }
-        setRows(prev => prev.map(r => r.id === row.id ? { ...r, certPdfPath: path } : r))
-      }
-      await sharePdf(path)
-    } catch (e) {
-      Alert.alert('Error', 'Could not generate PDF. Please try again.')
-      console.warn('download error', e)
+    // PDF generation needs full registration data (not available from list API).
+    // Only show for records registered in this session (row.certPdfPath already set).
+    if (row.certPdfPath && row.certPdfPath !== 'issued') {
+      setActionId(row.id)
+      try { await sharePdf(row.certPdfPath) }
+      catch { Alert.alert('Error', 'Could not open PDF file.') }
+      setActionId(null)
+      return
     }
-    setActionId(null)
+    Alert.alert(
+      'Certificate PDF',
+      `Cert No: ${row.certNo}\nRecord: ${row.name}\n\nTo download the full PDF certificate, go to the registration screen and re-open the record, or ask the system administrator to print from the web portal.`
+    )
   }
 
   // ── Print ─────────────────────────────────────────────────────────────────
   const handlePrint = async (row: CertRow) => {
-    setActionId(`print-${row.id}`)
-    try {
-      const html = row.type === 'birth'
-        ? buildBirthCertHtml(row.raw as LocalBirth)
-        : buildDeathCertHtml(row.raw as LocalDeath)
-      await printHtml(html)
-    } catch (e) {
-      Alert.alert('Print Error', 'Could not send to printer.')
-    }
-    setActionId(null)
+    Alert.alert(
+      'Print Certificate',
+      `Cert No: ${row.certNo}\nName: ${row.name}\n\nFull certificate printing is available from the registration screen immediately after registration, or via the web portal.`
+    )
   }
 
   // ── Detail Modal ──────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
  * syncService.ts  v9.0  ONLINE-ONLY — real backend API
  *
  * Every function that reads or writes data goes to
- *   https://adlcs-backend.onrender.com  →  Supabase PostgreSQL
+ *   https://adlcs.onrender.com  →  Supabase PostgreSQL
  *
  * No SQLite, no NetInfo, no offline queue.
  * AbortSignal.timeout() NOT used (Hermes-incompatible); uses makeSignal() instead.
@@ -11,7 +11,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LocalBirth, LocalDeath } from './localDb'
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 
 export type ConnQuality = 'Good' | 'Fair' | 'Offline'
 export interface SyncResult { synced: number; failed: number; offline: boolean }
@@ -89,7 +89,7 @@ export async function saveAndSyncBirth(
     const json = await apiPost('/officer/birth/sync', {
       localId:         id,
       birthCertNo:     data.certNo,
-      nationalId:      data.nationalId,
+      birthId:         data.birthId,
       childFirstName:  data.childFirstName,
       childMiddleName: data.childMiddleName,
       childSurname:    data.childSurname,

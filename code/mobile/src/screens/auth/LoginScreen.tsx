@@ -35,7 +35,7 @@ type LoginScreenProps = {
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 const { height: SCREEN_H } = Dimensions.get('window')
 
 // ─── Tanzania colours ─────────────────────────────────────────────────────────

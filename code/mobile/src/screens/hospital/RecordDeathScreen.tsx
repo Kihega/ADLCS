@@ -25,7 +25,7 @@ import { generateDeathPdf, sharePdf } from '../../services/certificateService'
 import { triggerSync, saveAndSyncDeath } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs-backend.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 type RootStack = { HospitalHome: undefined; RecordDeath: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RecordDeath'> }
 type LocationType  = 'health_facility'|'home'|'public_place'|'other'
