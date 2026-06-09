@@ -22,7 +22,7 @@ router.use(requireAuth)
 router.post('/birth/sync', async (req, res) => {
   const { id: officerId } = req.user
   const {
-    localId, birthCertNo, nationalId,
+    localId, birthCertNo, birthId,
     childFirstName, childMiddleName, childSurname,
     gender, dateOfBirth,
     fatherNid, motherNid,
@@ -63,7 +63,7 @@ router.post('/birth/sync', async (req, res) => {
     const birth = await prisma.birth.create({
       data: {
         birthCertNo,
-        nationalId:       nationalId || undefined,
+        birthId:          birthId || undefined,
         childFirstName,
         childMiddleName:  childMiddleName || '',
         childSurname,

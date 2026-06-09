@@ -14,7 +14,7 @@
 export interface LocalBirth {
   id:               string
   certNo:           string
-  nationalId:       string
+  birthId:          string   // Birth Registration ID — NIN issued at age 18
   childFirstName:   string
   childMiddleName:  string
   childSurname:     string
@@ -71,6 +71,28 @@ export interface OfficerCache {
 }
 
 // ─── Cert / ID generators ──────────────────────────────────────────────────────
+/**
+ * generateBirthId — Birth Registration tracking ID
+ *
+ * Format: BID-YYYYMMDD-XXXXXXX
+ * Example: BID-20260601-3847291
+ *
+ * This ID is stored with the birth record and presented to the family.
+ * At age 18 a Village Officer enters this ID to look up the birth record
+ * and issue the citizen's National ID (NIN).
+ *
+ * NO NIN is generated at birth — NIN issuance is a Village Officer workflow.
+ */
+export function generateBirthId(dob: string): string {
+  const parts  = dob.split('/')
+  const day    = (parts[0] ?? '01').padStart(2, '0')
+  const month  = (parts[1] ?? '01').padStart(2, '0')
+  const year   = parts[2] ?? String(new Date().getFullYear())
+  const date   = `${year}${month}${day}`
+  const seq    = String(Math.floor(Math.random() * 9000000) + 1000000)
+  return `BID-${date}-${seq}`
+}
+
 export function generateBirthCertNo(): string {
   const seq = Math.floor(Math.random() * 90000000 + 10000000)
   return `${seq} A`

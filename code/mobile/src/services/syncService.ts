@@ -89,7 +89,7 @@ export async function saveAndSyncBirth(
     const json = await apiPost('/officer/birth/sync', {
       localId:         id,
       birthCertNo:     data.certNo,
-      nationalId:      data.nationalId,
+      birthId:         data.birthId,
       childFirstName:  data.childFirstName,
       childMiddleName: data.childMiddleName,
       childSurname:    data.childSurname,

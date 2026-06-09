@@ -652,20 +652,6 @@ export default function HospitalHomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* Stats */}
-        <View style={s.sectionHead}>
-          <Text style={[s.sectionTitle, { color:T.text }]}>Today's Statistics</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('ViewRecords')}>
-            <Text style={[s.sectionLink, { color:T.primaryL }]}>View all →</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={{ flexDirection:'row', paddingHorizontal:12, gap:8 }}>
-          <StatCard icon={<Baby     size={18} color={TZ.green} />}  value={stats.todayBirths}            label="Births"   color={TZ.green}  sub="Today" />
-          <StatCard icon={<Cross    size={18} color={T.danger} />}  value={stats.todayDeaths}            label="Deaths"   color={T.danger}  sub="Today" />
-          <StatCard icon={<FileText size={18} color={H.primary}/>}  value={officer.facilityCertIssued}   label="Certs"    color={H.primary} sub="Total" />
-          <StatCard icon={<Clock    size={18} color={H.orange} />}  value={stats.pendingSync}            label="Pending"  color={H.orange}  sub="Sync"  />
-        </View>
-
         {/* Quick Actions */}
         <View style={s.sectionHead}><Text style={[s.sectionTitle, { color:T.text }]}>Quick Actions</Text></View>
         <View style={{ flexDirection:'row', paddingHorizontal:12, gap:8 }}>
