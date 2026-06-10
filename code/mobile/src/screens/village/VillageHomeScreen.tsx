@@ -44,7 +44,7 @@ type VStack = {
   Splash:undefined; Login:undefined; VillageHome:undefined; HospitalHome:undefined
   RegisterCitizen:undefined; RegisterMarriage:undefined; VillageRecordDeath:undefined
   RegisterBuilding:undefined; RegisterInfrastructure:undefined; TrackMigration:undefined
-  VillageViewRecords:undefined; SyncData:undefined
+  VillageViewRecords:undefined; SyncData:undefined; NINRegistration:undefined
 }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageHome'> }
 
@@ -394,16 +394,18 @@ export default function VillageHomeScreen({ navigation }: Props) {
     { id:'migration',icon:<Navigation  size={18} color="#fff"/>, label:'Track',     sub:'Migration',   bg:'#f97316'    },
     { id:'records',  icon:<FileText    size={18} color="#fff"/>, label:'View',      sub:'Records',     bg:G            },
     { id:'sync',     icon:<RefreshCw   size={18} color="#fff"/>, label:'Sync',      sub:'Data',        bg:'#4b5563'    },
+    { id:'nin',      icon:<IdCard      size={18} color="#fff"/>, label:'NIN',       sub:'Registration',bg:'#0f766e'    },
   ]
 
   const navigate = (id:string) => {
-    const m: Record<string,keyof VStack> = {
+    const m: Record<string,string> = {
       citizen:'RegisterCitizen', marriage:'RegisterMarriage',
       death:'VillageRecordDeath', building:'RegisterBuilding',
       infra:'RegisterInfrastructure', migration:'TrackMigration',
       records:'VillageViewRecords', sync:'SyncData',
+      nin:'NINRegistration',
     }
-    if (m[id]) navigation.navigate(m[id])
+    if (m[id]) navigation.navigate(m[id] as any)
   }
 
   if (loading) return (
@@ -505,21 +507,7 @@ export default function VillageHomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* Stats */}
-        <View style={s.sectionHead}>
-          <Text style={[s.sectionTitle,{color:T.text}]}>This Month</Text>
-          <TouchableOpacity onPress={()=>navigate('records')}>
-            <Text style={{fontSize:11,color:G}}>View all →</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={{flexDirection:'row',paddingHorizontal:12,gap:8}}>
-          <StatCard icon={<Users    size={18} color={TZ.blue} />} value={officer.totalCitizens??0} label="Citizens"  color={TZ.blue} sub="Total"/>
-          <StatCard icon={<Cross    size={18} color={T.danger}/>} value={stats.monthDeaths}         label="Deaths"    color={T.danger} sub="Month"/>
-          <StatCard icon={<Heart    size={18} color="#e11d48" />} value={0}                          label="Marriages" color="#e11d48"  sub="Month"/>
-          <StatCard icon={<Clock    size={18} color="#f97316" />} value={stats.pendingSync}          label="Pending"   color="#f97316" sub="Sync"/>
-        </View>
-
-        {/* Quick Actions — 2 rows of 4 */}
+        {/* Quick Actions */}
         <View style={s.sectionHead}>
           <Text style={[s.sectionTitle,{color:T.text}]}>Quick Actions</Text>
         </View>
@@ -527,7 +515,10 @@ export default function VillageHomeScreen({ navigation }: Props) {
           {ACTIONS.slice(0,4).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
         </View>
         <View style={{flexDirection:'row',paddingHorizontal:12,gap:8,marginTop:8}}>
-          {ACTIONS.slice(4).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
+          {ACTIONS.slice(4,8).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
+        </View>
+        <View style={{flexDirection:'row',paddingHorizontal:12,gap:8,marginTop:8}}>
+          {ACTIONS.slice(8).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
         </View>
 
         {/* Village info card */}

@@ -35,6 +35,7 @@ import RegisterBuildingScreen       from './src/screens/village/RegisterBuilding
 import RegisterInfrastructureScreen from './src/screens/village/RegisterInfrastructureScreen'
 import TrackMigrationScreen         from './src/screens/village/TrackMigrationScreen'
 import VillageViewRecordsScreen     from './src/screens/village/VillageViewRecordsScreen'
+import NINRegistrationScreen        from './src/screens/village/NINRegistrationScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -87,6 +88,8 @@ export default function App() {
               <Stack.Screen name="TrackMigration"          component={TrackMigrationScreen}
                 options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="VillageViewRecords"      component={VillageViewRecordsScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="NINRegistration"         component={NINRegistrationScreen}
                 options={{ animation: 'slide_from_right' }} />
             </Stack.Navigator>
           </NavigationContainer>
