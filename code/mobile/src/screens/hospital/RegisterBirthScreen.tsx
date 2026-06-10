@@ -1,14 +1,16 @@
 /**
- * RegisterBirthScreen.tsx — Birth Registration  v5.0  PRODUCTION
+ * RegisterBirthScreen.tsx — Birth Registration  v10.0  PRODUCTION
  *
- * Flow: Father NID → Mother NID → Child Info → Review → Submit
+ * Flow: Child Info → Father NID → Mother NID → Review → Submit
  *
  * On Submit:
  *  1. Generate Birth Registration ID (BID) + cert number
- *  2. Save to local SQLite (works offline)
+ *     ⚠️  NO NIN is generated at birth — NIN is issued at age 18 by Village Officer
+ *  2. POST directly to backend → Supabase (no local SQLite)
  *  3. Generate PDF certificate (expo-print)
- *  4. If online → auto-sync to backend
- *  5. Show success modal with Birth ID + cert no + copy icons
+ *  4. Show success modal with BID + cert no + age-18 instructions
+ *
+ * DATA FLOW: Mobile → Render (Express/Node) → Supabase (PostgreSQL)
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react'
@@ -370,8 +372,8 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       const fatherName = fatherData ? `${fatherData.firstName} ${fatherData.middleName ?? ''} ${fatherData.surname}`.replace(/\s+/g,' ').trim() : ''
       const motherName = motherData ? `${motherData.firstName} ${motherData.middleName ?? ''} ${motherData.surname}`.replace(/\s+/g,' ').trim() : ''
 
-      // Spec §2.7: if online → save directly to remote DB; if offline → save to
-      // local SQLite (synced=0) and push automatically when device reconnects
+      // Data flow: save directly to backend (Render) → Supabase.
+      // No local SQLite. No NIN generated here — NIN issued by Village Officer at age 18.
       const { birth, syncedRemote } = await saveAndSyncBirth({
         certNo, birthId,
         childFirstName:   childFirst.trim(),

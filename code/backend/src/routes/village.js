@@ -387,4 +387,48 @@ router.get('/profile', async (req, res) => {
   }
 })
 
+// ── GET /api/village/birth-lookup?bid=BID-YYYYMMDD-XXXXXXX ──────────────────────
+// Village Officer enters the child's Birth Registration ID to pre-fill
+// the citizen registration form at age 18 (NIN issuance workflow).
+router.get('/birth-lookup', async (req, res) => {
+  const { bid } = req.query
+  if (!bid || typeof bid !== 'string' || !bid.startsWith('BID-')) {
+    return res.status(400).json({ success: false, message: 'bid query param required (format: BID-YYYYMMDD-XXXXXXX)' })
+  }
+  try {
+    const birth = await prisma.birth.findFirst({
+      where: { birthId: bid.trim() },
+      select: {
+        id:             true,
+        birthId:        true,
+        birthCertNo:    true,
+        childFirstName: true,
+        childMiddleName:true,
+        childSurname:   true,
+        gender:         true,
+        dateOfBirth:    true,
+        childCitizenId: true,   // null until NIN issued
+        father: { select: { nationalId:true, firstName:true, middleName:true, surname:true } },
+        mother: { select: { nationalId:true, firstName:true, middleName:true, surname:true } },
+        facility: { select: { facilityName:true } },
+        registeredAt: true,
+      },
+    })
+    if (!birth) {
+      return res.status(404).json({ success: false, message: 'No birth record found for this BID' })
+    }
+    if (birth.childCitizenId) {
+      return res.status(409).json({
+        success: false,
+        message: 'NIN already issued for this birth record',
+        nationalId: birth.childCitizenId,
+      })
+    }
+    return res.json({ success: true, data: birth })
+  } catch (err) {
+    console.error('[village/birth-lookup]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
 module.exports = router
