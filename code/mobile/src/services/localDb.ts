@@ -1,13 +1,18 @@
 /**
- * localDb.ts  v8.0  STUBS ONLY — online-only mode
+ * localDb.ts  v10.0  STUBS ONLY — online-only mode
  *
  * SQLite / expo-sqlite completely removed.
+ * ALL registration data goes directly to the backend (Render) → Supabase.
+ *
  * Retained exports:
  *   • Type definitions  (LocalBirth, LocalDeath) — used by screens
- *   • Cert / ID generators — used by form screens to pre-fill cert numbers
+ *   • BID / cert generators — used by form screens to pre-fill numbers
  *   • No-op async stubs — satisfy any remaining imports without crashing
  *
- * All real data persistence goes directly to the backend via syncService.
+ * ⚠️  NO NIN IS GENERATED AT BIRTH.
+ *     generateNewbornNationalId() is intentionally removed.
+ *     NIN issuance is a Village Officer workflow triggered at age 18
+ *     when the citizen presents their Birth Registration ID (BID).
  */
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -103,22 +108,8 @@ export function generateDeathCertNo(): string {
   return `TZ-D-${seq} A`
 }
 
-export function generateNewbornNationalId(
-  dob: string,
-  regionCode   = '07',
-  districtCode = '03',
-  wardCode     = '1',
-): string {
-  const parts   = dob.split('/')
-  const day     = (parts[0] ?? '01').padStart(2, '0')
-  const month   = (parts[1] ?? '01').padStart(2, '0')
-  const year    = parts[2] ?? String(new Date().getFullYear())
-  const date    = `${year}${month}${day}`
-  const loc     = `${regionCode.padStart(2,'0')}${districtCode.padStart(2,'0')}${wardCode.padStart(1,'0')}`
-  const seq     = String(Math.floor(Math.random() * 89999) + 10001).padStart(5, '0')
-  const cc      = String(Math.floor(Math.random() * 89) + 10)
-  return `${date}-${loc}-${seq}-${cc}`
-}
+// generateNewbornNationalId() REMOVED — NIN is NOT issued at birth.
+// Village Officer issues NIN at age 18 via the NIN issuance workflow.
 
 export function generateNationalId(
   dob: string,

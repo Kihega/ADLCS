@@ -1,14 +1,17 @@
 /**
- * syncRoutes.js — Receive offline-queued records from mobile  v1.0
+ * syncRoutes.js — Receive registration records from mobile  v10.0
  *
- * Mobile devices save records locally (SQLite) when offline.
- * These endpoints accept those records when the device comes back online.
+ * Mobile sends records directly (online-only mode — no local SQLite).
  *
- * POST /api/officer/birth/sync   — receive a locally-saved birth registration
- * POST /api/officer/death/sync   — receive a locally-saved death registration
+ * POST /api/officer/birth/sync   — save birth registration to Supabase
+ * POST /api/officer/death/sync   — save death registration to Supabase
  *
- * Both endpoints are idempotent: if the record already exists (duplicate field),
- * they return { success: true, duplicate: true } so the mobile can mark it synced.
+ * Both endpoints are idempotent (duplicate → { success:true, duplicate:true }).
+ *
+ * ⚠️  BIRTH POLICY: No NIN is generated at birth.
+ *     Birth record stores only BID + cert no + child name/gender/DOB + parents.
+ *     childCitizenId is NULL until the child reaches age 18 and registers
+ *     with a Village Officer who issues the NIN via the NIN issuance workflow.
  */
 
 const { Router } = require('express')
@@ -60,6 +63,8 @@ router.post('/birth/sync', async (req, res) => {
       motherCitizenId = mother?.id
     }
 
+    // childCitizenId intentionally NOT set here.
+    // It remains NULL until Village Officer NIN issuance at age 18.
     const birth = await prisma.birth.create({
       data: {
         birthCertNo,
