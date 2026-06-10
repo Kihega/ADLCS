@@ -226,7 +226,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
 
       {/* Detail Modal */}
       <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
-        <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0.55)' }}>
+        <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0,0,0.55)' }}>
           <View style={[s.modalSheet, { backgroundColor:T.card }]}>
             <View style={[s.sheetHandle, { backgroundColor:T.border }]}/>
             <View style={{ flexDirection:'row', alignItems:'center', marginBottom:16 }}>

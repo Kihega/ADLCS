@@ -387,6 +387,99 @@ router.get('/profile', async (req, res) => {
   }
 })
 
+// ── POST /api/village/nin-issue ───────────────────────────────────────────────────
+// Village Officer issues a NIN after biometric registration.
+// Creates Citizen record, links Birth.childCitizenId, returns NIN.
+router.post('/nin-issue', async (req, res) => {
+  const { id: officerId } = req.user
+  const { birthId, birthCertNo } = req.body
+  if (!birthId && !birthCertNo) {
+    return res.status(400).json({ success:false, message:'birthId or birthCertNo required' })
+  }
+  try {
+    const birth = await prisma.birth.findFirst({
+      where: birthId ? { birthId } : { birthCertNo },
+      select: {
+        id:true, birthId:true, birthCertNo:true,
+        childFirstName:true, childMiddleName:true, childSurname:true,
+        gender:true, dateOfBirth:true, childCitizenId:true,
+        fatherCitizenId:true, motherCitizenId:true,
+      },
+    })
+    if (!birth) return res.status(404).json({ success:false, message:'Birth record not found' })
+    if (birth.childCitizenId) {
+      const existing = await prisma.citizen.findUnique({
+        where:  { id: birth.childCitizenId },
+        select: { nationalId:true },
+      })
+      return res.status(409).json({ success:false, message:'NIN already issued', nationalId:existing?.nationalId })
+    }
+
+    // Age check
+    const dob = new Date(birth.dateOfBirth)
+    const now = new Date()
+    let age = now.getFullYear() - dob.getFullYear()
+    const mo = now.getMonth() - dob.getMonth()
+    if (mo < 0 || (mo === 0 && now.getDate() < dob.getDate())) age--
+    if (age < 18) {
+      return res.status(422).json({ success:false, message:`Citizen is ${age} years old — must be 18+` })
+    }
+
+    // Officer village
+    const officer = await prisma.villageOfficer.findUnique({
+      where:  { id: officerId },
+      select: { villageId:true },
+    })
+
+    // Generate NIN: YYYYMMDD-07031-SSSSS-CC
+    const yy  = dob.getFullYear()
+    const mm  = String(dob.getMonth()+1).padStart(2,'0')
+    const dd  = String(dob.getDate()).padStart(2,'0')
+    const seq = String(Math.floor(Math.random()*89999)+10001).padStart(5,'0')
+    const cc  = String(Math.floor(Math.random()*89)+10)
+    const nationalId = `${yy}${mm}${dd}-07031-${seq}-${cc}`
+
+    const issuedDate  = new Date()
+    const expiresDate = new Date()
+    expiresDate.setFullYear(expiresDate.getFullYear() + 10)
+
+    const citizen = await prisma.citizen.create({
+      data: {
+        nationalId,
+        firstName:        birth.childFirstName,
+        middleName:       birth.childMiddleName ?? '',
+        surname:          birth.childSurname,
+        gender:           birth.gender,
+        dateOfBirth:      birth.dateOfBirth,
+        age,
+        vitalStatus:      'alive',
+        idCardIssued:     issuedDate,
+        idCardExpires:    expiresDate,
+        fatherCitizenId:  birth.fatherCitizenId ?? undefined,
+        motherCitizenId:  birth.motherCitizenId ?? undefined,
+        currentVillageId: officer?.villageId    ?? undefined,
+        registeredById:   officerId,
+        registeredAt:     new Date(),
+      },
+      select: { id:true, nationalId:true },
+    })
+
+    await prisma.birth.update({
+      where: { id: birth.id },
+      data:  { childCitizenId: citizen.id },
+    })
+
+    return res.json({
+      success: true,
+      data: { citizenId:citizen.id, nationalId:citizen.nationalId, age, message:'NIN issued successfully' },
+    })
+  } catch (err) {
+    if (err.code === 'P2002') return res.status(409).json({ success:false, message:'NIN conflict — please retry' })
+    console.error('[village/nin-issue]', err)
+    return res.status(500).json({ success:false, message:'Internal server error' })
+  }
+})
+
 // ── GET /api/village/birth-lookup?bid=BID-YYYYMMDD-XXXXXXX ──────────────────────
 // Village Officer enters the child's Birth Registration ID to pre-fill
 // the citizen registration form at age 18 (NIN issuance workflow).
@@ -396,24 +489,37 @@ router.get('/birth-lookup', async (req, res) => {
     return res.status(400).json({ success: false, message: 'bid query param required (format: BID-YYYYMMDD-XXXXXXX)' })
   }
   try {
-    const birth = await prisma.birth.findFirst({
-      where: { birthId: bid.trim() },
-      select: {
-        id:             true,
-        birthId:        true,
-        birthCertNo:    true,
-        childFirstName: true,
-        childMiddleName:true,
-        childSurname:   true,
-        gender:         true,
-        dateOfBirth:    true,
-        childCitizenId: true,   // null until NIN issued
-        father: { select: { nationalId:true, firstName:true, middleName:true, surname:true } },
-        mother: { select: { nationalId:true, firstName:true, middleName:true, surname:true } },
-        facility: { select: { facilityName:true } },
-        registeredAt: true,
-      },
-    })
+    // Step 1 — fetch scalar birth fields only. This is guaranteed to work
+    // even if the Citizen relations (father/mother) or facility are not
+    // yet fully migrated — keeps the core lookup functional.
+    let birth
+    try {
+      birth = await prisma.birth.findFirst({
+        where: { birthId: bid.trim() },
+        select: {
+          id:              true,
+          birthId:         true,
+          birthCertNo:     true,
+          childFirstName:  true,
+          childMiddleName: true,
+          childSurname:    true,
+          gender:          true,
+          dateOfBirth:     true,
+          childCitizenId:  true,   // null until NIN issued
+          fatherCitizenId: true,
+          motherCitizenId: true,
+          facilityId:      true,
+          registeredAt:    true,
+        },
+      })
+    } catch (scalarErr) {
+      console.error('[village/birth-lookup] scalar query failed:', scalarErr.code, scalarErr.message)
+      return res.status(500).json({
+        success: false,
+        message: `Database error (${scalarErr.code || 'unknown'}): ${scalarErr.message}`,
+      })
+    }
+
     if (!birth) {
       return res.status(404).json({ success: false, message: 'No birth record found for this BID' })
     }
@@ -424,10 +530,39 @@ router.get('/birth-lookup', async (req, res) => {
         nationalId: birth.childCitizenId,
       })
     }
-    return res.json({ success: true, data: birth })
+
+    // Step 2 — best-effort enrichment with father/mother/facility details.
+    // If these relation lookups fail (e.g. pending migration), don't fail
+    // the whole request — just return the core birth record without them.
+    let father = null, mother = null, facility = null
+    try {
+      if (birth.fatherCitizenId) {
+        father = await prisma.citizen.findUnique({
+          where:  { id: birth.fatherCitizenId },
+          select: { nationalId:true, firstName:true, middleName:true, surname:true },
+        })
+      }
+      if (birth.motherCitizenId) {
+        mother = await prisma.citizen.findUnique({
+          where:  { id: birth.motherCitizenId },
+          select: { nationalId:true, firstName:true, middleName:true, surname:true },
+        })
+      }
+      if (birth.facilityId) {
+        facility = await prisma.healthFacility.findUnique({
+          where:  { id: birth.facilityId },
+          select: { facilityName:true },
+        })
+      }
+    } catch (enrichErr) {
+      console.error('[village/birth-lookup] enrichment lookup failed (non-fatal):', enrichErr.code, enrichErr.message)
+    }
+
+    const { fatherCitizenId, motherCitizenId, facilityId, ...core } = birth
+    return res.json({ success: true, data: { ...core, father, mother, facility } })
   } catch (err) {
-    console.error('[village/birth-lookup]', err)
-    return res.status(500).json({ success: false, message: 'Internal server error' })
+    console.error('[village/birth-lookup]', err.code, err.message)
+    return res.status(500).json({ success: false, message: `Internal server error: ${err.message}` })
   }
 })
 

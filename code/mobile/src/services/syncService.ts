@@ -48,7 +48,12 @@ export async function apiPost(endpoint: string, body: object): Promise<any> {
       signal,
     })
     clear()
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) {
+      // Try to surface the backend's JSON `message` instead of a bare status code
+      let detail = `HTTP ${res.status}`
+      try { const j = await res.json(); if (j?.message) detail = j.message } catch {}
+      throw new Error(detail)
+    }
     return res.json()
   } catch (e) { clear(); throw e }
 }
@@ -63,7 +68,12 @@ export async function apiGet(endpoint: string): Promise<any> {
       signal,
     })
     clear()
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) {
+      // Try to surface the backend's JSON `message` instead of a bare status code
+      let detail = `HTTP ${res.status}`
+      try { const j = await res.json(); if (j?.message) detail = j.message } catch {}
+      throw new Error(detail)
+    }
     return res.json()
   } catch (e) { clear(); throw e }
 }
