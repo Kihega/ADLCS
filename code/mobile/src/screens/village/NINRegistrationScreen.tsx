@@ -25,7 +25,7 @@ import * as Clipboard from 'expo-clipboard'
 import {
   ArrowLeft, Search, Check, Shield,
   Camera as CameraIcon, Fingerprint, IdCard,
-  CheckCircle2, Copy, Download, AlertCircle, ChevronRight, User,
+  CheckCircle2, Copy, Download, AlertCircle, ChevronRight, User, Printer,
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
@@ -54,20 +54,18 @@ function today(): string {
 }
 
 // ── ID Card HTML (85.6×54mm CR-80 standard) ──────────────────────────────────
-function buildIdCardHtml(d: {
+type CardData = {
   fullName:string; nationalId:string; gender:string; dob:string
   village:string; issuedDate:string; expiryDate:string; photoBase64?:string
-}): string {
+}
+
+// ── Shared card markup + styles (used by both print and download builders) ──
+function cardMarkup(d: CardData): { css:string; html:string } {
   const photo = d.photoBase64
     ? `<img src="${d.photoBase64}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>`
     : `<div style="width:100%;height:100%;background:#d1fae5;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#0f766e;border-radius:4px;">${d.fullName.split(' ').slice(0,2).map((n:string)=>n[0]).join('')}</div>`
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>
-@page{size:85.6mm 54mm portrait;margin:0}
-*{box-sizing:border-box;margin:0;padding:0}
-body{width:85.6mm;height:54mm;font-family:Arial,sans-serif;background:#fff}
-.card{width:85.6mm;height:54mm;position:relative;overflow:hidden}
+  const css = `
+.card{width:85.6mm;height:54mm;position:relative;overflow:hidden;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,0.15)}
 .flag{display:flex;height:3mm}
 .fg{flex:3;background:#1eb53a}.fy{width:2mm;background:#fcd116}
 .fb{width:1.5mm;background:#000}.fbl{flex:3;background:#00a3dd}
@@ -87,8 +85,8 @@ body{width:85.6mm;height:54mm;font-family:Arial,sans-serif;background:#fff}
 .bars{display:flex;align-items:center;height:4mm;gap:.3mm}
 .bar{background:rgba(255,255,255,.5);border-radius:.2mm}
 .ftxt{font-size:3pt;color:rgba(255,255,255,.5)}
-</style></head>
-<body><div class="card">
+`
+  const html = `<div class="card">
 <div class="flag"><div class="fg"></div><div class="fy"></div><div class="fb"></div><div class="fy"></div><div class="fbl"></div></div>
 <div class="hdr"><div><div class="htitle">UNITED REPUBLIC OF TANZANIA</div><div class="hsub">NATIONAL IDENTIFICATION CARD</div></div></div>
 <div class="body">
@@ -110,7 +108,98 @@ body{width:85.6mm;height:54mm;font-family:Arial,sans-serif;background:#fff}
   <div class="bars">${Array.from({length:24},(_,i)=>`<div class="bar" style="width:${i%3===0?'2px':'1px'};height:${i%5===0?'3mm':'2mm'};"></div>`).join('')}</div>
   <div class="ftxt">NBS · NIDA · ${new Date().getFullYear()} · ${d.nationalId}</div>
 </div>
-</div></body></html>`
+</div>`
+  return { css, html }
+}
+
+// CR-80 (85.6×54mm) card-sized HTML — used with Print.printAsync() so the
+// native print dialog (and any connected card printer driver) receives a
+// correctly-sized page instead of a tiny card on a default A4/Letter sheet.
+function buildCardHtml(d: CardData): string {
+  const { css, html } = cardMarkup(d)
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+@page{size:85.6mm 54mm;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:85.6mm;height:54mm;font-family:Arial,sans-serif;background:#fff}
+${css}
+</style></head><body>${html}</body></html>`
+}
+
+// A4 page with the card centred — used for "Download Card" so the saved PDF
+// opens as a normal full page with the card centred, not stuck top-left.
+function buildDownloadPageHtml(d: CardData): string {
+  const { css, html } = cardMarkup(d)
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+@page{size:A4;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%}
+body{font-family:Arial,sans-serif;background:#f1f5f9;display:flex;align-items:center;justify-content:center}
+${css}
+</style></head><body>${html}</body></html>`
+}
+
+// ── On-screen ID card preview (CR-80 proportions) ────────────────────────────
+function IdCardPreview({ data }: { data: CardData | null }) {
+  if (!data) return null
+  const initials = data.fullName.split(' ').filter(Boolean).slice(0,2).map((n:string)=>n[0]).join('')
+  return (
+    <View style={{ alignSelf:'center', width:320, height:202, borderRadius:10, overflow:'hidden',
+      backgroundColor:'#fff', shadowColor:'#000', shadowOpacity:0.25, shadowRadius:10,
+      shadowOffset:{ width:0, height:4 }, elevation:8 }}>
+      <View style={{ flexDirection:'row', height:6 }}>
+        <View style={{ flex:3, backgroundColor:'#1eb53a' }} />
+        <View style={{ width:7, backgroundColor:'#fcd116' }} />
+        <View style={{ width:5, backgroundColor:'#000' }} />
+        <View style={{ width:7, backgroundColor:'#fcd116' }} />
+        <View style={{ flex:3, backgroundColor:'#00a3dd' }} />
+      </View>
+      <LinearGradient colors={['#003087','#0f766e']} style={{ height:38, alignItems:'center', justifyContent:'center' }}>
+        <Text style={{ color:'#fff', fontSize:10, fontWeight:'900', letterSpacing:1 }}>UNITED REPUBLIC OF TANZANIA</Text>
+        <Text style={{ color:'rgba(255,255,255,0.8)', fontSize:7, marginTop:1 }}>NATIONAL IDENTIFICATION CARD</Text>
+      </LinearGradient>
+      <View style={{ flex:1, flexDirection:'row', padding:10, gap:10 }}>
+        <View style={{ alignItems:'center', gap:5 }}>
+          <View style={{ width:62, height:76, borderRadius:6, borderWidth:2, borderColor:'#0f766e',
+            overflow:'hidden', backgroundColor:'#d1fae5', alignItems:'center', justifyContent:'center' }}>
+            {data.photoBase64
+              ? <Image source={{ uri:data.photoBase64 }} style={{ width:62, height:76 }} resizeMode="cover" />
+              : <Text style={{ fontSize:20, fontWeight:'900', color:'#0f766e' }}>{initials}</Text>}
+          </View>
+          <View style={{ backgroundColor:'#003087', borderRadius:4, paddingHorizontal:6, paddingVertical:3 }}>
+            <Text style={{ color:'#fcd116', fontSize:7, fontWeight:'900' }}>{data.nationalId}</Text>
+          </View>
+        </View>
+        <View style={{ flex:1, gap:3, paddingTop:1 }}>
+          <Text style={{ fontSize:13, fontWeight:'900', color:'#003087' }} numberOfLines={1}>{data.fullName}</Text>
+          <View style={{ backgroundColor:'#0f766e', borderRadius:3, paddingHorizontal:6, paddingVertical:1.5, alignSelf:'flex-start', marginBottom:1 }}>
+            <Text style={{ color:'#fff', fontSize:7, fontWeight:'700', letterSpacing:0.5 }}>TANZANIA CITIZEN</Text>
+          </View>
+          {[
+            ['Gender',        data.gender.toUpperCase()],
+            ['Date of Birth', fmtDOB(data.dob)],
+            ['Village',       data.village],
+            ['Issued',        data.issuedDate],
+            ['Expires',       data.expiryDate],
+          ].map(([k,v])=>(
+            <View key={k} style={{ flexDirection:'row', justifyContent:'space-between',
+              borderBottomWidth:0.5, borderBottomColor:'#e2e8f0', paddingBottom:1 }}>
+              <Text style={{ fontSize:8, color:'#64748b' }}>{k}</Text>
+              <Text style={{ fontSize:8, fontWeight:'700', color:'#0f172a' }} numberOfLines={1}>{v}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={{ height:18, backgroundColor:'#1e293b', flexDirection:'row',
+        alignItems:'center', justifyContent:'space-between', paddingHorizontal:10 }}>
+        <View style={{ flexDirection:'row', alignItems:'flex-end', gap:1 }}>
+          {Array.from({length:24}).map((_,i)=>(
+            <View key={i} style={{ width:i%3===0?2:1, height:i%5===0?12:8, backgroundColor:'rgba(255,255,255,0.5)' }} />
+          ))}
+        </View>
+        <Text style={{ fontSize:6, color:'rgba(255,255,255,0.5)' }}>NBS · NIDA</Text>
+      </View>
+    </View>
+  )
 }
 
 // ── StepBar ───────────────────────────────────────────────────────────────────
@@ -179,8 +268,10 @@ export default function NINRegistrationScreen({ navigation }: Props) {
   // Step 3
   const [submitting,  setSubmitting]  = useState(false)
   const [issuedNIN,   setIssuedNIN]   = useState<string|null>(null)
-  const [pdfPath,     setPdfPath]     = useState<string|null>(null)
+  const [cardHtml,    setCardHtml]    = useState<string|null>(null)
+  const [cardData,    setCardData]    = useState<CardData|null>(null)
   const [downloading, setDownloading] = useState(false)
+  const [printing,    setPrinting]    = useState(false)
   const [officer,     setOfficer]     = useState<any>({})
 
   // Toast + step
@@ -287,15 +378,13 @@ export default function NINRegistrationScreen({ navigation }: Props) {
         const issued = today()
         const expiry = new Date(); expiry.setFullYear(expiry.getFullYear()+10)
         const expiryStr = expiry.toLocaleDateString('en-TZ',{day:'2-digit',month:'long',year:'numeric'}).toUpperCase()
-        const html = buildIdCardHtml({
+        const data: CardData = {
           fullName, nationalId:nin, gender:birthRecord.gender,
           dob:birthRecord.dateOfBirth, village:officer?.villageName??'—',
           issuedDate:issued, expiryDate:expiryStr, photoBase64:photoBase64??undefined,
-        })
-        const { uri } = await Print.printToFileAsync({ html, base64:false })
-        const dest = `${FileSystem.documentDirectory}NID-${nin.replace(/-/g,'_')}.pdf`
-        await FileSystem.copyAsync({ from:uri, to:dest })
-        setPdfPath(dest)
+        }
+        setCardData(data)
+        setCardHtml(buildCardHtml(data))
         setStep(3)
       } else {
         Alert.alert('Error', json.message ?? 'Failed to issue NIN')
@@ -304,11 +393,35 @@ export default function NINRegistrationScreen({ navigation }: Props) {
     setSubmitting(false)
   },[birthRecord, photoBase64, fpLeft, fpRight, officer])
 
+  // Print Card — opens the native print dialog (officer selects a connected
+  // card printer or any other printer). Uses CR-80-sized HTML.
+  const handlePrint = async () => {
+    if (!cardHtml) return
+    setPrinting(true)
+    try {
+      await Print.printAsync({ html: cardHtml })
+    } catch (e: any) {
+      if (e?.message && !/cancel/i.test(e.message)) {
+        Alert.alert('Print Error', 'Could not open the print dialog.')
+      }
+    }
+    setPrinting(false)
+  }
+
+  // Download Card — generates an A4 PDF with the card centred on the page,
+  // then opens the share sheet to save/send it.
   const handleDownload = async () => {
-    if (!pdfPath) return
+    if (!cardData) return
     setDownloading(true)
-    try { await Sharing.shareAsync(pdfPath,{ mimeType:'application/pdf', dialogTitle:'Save NID Card' }) }
-    catch { Alert.alert('Error','Could not share PDF') }
+    try {
+      const pageHtml = buildDownloadPageHtml(cardData)
+      const { uri } = await Print.printToFileAsync({ html: pageHtml, width: 595, height: 842, base64: false })
+      const dest = `${FileSystem.documentDirectory}NID-${cardData.nationalId.replace(/-/g,'_')}.pdf`
+      await FileSystem.copyAsync({ from: uri, to: dest })
+      await Sharing.shareAsync(dest, { mimeType:'application/pdf', dialogTitle:'Save NID Card' })
+    } catch {
+      Alert.alert('Error', 'Could not generate or share the PDF')
+    }
     setDownloading(false)
   }
 
@@ -579,6 +692,16 @@ export default function NINRegistrationScreen({ navigation }: Props) {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* National ID card preview */}
+            <View style={{ gap:6 }}>
+              <Text style={{ fontSize:11, color:T.textDim, fontWeight:'600', textTransform:'uppercase',
+                letterSpacing:0.5, textAlign:'center' }}>
+                Card Preview
+              </Text>
+              <IdCardPreview data={cardData} />
+            </View>
+
             {[
               ['Age',          `${age} years`],
               ['Gender',       birthRecord?.gender?.toUpperCase()],
@@ -591,17 +714,29 @@ export default function NINRegistrationScreen({ navigation }: Props) {
                 <Text style={{ fontSize:12, fontWeight:'700', color:T.text }}>{v}</Text>
               </View>
             ))}
-            <TouchableOpacity onPress={handleDownload} disabled={downloading || !pdfPath}
-              style={{ flexDirection:'row', alignItems:'center', justifyContent:'center', gap:10,
-                backgroundColor:downloading ? T.card2 : G, borderRadius:12, paddingVertical:14,
-                borderWidth:downloading?1:0, borderColor:T.border, marginTop:8 }}>
-              {downloading
-                ? <ActivityIndicator color={GL} size="small" />
-                : <Download size={18} color="#fff" />}
-              <Text style={{ fontSize:14, fontWeight:'800', color:downloading?GL:'#fff' }}>
-                {downloading ? 'Generating…' : 'Download ID Card PDF'}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection:'row', gap:10, marginTop:8 }}>
+              <TouchableOpacity onPress={handlePrint} disabled={printing || !cardHtml}
+                style={{ flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8,
+                  backgroundColor:printing ? T.card2 : G, borderRadius:12, paddingVertical:14,
+                  borderWidth:printing?1:0, borderColor:T.border }}>
+                {printing
+                  ? <ActivityIndicator color={GL} size="small" />
+                  : <Printer size={18} color="#fff" />}
+                <Text style={{ fontSize:14, fontWeight:'800', color:printing?GL:'#fff' }}>
+                  {printing ? 'Opening…' : 'Print Card'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDownload} disabled={downloading || !cardData}
+                style={{ flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8,
+                  borderRadius:12, paddingVertical:14, borderWidth:1.5, borderColor:`${G}60` }}>
+                {downloading
+                  ? <ActivityIndicator color={GL} size="small" />
+                  : <Download size={18} color={GL} />}
+                <Text style={{ fontSize:14, fontWeight:'800', color:GL }}>
+                  {downloading ? 'Generating…' : 'Download Card'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity onPress={()=>navigation.goBack()}
               style={{ borderWidth:1, borderColor:T.border, borderRadius:12, paddingVertical:13, alignItems:'center' }}>
               <Text style={{ fontSize:14, fontWeight:'700', color:T.textSub }}>Done</Text>
