@@ -329,7 +329,18 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         clearTimeout(_bt)
         const json = await res.json()
         if (json.success && json.data) {
-          setData({ ...json.data, firstName: json.data.firstName, middleName: json.data.middleName ?? '', surname: json.data.surname, gender: json.data.gender?.toUpperCase(), dateOfBirth: json.data.dateOfBirth, age: 0, region:'Tanzania', district:'—', occupation:'—', vitalStatus: json.data.vitalStatus?.toUpperCase() ?? 'ALIVE' })
+          const foundGender = json.data.gender?.toUpperCase()
+          if (isFather && foundGender !== 'MALE') {
+            setError('This National ID belongs to a FEMALE citizen and cannot be used for the Father.')
+            setLoading(false)
+            return
+          }
+          if (!isFather && foundGender !== 'FEMALE') {
+            setError('This National ID belongs to a MALE citizen and cannot be used for the Mother.')
+            setLoading(false)
+            return
+          }
+          setData({ ...json.data, firstName: json.data.firstName, middleName: json.data.middleName ?? '', surname: json.data.surname, gender: foundGender, dateOfBirth: json.data.dateOfBirth, age: 0, region:'Tanzania', district:'—', occupation:'—', vitalStatus: json.data.vitalStatus?.toUpperCase() ?? 'ALIVE' })
           setLoading(false)
           return
         }
