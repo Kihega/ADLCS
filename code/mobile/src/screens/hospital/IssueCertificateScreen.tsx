@@ -397,7 +397,7 @@ const s = StyleSheet.create({
   cardActions:  { flexDirection: 'row', borderTopWidth: 1, marginTop: 10 },
   cardBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
   cardBtnText:  { fontSize: 12, fontWeight: '700' },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0.55)' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
   modalSheet:   { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, maxHeight: '80%' },
   sheetHandle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: '#ccc', alignSelf: 'center', marginBottom: 16 },
   sheetTypeIcon:{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },

@@ -45,7 +45,7 @@ function CalPicker({ visible, title, onSelect, onClose }: {
   if (!visible) return null
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0.65)' }}>
+      <View style={{ flex:1, justifyContent:'flex-end', backgroundColor:'rgba(0,0,0,0.65)' }}>
         <View style={{ backgroundColor:'#0d1f38', borderTopLeftRadius:24, borderTopRightRadius:24, padding:20, paddingBottom:36 }}>
           <View style={{ width:40, height:4, backgroundColor:'#1e3a5f', borderRadius:2, alignSelf:'center', marginBottom:16 }} />
           <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginBottom:14 }}>

@@ -44,7 +44,7 @@ const C = {
   bg3:    '#040b16' as const,
   cyan:   '#00d4ff' as const,
   white:  '#ffffff' as const,
-  dim:    'rgba(255,255,0.35)' as const,
+  dim:    'rgba(255,255,255,0.35)' as const,
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -251,13 +251,13 @@ const s = StyleSheet.create({
   },
   labelMain: {
     fontSize:   14,
-    color:      'rgba(255,255,0.80)',
+    color:      'rgba(255,255,255,0.80)',
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   labelSub: {
     fontSize:   11,
-    color:      'rgba(255,255,0.40)',
+    color:      'rgba(255,255,255,0.40)',
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
@@ -294,7 +294,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     bottom:   20,
     fontSize: 9,
-    color:    'rgba(255,255,0.18)',
+    color:    'rgba(255,255,255,0.18)',
     letterSpacing: 0.5,
   },
 })
