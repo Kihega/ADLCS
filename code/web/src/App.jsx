@@ -2,8 +2,8 @@
  * App.jsx — ADLCS Web Router
  *
  * Web portal serves ADMIN roles only:
- *   /super-admin    → ProtectedRoute [super_admin]    → PlaceholderDashboard
- *   /district-admin → ProtectedRoute [district_admin] → PlaceholderDashboard
+ *   /super-admin    → ProtectedRoute [super_admin]    → AdminDashboard (role="super_admin")
+ *   /district-admin → ProtectedRoute [district_admin] → AdminDashboard (role="district_admin")
  *   /mobile-only    → MobileOnlyPage (shown when village/hospital officer
  *                     accidentally logs in via web — tells them to use the app)
  *   /login          → LoginPage (public)
@@ -21,7 +21,7 @@ import { apiRefresh, apiMe } from './api/auth.api'
 
 import ProtectedRoute       from './components/ProtectedRoute'
 import LoginPage            from './pages/LoginPage'
-import PlaceholderDashboard from './pages/PlaceholderDashboard'
+import AdminDashboard       from './pages/AdminDashboard'
 import MobileOnlyPage       from './pages/MobileOnlyPage'
 
 // ── Silent token refresh on startup ──────────────────────────────────────────
@@ -67,7 +67,7 @@ export default function App() {
           path="/super-admin"
           element={
             <ProtectedRoute roles={['super_admin']}>
-              <PlaceholderDashboard />
+              <AdminDashboard role="super_admin" />
             </ProtectedRoute>
           }
         />
@@ -75,7 +75,7 @@ export default function App() {
           path="/district-admin"
           element={
             <ProtectedRoute roles={['district_admin']}>
-              <PlaceholderDashboard />
+              <AdminDashboard role="district_admin" />
             </ProtectedRoute>
           }
         />

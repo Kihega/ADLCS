@@ -186,6 +186,12 @@ enum AuditActorRole {
   public_user
 }
 
+enum AuditSeverity {
+  info
+  warning
+  critical
+}
+
 enum PopulationLevel {
   national
   region
@@ -715,6 +721,7 @@ model AuditLog {
   ipAddress   String?        @map("ip_address") @db.VarChar(45)
   gpsLat      Decimal?       @map("gps_lat") @db.Decimal(10, 8)
   gpsLng      Decimal?       @map("gps_lng") @db.Decimal(11, 8)
+  severity    AuditSeverity  @default(info)
   timestamp   DateTime       @default(now())
 
   superAdmin      SuperAdmin?      @relation(fields: [actorId], references: [id], map: "audit_super_admin_fk")

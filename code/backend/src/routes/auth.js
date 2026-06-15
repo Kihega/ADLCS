@@ -138,8 +138,12 @@ router.post('/change-password', requireAuth, async (req, res) => {
       record = await prisma.villageOfficer.findUnique({
         where: { id }, select: { id: true, passwordHash: true },
       })
-    } else if (['super_admin', 'admin', 'district_admin', 'regional_admin'].includes(role)) {
-      record = await prisma.admin.findUnique({
+    } else if (role === 'super_admin') {
+      record = await prisma.superAdmin.findUnique({
+        where: { id }, select: { id: true, passwordHash: true },
+      })
+    } else if (role === 'district_admin') {
+      record = await prisma.districtAdmin.findUnique({
         where: { id }, select: { id: true, passwordHash: true },
       })
     } else {
@@ -161,8 +165,10 @@ router.post('/change-password', requireAuth, async (req, res) => {
       await prisma.hospitalOfficer.update({ where: { id }, data: { passwordHash: newHash } })
     } else if (role === 'village_officer') {
       await prisma.villageOfficer.update({ where: { id }, data: { passwordHash: newHash } })
+    } else if (role === 'super_admin') {
+      await prisma.superAdmin.update({ where: { id }, data: { passwordHash: newHash } })
     } else {
-      await prisma.admin.update({ where: { id }, data: { passwordHash: newHash } })
+      await prisma.districtAdmin.update({ where: { id }, data: { passwordHash: newHash } })
     }
 
     console.log(`[change-password] Officer ${id} (${role}) changed password`)
