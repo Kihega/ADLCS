@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient }  from 'expo-linear-gradient'
 import { Eye, EyeOff, Shield, MapPin, Smartphone, AlertCircle } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { resolveBase } from '../../services/apiResolver'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type RootStack = {
@@ -201,7 +202,10 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     if (password.length < 4)  { setError('Enter your password'); return }
     setError(''); setLoading(true)
     try {
-      const res  = await fetch(`${API_BASE}/auth/login`, {
+      let base: string
+      try { base = await resolveBase() }
+      catch { setError('No internet connection — check Wi-Fi or mobile data'); return }
+      const res  = await fetch(`${base}/auth/login`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email, password }),
@@ -226,8 +230,13 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         ])
         goHome(data.profile?.role ?? '')
       }
-    } catch {
-      setError('Connection failed. Check your internet.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg === 'No internet connection' || msg.includes('Network request failed')) {
+        setError('No internet connection — check Wi-Fi or mobile data')
+      } else {
+        setError('Login failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -237,7 +246,10 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     if (mfaCode.length < 6) { setError('Enter the 6-digit TOTP code'); return }
     setError(''); setLoading(true)
     try {
-      const res  = await fetch(`${API_BASE}/auth/mfa/verify`, {
+      let base: string
+      try { base = await resolveBase() }
+      catch { setError('No internet connection — check Wi-Fi or mobile data'); return }
+      const res  = await fetch(`${base}/auth/mfa/verify`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ tempToken, code: mfaCode }),
@@ -256,8 +268,13 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         ['adlcs_employee_id',   data.profile?.employee_id ?? 'EMP-000'],
       ])
       goHome(data.profile?.role ?? '')
-    } catch {
-      setError('Connection failed. Try again.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg === 'No internet connection' || msg.includes('Network request failed')) {
+        setError('No internet connection — check Wi-Fi or mobile data')
+      } else {
+        setError('MFA verification failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

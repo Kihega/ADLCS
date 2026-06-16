@@ -13,8 +13,9 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LocalBirth, LocalDeath } from './localDb'
+import { resolveBase, resetResolver } from './apiResolver'
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
+// API_BASE is resolved dynamically — see apiResolver.ts
 
 export type ConnQuality = 'Good' | 'Fair' | 'Offline'
 export interface SyncResult { synced: number; failed: number; offline: boolean }
@@ -39,9 +40,10 @@ async function getToken(): Promise<string | null> {
 export async function apiPost(endpoint: string, body: object): Promise<any> {
   const token = await getToken()
   if (!token) throw new Error('No auth token')
+  const base = await resolveBase()
   const { signal, clear } = makeSignal(15_000)
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    const res = await fetch(`${base}${endpoint}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body:    JSON.stringify(body),
@@ -61,9 +63,10 @@ export async function apiPost(endpoint: string, body: object): Promise<any> {
 export async function apiGet(endpoint: string): Promise<any> {
   const token = await getToken()
   if (!token) throw new Error('No auth token')
+  const base = await resolveBase()
   const { signal, clear } = makeSignal(10_000)
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    const res = await fetch(`${base}${endpoint}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal,
     })
@@ -83,11 +86,16 @@ export async function checkConnQuality(): Promise<ConnQuality> {
   const { signal, clear } = makeSignal(4000)
   try {
     const t = Date.now()
-    const res = await fetch(`${API_BASE}/health`, { signal })
+    const base = await resolveBase()
+    const res = await fetch(`${base}/health`, { signal })
     clear()
     if (!res.ok) return 'Fair'
     return Date.now() - t < 800 ? 'Good' : 'Fair'
-  } catch { clear(); return 'Offline' }
+  } catch (err) {
+    clear()
+    resetResolver()  // force re-probe next call after a connectivity event
+    return 'Offline'
+  }
 }
 
 // ── Save birth → POST directly to backend → Supabase ─────────────────────────

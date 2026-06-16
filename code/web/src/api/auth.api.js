@@ -45,7 +45,8 @@ apiClient.interceptors.response.use(
         }
 
         // Use a plain axios call (not apiClient) to avoid the interceptor loop
-        const { data } = await axios.post(`${BASE}/auth/refresh`, { refreshToken })
+        const base = apiClient.defaults.baseURL || import.meta.env.VITE_API_BASE_URL || 'https://adlcs.onrender.com/api'
+        const { data } = await axios.post(`${base}/auth/refresh`, { refreshToken })
         updateAccessToken(data.accessToken)
 
         // Retry the original failed request with the new token
