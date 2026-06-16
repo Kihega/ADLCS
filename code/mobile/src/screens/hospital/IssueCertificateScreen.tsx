@@ -23,18 +23,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { LocalBirth, LocalDeath } from '../../services/localDb'
 import { apiGet } from '../../services/syncService'
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
-import {
-  generateBirthPdf, generateDeathPdf,
-  sharePdf, printHtml,
-  buildBirthCertHtml, buildDeathCertHtml,
-  updateBirthCertPath, updateDeathCertPath,
-} from '../../services/certificateService'
+import { sharePdf } from '../../services/certificateService'
 import { useTheme, TZ } from '../../context/ThemeContext'
-
-// re-export updateDeathCertPath from localDb
-import { updateDeathCertPath as _updateDeathCertPath } from '../../services/localDb'
 
 type RootStack = { HospitalHome: undefined; IssueCertificate: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'IssueCertificate'> }

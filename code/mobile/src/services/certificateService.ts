@@ -34,7 +34,7 @@ function fmtDate(d: string): string {
   } catch { return d }
 }
 
-function today(): string {
+function _today(): string {
   return new Date().toLocaleDateString('en-TZ', { day:'2-digit', month:'long', year:'numeric' }).toUpperCase()
 }
 

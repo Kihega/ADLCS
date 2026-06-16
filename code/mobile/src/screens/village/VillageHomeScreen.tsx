@@ -23,7 +23,7 @@ import AsyncStorage        from '@react-native-async-storage/async-storage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
-  Users, Cross, FileText, Clock, Sun, Moon, Bell, LogOut,
+  Cross, FileText, Sun, Moon, Bell, LogOut,
   MapPin, RefreshCw, ChevronRight, Shield, Building2, Heart,
   Wifi, WifiOff, AlertTriangle, BarChart3, User, Lock,
   Menu, X, Download, WifiLow, UserPlus, Navigation,
@@ -32,10 +32,9 @@ import {
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { getLocalStats, getCachedOfficerData, cacheOfficerData } from '../../services/localDb'
 import {
   fetchRemoteDashboard, fetchRemoteActivity,
-  isOnline, getConnQuality, checkConnQuality, ConnQuality,
+  checkConnQuality, ConnQuality,
 } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { useGeofence } from '../../context/GeofenceContext'
@@ -176,6 +175,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
         Animated.timing(bg,{toValue:0,  duration:220,useNativeDriver:true}),
       ]).start(()=>setMounted(false))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[open])
 
   if (!mounted) return null
@@ -264,6 +264,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
 }
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function StatCard({ icon, value, label, color, sub }: { icon:React.ReactNode; value:number; label:string; color:string; sub?:string }) {
   const { theme:T } = useTheme()
   return (
@@ -289,9 +290,9 @@ function ActionCard({ icon, label, sub, bg, onPress }: { icon:React.ReactNode; l
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-export default function VillageHomeScreen({ navigation }: Props) {
+export default function VillageHomeScreen({ navigation: _navigation }: Props) {
   const { theme:T, isDark, toggleTheme } = useTheme()
-  const { inZone, distanceKm, setGeofenceConfig } = useGeofence()
+  const { inZone, distanceKm, setGeofenceConfig: _setGeofenceConfig } = useGeofence()
 
   const [loading,     setLoading]    = useState(true)
   const [refreshing,  setRefreshing] = useState(false)

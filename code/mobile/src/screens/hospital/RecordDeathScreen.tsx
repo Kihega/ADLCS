@@ -21,11 +21,11 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { generateDeathCertNo, updateDeathCertPath } from '../../services/localDb'
-import { generateDeathPdf, sharePdf } from '../../services/certificateService'
+import { sharePdf } from '../../services/certificateService'
 import { triggerSync, saveAndSyncDeath } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 type RootStack = { HospitalHome: undefined; RecordDeath: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RecordDeath'> }
 type LocationType  = 'health_facility'|'home'|'public_place'|'other'
@@ -147,6 +147,7 @@ function Toast({ message, visible }: { message:string; visible:boolean }) {
       Animated.delay(1600),
       Animated.timing(op,{toValue:0,duration:300,useNativeDriver:true}),
     ]).start()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[visible])
   return (
     <Animated.View style={{ position:'absolute', bottom:120, alignSelf:'center', backgroundColor:TZ.green, borderRadius:20, paddingHorizontal:18, paddingVertical:10, flexDirection:'row', alignItems:'center', gap:8, opacity:op, elevation:9 }} pointerEvents="none">

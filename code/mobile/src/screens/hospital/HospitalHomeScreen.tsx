@@ -25,16 +25,14 @@ import {
   MapPin, RefreshCw, ChevronRight, Shield, Building2,
   Wifi, WifiOff, AlertTriangle, BarChart3, User, Lock,
   Menu, X, Download, WifiLow, Stethoscope, IdCard,
-  Calendar, BadgeCheck, Eye, EyeOff,
+  Eye, EyeOff,
 } from 'lucide-react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { getLocalStats, getCachedOfficerData, cacheOfficerData } from '../../services/localDb'
 import {
   fetchRemoteDashboard, fetchRemoteActivity,
-  isOnline, getConnQuality, checkConnQuality, triggerSync,
-  fetchOfficerProfile, ConnQuality,
+  checkConnQuality, ConnQuality,
 } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { useGeofence } from '../../context/GeofenceContext'
@@ -48,7 +46,7 @@ type Props = { navigation: NativeStackNavigationProp<RootStack, 'HospitalHome'> 
 
 const H       = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const W       = Dimensions.get('window').width
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 const CONN_COLORS: Record<ConnQuality, string> = { Good: '#4ade80', Fair: '#fbbf24', Offline: '#f87171' }
 
 // ─── Change Password Modal ─────────────────────────────────────────────────────
@@ -190,7 +188,7 @@ function OfficerIdCard({ visible, onClose, officer }: {
   onClose: () => void
   officer: Record<string,any>
 }) {
-  const { theme: T, isDark } = useTheme()
+  const { theme: T, isDark: _isDark } = useTheme()
   const initials = (officer.officerName ?? 'HO').split(' ').filter(Boolean)
     .slice(0,2).map((n:string)=>n[0]).join('').toUpperCase()
   const issueYear = new Date().getFullYear()
@@ -307,6 +305,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
         Animated.timing(bg, { toValue: 0,   duration: 220, useNativeDriver: true }),
       ]).start(() => setMounted(false))  // unmount AFTER animation
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   if (!mounted) return null
@@ -414,6 +413,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
 }
 
 // ─── StatCard / ActionCard ─────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function StatCard({ icon, value, label, color, sub }: { icon:React.ReactNode; value:number; label:string; color:string; sub?:string }) {
   const { theme:T } = useTheme()
   return (
@@ -437,7 +437,7 @@ function ActionCard({ icon, label, sub, bg, onPress }: { icon:React.ReactNode; l
 }
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
-export default function HospitalHomeScreen({ navigation }: Props) {
+export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
   const { theme:T, isDark, toggleTheme } = useTheme()
   const { inZone, distanceKm, setGeofenceConfig } = useGeofence()
 

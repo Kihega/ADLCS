@@ -6,10 +6,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Animated } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
-import { ArrowLeft, RefreshCw, Wifi, WifiOff, CheckCircle, Baby, Cross, Clock, Shield, Database, WifiLow } from 'lucide-react-native'
+import { ArrowLeft, RefreshCw, Wifi, WifiOff, Baby, Cross, Clock, Shield, Database, WifiLow } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { getLocalStats } from '../../services/localDb'
+// localDb imported when needed
 import { triggerSync, getSyncStatus, checkConnQuality, ConnQuality } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -35,6 +35,7 @@ export default function SyncDataScreen({ navigation }: Props) {
 
   useFocusEffect(useCallback(() => { loadStatus(); const t = setInterval(loadStatus, 10_000); return () => clearInterval(t) }, [loadStatus]))
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (syncing) { spinLoop.current = Animated.loop(Animated.timing(spinAnim,{toValue:1,duration:900,useNativeDriver:true})); spinLoop.current.start() }
     else { spinLoop.current?.stop(); spinAnim.setValue(0) }
