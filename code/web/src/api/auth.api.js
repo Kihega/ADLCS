@@ -9,15 +9,28 @@
 
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import { resolveBase } from './apiResolver'
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+// BASE starts as the env-configured URL; resolveBase() may switch it to local
+const INITIAL_BASE = import.meta.env.VITE_API_BASE_URL || 'https://adlcs.onrender.com/api'
+let _baseReady = false
 
 // Shared axios instance for all authenticated requests
-export const apiClient = axios.create({ baseURL: BASE })
+export const apiClient = axios.create({ baseURL: INITIAL_BASE })
 
-// ── Request interceptor — attach access token ─────────────────────────────────
-apiClient.interceptors.request.use((config) => {
-  // useAuthStore.getState() is the Zustand way to read state outside React
+// ── Request interceptor — resolve base URL + attach access token ───────────────
+apiClient.interceptors.request.use(async (config) => {
+  // Resolve live backend on first call (cached 60 s by apiResolver)
+  if (!_baseReady) {
+    try {
+      const base = await resolveBase()
+      apiClient.defaults.baseURL = base
+      config.baseURL = base
+      _baseReady = true
+    } catch {
+      return Promise.reject(new Error('No internet connection'))
+    }
+  }
   const { accessToken } = useAuthStore.getState()
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`
