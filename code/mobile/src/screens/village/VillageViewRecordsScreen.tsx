@@ -1,23 +1,18 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useCallback } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
-  Animated,
+  View, Text, TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ArrowLeft, Calendar, X, CheckCircle2, Copy } from 'lucide-react-native'
-import * as Clipboard from 'expo-clipboard'
-import AsyncStorage   from '@react-native-async-storage/async-storage'
+import { ArrowLeft } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
-import { apiPost, isOnline } from '../../services/syncService'
-
+import { isOnline, apiGet } from '../../services/syncService'
 import { FileText, Cross, Heart, Home, Landmark, Navigation,
          Users, Search, ChevronRight, WifiOff, RefreshCw } from 'lucide-react-native'
 import { FlatList, RefreshControl } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
-import { getAllBirths, getAllDeaths } from '../../services/localDb'
-import { apiGet } from '../../services/syncService'
+import { getAllDeaths } from '../../services/localDb'
 
 type VStack = { VillageHome:undefined; VillageViewRecords:undefined }
 type Props  = { navigation: NativeStackNavigationProp<VStack,'VillageViewRecords'> }

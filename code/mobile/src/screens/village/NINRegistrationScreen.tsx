@@ -204,7 +204,7 @@ function IdCardPreview({ data }: { data: CardData | null }) {
 
 // ── StepBar ───────────────────────────────────────────────────────────────────
 function StepBar({ step, total }: { step:number; total:number }) {
-  const { theme: T } = useTheme()
+  const { theme: _T } = useTheme()
   return (
     <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:20, paddingVertical:10, gap:6 }}>
       {Array.from({length:total},(_,i)=>i+1).map((n,i)=>(
@@ -227,6 +227,7 @@ function StepBar({ step, total }: { step:number; total:number }) {
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, vis }: { msg:string; vis:boolean }) {
   const op = useRef(new Animated.Value(0)).current
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{
     if (vis) Animated.sequence([
       Animated.timing(op,{toValue:1,duration:200,useNativeDriver:true}),

@@ -3,14 +3,13 @@
  */
 
 import React, { useState, useCallback } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { ArrowLeft, Clock, Baby, Cross, FileText, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; PendingCases: undefined; IssueCertificate: undefined }
@@ -32,19 +31,7 @@ export default function PendingCasesScreen({ navigation }: Props) {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
-      if (!token) { setLoading(false); setRefreshing(false); return }
-      const { signal, clear } = (() => {
-        const c = new AbortController()
-        const t = setTimeout(() => c.abort(), 8000)
-        return { signal: c.signal, clear: () => clearTimeout(t) }
-      })()
-      const res  = await fetch(`${API_BASE}/officer/records/pending`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal,
-      })
-      clear()
-      const json = await res.json()
+      const json = await apiGet('/officer/records/pending')
       if (json.success && Array.isArray(json.data)) {
         const rows: PendingRow[] = json.data.map((r: any) => ({
           id:      r.id,

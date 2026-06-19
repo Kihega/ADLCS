@@ -1,6 +1,6 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
+  View, Text, TextInput, TouchableOpacity, ScrollView,
   Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
   Animated,
 } from 'react-native'
@@ -13,7 +13,7 @@ import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
 
 import { User, Shield, AlertTriangle, CheckCircle2 as CC } from 'lucide-react-native'
-import { saveBirth, generateNationalId } from '../../services/localDb'
+import { generateNationalId } from '../../services/localDb'
 
 // ── Reusable calendar picker (no external packages) ──────────────────────────
 function CalPicker({ visible, title, maxDate, minDate, onSelect, onClose }: {
@@ -114,6 +114,7 @@ const SField = React.memo(function SField({ label, value, onChange, placeholder,
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, vis }: { msg:string; vis:boolean }) {
   const op = useRef(new Animated.Value(0)).current
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{
     if (vis) Animated.sequence([
       Animated.timing(op,{toValue:1,duration:200,useNativeDriver:true}),
@@ -186,7 +187,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
   const [toast,       setToast]       = useState('')
   const [toastVis,    setToastVis]    = useState(false)
 
-  const BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown']
+  const _BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown']
 
   const checkAge = () => {
     if (!dob) { setAgeError('Please select a date of birth.'); return }

@@ -13,7 +13,7 @@
  *   const res = await fetch(`${base}/auth/login`, ...)
  */
 
-const REMOTE   = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
+const REMOTE   = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 const LOCAL    = 'http://10.0.2.2:5000/api'   // Android emulator localhost alias
 const LOCAL_IOS = 'http://localhost:5000/api'  // iOS simulator localhost
 const TIMEOUT  = 5_000   // ms per probe attempt

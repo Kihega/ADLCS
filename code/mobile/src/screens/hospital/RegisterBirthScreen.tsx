@@ -25,7 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import * as Clipboard     from 'expo-clipboard'
 import AsyncStorage       from '@react-native-async-storage/async-storage'
 import {
-  Baby, ChevronLeft, ChevronRight, Check, X,
+  ChevronLeft, ChevronRight, Check, X,
   User, Shield, FileText, AlertCircle,
   CheckCircle2, Copy, Calendar, Download,
 } from 'lucide-react-native'
@@ -42,7 +42,7 @@ import { useTheme, TZ } from '../../context/ThemeContext'
 type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const { width: W } = Dimensions.get('window')
 
@@ -138,6 +138,7 @@ function Toast({ message, visible }: { message:string; visible:boolean }) {
       Animated.delay(1600),
       Animated.timing(op,{toValue:0,duration:300,useNativeDriver:true}),
     ]).start()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
   return (
     <Animated.View style={{ position:'absolute', bottom:100, alignSelf:'center', backgroundColor:TZ.green, borderRadius:20, paddingHorizontal:18, paddingVertical:10, flexDirection:'row', alignItems:'center', gap:8, opacity:op, elevation:9 }} pointerEvents="none">
@@ -163,6 +164,7 @@ function SuccessModal({ visible, onClose, birth, pdfPath, onDownload, downloadin
       Animated.spring(scale,{toValue:visible?1:0.7,friction:6,tension:80,useNativeDriver:true}),
       Animated.timing(fade, {toValue:visible?1:0,duration:200,useNativeDriver:true}),
     ]).start()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
   const copy = async (text:string, label:string) => {
@@ -281,7 +283,7 @@ function CitizenCard({ c, role }: { c:any; role:'Father'|'Mother' }) {
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function RegisterBirthScreen({ navigation }: Props) {
-  const { theme: T, isDark } = useTheme()
+  const { theme: T, isDark: _isDark } = useTheme()
 
   const [step, setStep] = useState<1|2|3|4>(1)
   const [fatherNid, setFatherNid] = useState('')
@@ -310,6 +312,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       if (!childMiddle.trim()) setChildMiddle(fatherData.middleName ?? '')
       if (!childSurname.trim()) setChildSurname(fatherData.surname ?? '')
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fatherData])
 
   const lookupParent = useCallback(async (nid: string, role: 'father'|'mother') => {

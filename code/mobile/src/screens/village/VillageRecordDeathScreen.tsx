@@ -1,11 +1,12 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
+  View, Text, TextInput, TouchableOpacity, ScrollView,
   Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
   Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ArrowLeft, Calendar, X, CheckCircle2, Copy } from 'lucide-react-native'
+import { ArrowLeft, Calendar, X, CheckCircle2, Copy,
+         Cross, AlertTriangle, Search, User, CheckCircle2 as CC } from 'lucide-react-native'
 import * as Clipboard from 'expo-clipboard'
 import AsyncStorage   from '@react-native-async-storage/async-storage'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -113,6 +114,7 @@ const SField = React.memo(function SField({ label, value, onChange, placeholder,
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, vis }: { msg:string; vis:boolean }) {
   const op = useRef(new Animated.Value(0)).current
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{
     if (vis) Animated.sequence([
       Animated.timing(op,{toValue:1,duration:200,useNativeDriver:true}),
@@ -157,7 +159,7 @@ function ScreenHeader({ title, sub, icon, iconBg, onBack }: {
 type VStack = { VillageHome:undefined; VillageRecordDeath:undefined }
 type Props  = { navigation: NativeStackNavigationProp<VStack,'VillageRecordDeath'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 
 export default function VillageRecordDeathScreen({ navigation }: Props) {
   const { theme:T } = useTheme()

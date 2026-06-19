@@ -36,7 +36,7 @@ type LoginScreenProps = {
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://adlcs.onrender.com/api'
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 const { height: SCREEN_H } = Dimensions.get('window')
 
 // ─── Tanzania colours ─────────────────────────────────────────────────────────
@@ -192,6 +192,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current
 
   // Fade in on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start()
   }, [])
