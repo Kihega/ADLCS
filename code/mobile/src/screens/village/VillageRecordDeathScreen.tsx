@@ -114,13 +114,16 @@ const SField = React.memo(function SField({ label, value, onChange, placeholder,
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, vis }: { msg:string; vis:boolean }) {
   const op = useRef(new Animated.Value(0)).current
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // LINTFIX-5: disable comment moved to sit directly above the dependency
+  // array line, where eslint-plugin-react-hooks actually attaches the warning
+  // (it was previously above `useEffect(`, one line too early to suppress it).
   useEffect(()=>{
     if (vis) Animated.sequence([
       Animated.timing(op,{toValue:1,duration:200,useNativeDriver:true}),
       Animated.delay(1600),
       Animated.timing(op,{toValue:0,duration:300,useNativeDriver:true}),
     ]).start()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[vis])
   return (
     <Animated.View pointerEvents="none"

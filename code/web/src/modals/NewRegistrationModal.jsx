@@ -45,21 +45,21 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
       ? apiGetDistricts(form.regionId).then(r => r.data || [])
       : Promise.resolve([])
     fetch.then(data => setDistricts(data)).catch(() => {})
-  }, [form.regionId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.regionId])  
 
   useEffect(() => {
     const fetch = form.districtId
       ? apiGetWards(form.districtId).then(r => r.data || [])
       : Promise.resolve([])
     fetch.then(data => setWards(data)).catch(() => {})
-  }, [form.districtId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.districtId])  
 
   useEffect(() => {
     const fetch = form.wardId
       ? apiGetVillages(form.wardId).then(r => r.data || [])
       : Promise.resolve([])
     fetch.then(data => setVillages(data)).catch(() => {})
-  }, [form.wardId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.wardId])  
 
   async function handleSubmit() {
     if (!form.fullName || !form.email || !form.nidaNumber || !form.employeeId) {

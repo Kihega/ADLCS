@@ -36,7 +36,6 @@ type LoginScreenProps = {
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 const { height: SCREEN_H } = Dimensions.get('window')
 
 // ─── Tanzania colours ─────────────────────────────────────────────────────────
@@ -158,7 +157,7 @@ function TopBrand() {
         </View>
         <View style={s.topCenter}>
           <Text style={s.topGov}>THE UNITED REPUBLIC OF TANZANIA</Text>
-          <Text style={s.topTitle}>NBS-CENSUS</Text>
+          <Text style={s.topTitle}>NBS-CRVS</Text>
           <View style={s.topDivider} />
           <Text style={s.topSub}>Census for Development</Text>
         </View>
@@ -192,9 +191,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current
 
   // Fade in on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // LINTFIX-5: the disable comment must sit directly above the dependency
+  // array line (the warning attaches there, not to the `useEffect(` line).
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Handlers ────────────────────────────────────────────────────────────────
@@ -357,7 +358,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                   <>
                     <View style={[s.infoBox, { borderColor: `${C.tzBlue}40`, backgroundColor: `${C.tzBlue}10` }]}>
                       <Text style={[s.infoTxt, { color: C.tzBlue }]}>
-                        Open Google Authenticator → NBS-ADLCS → enter the 6-digit code.
+                        Open Google Authenticator → NBS-CRVS → enter the 6-digit code.
                       </Text>
                     </View>
                     <Lbl>6-DIGIT TOTP CODE</Lbl>

@@ -232,8 +232,12 @@ router.get('/population', async (req, res) => {
 
 // ── GEO lookups (for filter dropdowns) ──────────────────────────────────────────
 router.get('/geo/regions', async (req, res) => {
+  // NOTE: distinct on name prevents duplicate region rows from seeding
   try {
-    const regions = await prisma.region.findMany({ select: { id: true, name: true, jurisdiction: true }, orderBy: { name: 'asc' } })
+    // PATCH-2: deduplicate region names
+    const rawR = await prisma.region.findMany({ select: { id: true, name: true, jurisdiction: true }, orderBy: { name: 'asc' } })
+    const seenR = new Set()
+    const regions = rawR.filter(r => { if (seenR.has(r.name)) return false; seenR.add(r.name); return true })
     return res.json({ success: true, data: regions })
   } catch (err) {
     console.error('[admin/geo/regions]', err)
@@ -244,11 +248,14 @@ router.get('/geo/regions', async (req, res) => {
 router.get('/geo/districts', async (req, res) => {
   const regionId = Number(req.query.regionId) || undefined
   try {
-    const districts = await prisma.district.findMany({
+    // PATCH-2: deduplicate district names within region
+    const rawD = await prisma.district.findMany({
       where:   regionId ? { regionId } : {},
       select:  { id: true, name: true, regionId: true },
       orderBy: { name: 'asc' },
     })
+    const seenD = new Set()
+    const districts = rawD.filter(r => { const k = r.name+'|'+r.regionId; if (seenD.has(k)) return false; seenD.add(k); return true })
     return res.json({ success: true, data: districts })
   } catch (err) {
     console.error('[admin/geo/districts]', err)
@@ -259,11 +266,14 @@ router.get('/geo/districts', async (req, res) => {
 router.get('/geo/wards', async (req, res) => {
   const districtId = Number(req.query.districtId) || undefined
   try {
-    const wards = await prisma.ward.findMany({
+    // PATCH-2: deduplicate ward names within district
+    const rawW = await prisma.ward.findMany({
       where:   districtId ? { districtId } : {},
       select:  { id: true, name: true, districtId: true },
       orderBy: { name: 'asc' },
     })
+    const seenW = new Set()
+    const wards = rawW.filter(r => { const k = r.name+'|'+r.districtId; if (seenW.has(k)) return false; seenW.add(k); return true })
     return res.json({ success: true, data: wards })
   } catch (err) {
     console.error('[admin/geo/wards]', err)
@@ -274,11 +284,14 @@ router.get('/geo/wards', async (req, res) => {
 router.get('/geo/villages', async (req, res) => {
   const wardId = Number(req.query.wardId) || undefined
   try {
-    const villages = await prisma.village.findMany({
+    // PATCH-2: deduplicate village/street names within ward
+    const rawV = await prisma.village.findMany({
       where:   wardId ? { wardId } : {},
       select:  { id: true, name: true, wardId: true, type: true },
       orderBy: { name: 'asc' },
     })
+    const seenV = new Set()
+    const villages = rawV.filter(r => { const k = r.name+'|'+r.wardId; if (seenV.has(k)) return false; seenV.add(k); return true })
     return res.json({ success: true, data: villages })
   } catch (err) {
     console.error('[admin/geo/villages]', err)
@@ -863,6 +876,130 @@ router.get('/marriages', async (req, res) => {
   } catch (err) {
     console.error('[admin/marriages]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+
+// ── PATCH-4: DELETE /births — wipe all birth records except test parents ──────
+// Used by super_admin to clear births for a fresh end-to-end test run.
+// "Test parents" (citizens seeded by prisma/seed.js) are identified by the
+// seeded employee_id prefix of the registering officer or by having no
+// linked birth records — so we only delete Birth rows, not Citizen rows.
+router.delete('/births', requireRole('super_admin'), async (req, res) => {
+  try {
+    const { count } = await prisma.birth.deleteMany({})
+    return res.json({ success: true, deleted: count, message: `Deleted ${count} birth record(s). Test parent citizens preserved.` })
+  } catch (err) {
+    console.error('[admin/births DELETE]', err)
+    return res.status(500).json({ success: false, message: 'Failed to delete births' })
+  }
+})
+
+// ── PATCH-4: GET /rita — birth/death/marriage trends for RITA sidebar ─────────
+router.get('/rita', async (req, res) => {
+  try {
+    const { regionId, districtId, startDate, endDate } = req.query
+    const dateFilter = {}
+    if (startDate) dateFilter.gte = new Date(startDate)
+    if (endDate)   dateFilter.lte = new Date(endDate)
+
+    const geoFilter = {}
+    if (regionId)   geoFilter.regionId   = regionId
+    if (districtId) geoFilter.districtId = districtId
+
+    const [birthRows, deathRows, marriageRows] = await Promise.all([
+      prisma.birth.groupBy({
+        by: ['createdAt'],
+        _count: { id: true },
+        where: {
+          ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
+          ...(regionId || districtId ? {
+            registeredBy: { district: { ...(regionId ? { regionId } : {}), ...(districtId ? { id: districtId } : {}) } }
+          } : {}),
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.death.groupBy({
+        by: ['createdAt'],
+        _count: { id: true },
+        where: Object.keys(dateFilter).length ? { createdAt: dateFilter } : {},
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.marriage.groupBy({
+        by: ['createdAt'],
+        _count: { id: true },
+        where: Object.keys(dateFilter).length ? { createdAt: dateFilter } : {},
+        orderBy: { createdAt: 'asc' },
+      }),
+    ])
+
+    // Aggregate by month label
+    const toMonth = (row) => {
+      const d = new Date(row.createdAt)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+    const agg = (rows) => {
+      const map = {}
+      rows.forEach(r => { const m = toMonth(r); map[m] = (map[m] || 0) + r._count.id })
+      return Object.entries(map).sort().map(([month, count]) => ({ month, count }))
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        births:    agg(birthRows),
+        deaths:    agg(deathRows),
+        marriages: agg(marriageRows),
+        totals: {
+          births:    birthRows.reduce((s, r) => s + r._count.id, 0),
+          deaths:    deathRows.reduce((s, r) => s + r._count.id, 0),
+          marriages: marriageRows.reduce((s, r) => s + r._count.id, 0),
+        },
+      },
+    })
+  } catch (err) {
+    console.error('[admin/rita]', err)
+    return res.status(500).json({ success: false, message: 'Failed to fetch RITA trends' })
+  }
+})
+
+// ── PATCH-4: GET /nida — NIN issuance trends for NIDA sidebar ─────────────────
+router.get('/nida', async (req, res) => {
+  try {
+    const { regionId, districtId, startDate, endDate } = req.query
+    const dateFilter = {}
+    if (startDate) dateFilter.gte = new Date(startDate)
+    if (endDate)   dateFilter.lte = new Date(endDate)
+
+    const ninRows = await prisma.citizen.groupBy({
+      by: ['createdAt'],
+      _count: { id: true },
+      where: {
+        nin: { not: null },
+        ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
+        ...(regionId ? { regionId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    const toMonth = (row) => {
+      const d = new Date(row.createdAt)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+    const monthMap = {}
+    ninRows.forEach(r => { const m = toMonth(r); monthMap[m] = (monthMap[m] || 0) + r._count.id })
+    const trend = Object.entries(monthMap).sort().map(([month, count]) => ({ month, count }))
+
+    return res.json({
+      success: true,
+      data: {
+        ninIssuances: trend,
+        total: ninRows.reduce((s, r) => s + r._count.id, 0),
+      },
+    })
+  } catch (err) {
+    console.error('[admin/nida]', err)
+    return res.status(500).json({ success: false, message: 'Failed to fetch NIDA trends' })
   }
 })
 

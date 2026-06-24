@@ -54,6 +54,23 @@ async function getOrCreate(modelName, findWhere, createData) {
 async function main() {
   console.log('🌱  ADLCS Seed v2.1 — Starting…\n')
 
+  // ── STEP 0: Delete existing test accounts so hashes are always fresh ──────
+  // This is the fix for "wrong credentials" — stale bcrypt hashes in the DB
+  // after a code/env change are wiped and replaced with a clean hash below.
+  console.log('🗑️   Deleting existing test accounts…')
+  const deleteResults = await Promise.allSettled([
+    prisma.hospitalOfficer.deleteMany({ where: { email: 'hospital@adlcs.tz' } }),
+    prisma.villageOfficer.deleteMany({ where: { email: 'village@adlcs.tz' } }),
+    prisma.districtAdmin.deleteMany({ where: { email: 'district@adlcs.tz' } }),
+    prisma.superAdmin.deleteMany({ where: { email: 'super@adlcs.tz' } }),
+  ])
+  deleteResults.forEach((r, i) => {
+    const labels = ['HospitalOfficer', 'VillageOfficer', 'DistrictAdmin', 'SuperAdmin']
+    if (r.status === 'fulfilled') console.log(`   🗑️  Deleted ${labels[i]} test account (count: ${r.value.count})`)
+    else console.warn(`   ⚠️  Delete ${labels[i]} warning:`, r.reason?.message)
+  })
+  console.log()
+
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, BCRYPT_ROUNDS)
   console.log('🔑  Password hashed\n')
 

@@ -83,7 +83,11 @@ async function startServer() {
   try {
     connectRedis()
     await connectDB()
-    app.listen(PORT, () => {
+    // BUGFIX-1: use the http.Server returned by app.listen() so we can
+    // attach a proper 'error' handler. Without this, EADDRINUSE (port
+    // already taken by a previous process) crashes the whole process with
+    // an unhandled exception instead of failing with a clear message.
+    const server = app.listen(PORT, () => {
       console.log('═══════════════════════════════════════════════')
       console.log('  ADLCS — Tanzania Automated Digital Census API')
       console.log(`  🚀 Port     : ${PORT}`)
@@ -92,6 +96,24 @@ async function startServer() {
       console.log(`  🔐 Auth     : http://localhost:${PORT}/api/auth`)
       console.log(`  📊 Dashboard: http://localhost:${PORT}/api/officer/dashboard`)
       console.log('═══════════════════════════════════════════════')
+    })
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('═══════════════════════════════════════════════')
+        console.error(`❌  Port ${PORT} is already in use.`)
+        console.error('   Another process (often a previous `npm run dev`')
+        console.error('   that did not shut down cleanly) is still bound to it.')
+        console.error('')
+        console.error('   Fix it with ONE of the following:')
+        console.error(`     1) node scripts/free-port.js   (frees port ${PORT} automatically)`)
+        console.error(`     2) lsof -ti:${PORT} | xargs kill -9   (Linux/macOS, manual)`)
+        console.error('     3) Change PORT in backend/.env to a free port, e.g. 5001')
+        console.error('═══════════════════════════════════════════════')
+        process.exit(1)
+      }
+      console.error('❌ Server error:', err)
+      process.exit(1)
     })
   } catch (err) {
     console.error('❌ Startup failed:', err)

@@ -9,7 +9,6 @@ import { useFocusEffect } from '@react-navigation/native'
 import { ArrowLeft, Clock, Baby, Cross, FileText, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; PendingCases: undefined; IssueCertificate: undefined }

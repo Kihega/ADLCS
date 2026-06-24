@@ -123,7 +123,7 @@ export default function SplashScreen({ navigation }: Props) {
           <View style={s.circleInner}>
 
             {/* ADLCS lettering — styled like PoPtz bold text */}
-            <Text style={s.circleTitle}>ADLCS</Text>
+            <Text style={s.circleTitle}>NBS-CRVS</Text>
             <View style={s.circleDivider} />
             <Text style={s.circleSubtitle}>NBS · Tanzania</Text>
             <Text style={s.circleVersion}>V 1.X.X</Text>
@@ -134,7 +134,7 @@ export default function SplashScreen({ navigation }: Props) {
 
       {/* ── App name below circle ────────────────────────────────────────── */}
       <View style={s.labelBlock}>
-        <Text style={s.labelMain}>Automated Digital Live Census</Text>
+        <Text style={s.labelMain}>NBS Civil Registration &amp; Vital Statistics</Text>
         <Text style={s.labelSub}>National Bureau of Statistics</Text>
       </View>
 
@@ -154,7 +154,7 @@ export default function SplashScreen({ navigation }: Props) {
       </View>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
-      <Text style={s.footer}>© 2026 NBS-ADLCS · All rights reserved</Text>
+      <Text style={s.footer}>© 2026 NBS-CRVS · All rights reserved</Text>
 
     </Animated.View>
   )

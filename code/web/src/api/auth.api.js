@@ -12,7 +12,16 @@ import { useAuthStore } from '../store/authStore'
 import { resolveBase } from './apiResolver'
 
 // BASE starts as the env-configured URL; resolveBase() may switch it to local
-const INITIAL_BASE = import.meta.env.VITE_API_BASE_URL || 'https://adlcs.onrender.com/api'
+// BUGFIX-2: no hardcoded fallback — VITE_API_BASE_URL must be set in web/.env
+const INITIAL_BASE = import.meta.env.VITE_API_BASE_URL
+// BUGFIX-2 guard: fail loudly at startup instead of silently calling
+// "undefined/auth/..." if the developer forgot to set the .env variable.
+if (!INITIAL_BASE) {
+  console.error(
+    '❌ VITE_API_BASE_URL is not set. Create web/.env (see web/.env.example) ' +
+    'and set VITE_API_BASE_URL=https://your-backend-url/api'
+  )
+}
 let _baseReady = false
 
 // Shared axios instance for all authenticated requests
@@ -58,7 +67,8 @@ apiClient.interceptors.response.use(
         }
 
         // Use a plain axios call (not apiClient) to avoid the interceptor loop
-        const base = apiClient.defaults.baseURL || import.meta.env.VITE_API_BASE_URL || 'https://adlcs.onrender.com/api'
+        // BUGFIX-2: no hardcoded fallback — relies solely on .env / resolved base
+        const base = apiClient.defaults.baseURL || import.meta.env.VITE_API_BASE_URL
         const { data } = await axios.post(`${base}/auth/refresh`, { refreshToken })
         updateAccessToken(data.accessToken)
 

@@ -1,1 +1,16 @@
 ##citzen app
+
+=== PUBLIC MOBILE APP (Separate App — No Login Required) ===
+Per design notes (note 7): A separate publicly accessible mobile app
+should be created that shows live demographic statistics to all citizens.
+
+Key requirements:
+- Separate Expo app (NOT the officer app)
+- No login or account creation required
+- Displays: total population, gender split, age bands, region breakdowns
+- Live data sync: every 1 minute during presentation/demo mode
+- In actual production: syncs once per day at 00:00am from PopulationSnapshot
+- Reuses the Demographics view from the web admin dashboard (adapted for mobile)
+
+This public app is a FUTURE DELIVERABLE — not yet implemented in this codebase.
+The web admin dashboard DemographicsSection can serve as the data/UI reference.

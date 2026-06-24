@@ -1,81 +1,58 @@
 /**
- * apiResolver.ts — Dual-backend resolver for ADLCS Mobile
+ * apiResolver.js — Dual-backend resolver for ADLCS Web Dashboard
  *
  * Priority:
- *   1. EXPO_PUBLIC_API_URL   (your Render URL — set in .env)
+ *   1. VITE_API_BASE_URL env var  (your Render URL — set in .env)
  *   2. http://localhost:5000/api  (local dev backend)
  *
- * Probe result is cached for CACHE_MS (60 s) to avoid re-probing every call.
+ * Probe result cached for 60 s so the dashboard doesn't re-probe every call.
  *
- * Usage (replaces any hardcoded API_BASE):
+ * Usage (replaces hardcoded BASE in auth.api.js):
  *   import { resolveBase } from './apiResolver'
  *   const base = await resolveBase()
- *   const res = await fetch(`${base}/auth/login`, ...)
  */
 
-const REMOTE   = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
-const LOCAL    = 'http://10.0.2.2:5000/api'   // Android emulator localhost alias
-const LOCAL_IOS = 'http://localhost:5000/api'  // iOS simulator localhost
-const TIMEOUT  = 5_000   // ms per probe attempt
-const CACHE_MS = 60_000  // re-probe after 60 s
+// PATCH-6: Only use VITE_API_BASE_URL from .env — no hardcoded fallbacks.
+// Update .env (or Vercel env vars) when the backend URL changes.
+const REMOTE  = (import.meta.env.VITE_API_BASE_URL || '').trim()
+const TIMEOUT = 5_000
+const CACHE_MS = 60_000
 
-let _cached: string | null = null
+let _cached  = null
 let _cachedAt = 0
 
-/** Abort-controller helper (Hermes-compatible, no AbortSignal.timeout) */
-function makeSignal(ms: number): { signal: AbortSignal; clear: () => void } {
+async function probe(base) {
   const ctrl  = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), ms)
-  return { signal: ctrl.signal, clear: () => clearTimeout(timer) }
-}
-
-async function probe(base: string): Promise<boolean> {
-  const { signal, clear } = makeSignal(TIMEOUT)
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT)
   try {
-    const res = await fetch(`${base}/health`, { signal })
-    clear()
+    const res = await fetch(`${base}/health`, { signal: ctrl.signal })
+    clearTimeout(timer)
     return res.ok
   } catch {
-    clear()
+    clearTimeout(timer)
     return false
   }
 }
 
 /**
  * Returns the first reachable backend base URL.
- * Throws a user-friendly error if neither backend responds.
+ * Throws a user-friendly Error if neither backend responds.
  */
-export async function resolveBase(): Promise<string> {
-  // Return cached value if still fresh
+// PATCH-6: Only probe the .env-configured remote.
+export async function resolveBase() {
+  if (!REMOTE) throw new Error('VITE_API_BASE_URL is not set in your .env file')
   if (_cached && Date.now() - _cachedAt < CACHE_MS) return _cached
 
-  // 1. Try configured remote (Render)
   if (await probe(REMOTE)) {
     _cached = REMOTE; _cachedAt = Date.now()
-    console.log('[apiResolver] using remote:', REMOTE)
+    console.log('[apiResolver] connected:', REMOTE)
     return _cached
   }
 
-  // 2. Try local backend (dev / offline)
-  const local = LOCAL  // Android emulator uses 10.0.2.2; adjust for real device
-  if (await probe(local)) {
-    _cached = local; _cachedAt = Date.now()
-    console.log('[apiResolver] using local:', local)
-    return _cached
-  }
-
-  // 3. iOS simulator fallback
-  if (await probe(LOCAL_IOS)) {
-    _cached = LOCAL_IOS; _cachedAt = Date.now()
-    console.log('[apiResolver] using localhost (iOS):', LOCAL_IOS)
-    return _cached
-  }
-
-  // 4. Nothing works
   throw new Error('No internet connection')
 }
 
-/** Force a fresh probe on next call (call after reconnect or app resume). */
-export function resetResolver(): void {
+/** Force re-probe on next call (e.g. after network reconnect). */
+export function resetResolver() {
   _cached = null; _cachedAt = 0
 }

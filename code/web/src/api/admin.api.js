@@ -137,3 +137,27 @@ export async function apiChangePassword(currentPassword, newPassword) {
   const { data } = await apiClient.post('/auth/change-password', { currentPassword, newPassword })
   return data
 }
+
+// LINTFIX-1: rewritten to use the shared `apiClient` axios instance
+// (same convention as every other function in this file) instead of raw
+// fetch() + undefined resolveBase()/useAuthStore references. apiClient
+// already attaches the Bearer token and handles silent refresh on 401,
+// so no manual token handling is needed here at all.
+
+// PATCH-4: Delete all births (super_admin only)
+export async function apiDeleteBirths() {
+  const { data } = await apiClient.delete('/admin/births')
+  return data
+}
+
+// PATCH-4: RITA trends
+export async function apiGetRITA(params = {}) {
+  const { data } = await apiClient.get('/admin/rita', { params })
+  return data
+}
+
+// PATCH-4: NIDA trends
+export async function apiGetNIDA(params = {}) {
+  const { data } = await apiClient.get('/admin/nida', { params })
+  return data
+}

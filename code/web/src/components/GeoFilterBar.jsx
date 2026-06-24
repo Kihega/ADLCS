@@ -35,7 +35,7 @@ export default function GeoFilterBar({ onChange, scoped = false }) {
     fetch
       .then(data => { setDistricts(data); if (!regionId) setDistrictId('') })
       .catch(() => setDistricts([]))
-  }, [regionId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [regionId])  
 
   // Cascade: when districtId changes, fetch wards (or clear list).
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function GeoFilterBar({ onChange, scoped = false }) {
     fetch
       .then(data => { setWards(data); if (!districtId) setWardId('') })
       .catch(() => setWards([]))
-  }, [districtId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [districtId])  
 
   // Cascade: when wardId changes, fetch villages (or clear list).
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function GeoFilterBar({ onChange, scoped = false }) {
     fetch
       .then(data => { setVillages(data); if (!wardId) setVillageId('') })
       .catch(() => setVillages([]))
-  }, [wardId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wardId])  
 
   useEffect(() => {
     onChange?.({ regionId, districtId, wardId, villageId })

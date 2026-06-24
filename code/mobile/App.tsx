@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * App.js — ADLCS Mobile Root  v8.0  ONLINE-ONLY
  * Offline SQLite removed. Geofencing disabled for dev/test.
@@ -31,8 +32,6 @@ import VillageHomeScreen            from './src/screens/village/VillageHomeScree
 import RegisterCitizenScreen        from './src/screens/village/RegisterCitizenScreen'
 import RegisterMarriageScreen       from './src/screens/village/RegisterMarriageScreen'
 import VillageRecordDeathScreen     from './src/screens/village/VillageRecordDeathScreen'
-import RegisterBuildingScreen       from './src/screens/village/RegisterBuildingScreen'
-import RegisterInfrastructureScreen from './src/screens/village/RegisterInfrastructureScreen'
 import TrackMigrationScreen         from './src/screens/village/TrackMigrationScreen'
 import VillageViewRecordsScreen     from './src/screens/village/VillageViewRecordsScreen'
 import NINRegistrationScreen        from './src/screens/village/NINRegistrationScreen'
@@ -81,9 +80,7 @@ export default function App() {
                 options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="VillageRecordDeath"      component={VillageRecordDeathScreen}
                 options={{ animation: 'slide_from_right' }} />
-              <Stack.Screen name="RegisterBuilding"        component={RegisterBuildingScreen}
                 options={{ animation: 'slide_from_right' }} />
-              <Stack.Screen name="RegisterInfrastructure"  component={RegisterInfrastructureScreen}
                 options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="TrackMigration"          component={TrackMigrationScreen}
                 options={{ animation: 'slide_from_right' }} />

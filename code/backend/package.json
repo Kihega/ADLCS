@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "predev": "node scripts/free-port.js",
     "dev": "nodemon src/index.js",
     "build": "npx prisma generate --schema=prisma/schema.prisma",
     "postinstall": "npx prisma generate --schema=prisma/schema.prisma",
