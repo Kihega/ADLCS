@@ -1,0 +1,55 @@
+module.exports = {
+  // LINTFIX-3-v2: without root:true, ESLint kept walking past this
+  // project's own folder and merging in the user's personal
+  // ~/.eslintrc.json (confirmed by ESLint's own deprecation warning:
+  // "found in '../../../.eslintrc.json'"), which silently re-applied
+  // @typescript-eslint/parser globally and defeated the `overrides`
+  // block below. This was the actual reason App.js kept crashing with
+  // the exact same error even after that override was added.
+  root: true,
+  extends: 'expo',
+  plugins: ['@typescript-eslint'],
+  // LINTFIX-3: @typescript-eslint/parser is now scoped to .ts/.tsx files
+  // ONLY (via the `overrides` block below). Forcing it onto plain .js/.jsx
+  // files (like App.js) caused "Unexpected token" parsing crashes on
+  // certain JSX token sequences, which then cascaded into nonsense
+  // misattributed errors on unrelated files later in the same `eslint .`
+  // run (e.g. "Type alias name cannot be 'type'" in files that don't even
+  // have that pattern). Plain .js/.jsx files now use ESLint's default
+  // parser (espree), which eslint-config-expo already configures
+  // correctly for JSX — no separate babel parser package needed.
+  parserOptions: {
+    ecmaFeatures: { jsx: true },
+    ecmaVersion: 2022,
+    sourceType: 'module',
+  },
+  overrides: [
+    {
+      files: ['*.ts', '*.tsx'],
+      parser: '@typescript-eslint/parser',
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+        ecmaVersion: 2022,
+        sourceType: 'module',
+      },
+    },
+  ],
+  rules: {
+    // Unused variables must be errors — catch missing import removals
+    'no-unused-vars': 'off',
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        vars: 'all',
+        args: 'after-used',
+        // Identifiers starting with _ are intentionally unused
+        varsIgnorePattern: '^_',
+        argsIgnorePattern: '^_',
+      },
+    ],
+    // Consistent with web ESLint config
+    'react-hooks/rules-of-hooks': 'error',
+    'react-hooks/exhaustive-deps': 'warn',
+  },
+  ignorePatterns: ['node_modules/', 'babel.config.js'],
+}

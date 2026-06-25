@@ -281,11 +281,12 @@ function OfficerIdCard({ visible, onClose, officer }: {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 // Key fix: animation completes BEFORE navigation, preventing app stack freeze.
-function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, onChangePwd, navigation }: {
+// LINTFIX-4: removed unused 'navigation' prop (was destructured and typed
+// but never referenced in the component body — genuinely dead code).
+function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, onChangePwd }: {
   open: boolean; onClose: () => void
   officer: Record<string,any>; onLogout: () => void; loggingOut: boolean
   onShowProfile: () => void; onChangePwd: () => void
-  navigation: Props['navigation']
 }) {
   const { theme: T } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -405,7 +406,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
         </ScrollView>
 
         <View style={[s.drawerFooter, { borderTopColor:T.border }]}>
-          <Text style={[s.drawerFooterText, { color:T.textDim }]}>ADLCS · NBS Tanzania · © {new Date().getFullYear()}</Text>
+          <Text style={[s.drawerFooterText, { color:T.textDim }]}>NBS-CRVS · NBS Tanzania · © {new Date().getFullYear()}</Text>
         </View>
       </Animated.View>
     </Modal>
@@ -498,7 +499,13 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
     }
     setLoading(false)
     setRefreshing(false)
-  }, [navigation, setGeofenceConfig])
+  // LINTFIX-4-v2: 'navigation' removed from deps — React Navigation
+  // guarantees it is referentially stable for the screen's lifetime, so
+  // it can never trigger a meaningful re-run and does not belong in the
+  // dependency array (it is still used directly in the callback body
+  // above via navigation.replace('Login'), this only removes the
+  // redundant tracking of an outer-scope value that never changes).
+  }, [setGeofenceConfig])
 
   // ← Refresh whenever screen comes back into focus (e.g. after RegisterBirth)
   useFocusEffect(useCallback(() => { loadData() }, [loadData]))
@@ -518,11 +525,11 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
         navigation.replace('Login')
       }},
     ])
-  }, [navigation])
+  }, [])
 
   const downloadReport = async (period: string, type: string) => {
     const lines = [
-      `ADLCS — ${period.toUpperCase()} ${type.toUpperCase()} REPORT`,
+      `NBS-CRVS — ${period.toUpperCase()} ${type.toUpperCase()} REPORT`,
       `Facility: ${officer.facilityName}`,
       `Location: ${officer.facilityRegion}, ${officer.facilityDistrict}`,
       `Officer:  ${officer.officerName}`,
@@ -534,7 +541,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
       `Month deaths:  ${stats.monthDeaths}`,
       `Pending sync:  ${stats.pendingSync}`,
     ].join('\n')
-    await Share.share({ title:`ADLCS ${period} ${type}`, message:lines })
+    await Share.share({ title:`NBS-CRVS ${period} ${type}`, message:lines })
   }
 
   const ConnIcon = connQuality==='Good' ? Wifi : connQuality==='Fair' ? WifiLow : WifiOff
@@ -572,7 +579,6 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
         officer={officer} onLogout={handleLogout} loggingOut={loggingOut}
         onShowProfile={() => setProfileOpen(true)}
         onChangePwd={() => setChangePwdOpen(true)}
-        navigation={navigation}
       />
 
       {/* Officer ID Card */}

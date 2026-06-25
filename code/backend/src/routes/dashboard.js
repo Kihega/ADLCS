@@ -442,7 +442,13 @@ router.post('/certificate/issue', async (req, res) => {
   const { type, recordId } = req.body
   if (!type || !recordId) return res.status(400).json({ success: false, message: 'type and recordId required' })
   try {
-    const pdfUrl = `https://adlcs.onrender.com/certificates/${type}/${recordId}.pdf`
+    // BUGFIX-2: build the certificate URL from .env instead of a hardcoded
+    // domain, so it automatically follows the backend if it ever moves.
+    const publicBase = (process.env.PUBLIC_BACKEND_URL || '').replace(/\/$/, '')
+    if (!publicBase) {
+      console.warn('⚠️  PUBLIC_BACKEND_URL is not set in .env — certificate links will be relative paths only.')
+    }
+    const pdfUrl = `${publicBase}/certificates/${type}/${recordId}.pdf`
     if (type === 'birth')       await prisma.birth.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
     else if (type === 'death')  await prisma.death.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
     return res.json({ success: true, data: { pdfUrl } })

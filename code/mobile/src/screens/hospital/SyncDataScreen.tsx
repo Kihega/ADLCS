@@ -12,7 +12,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 // localDb imported when needed
 import { triggerSync, getSyncStatus, checkConnQuality, ConnQuality } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 
 type RootStack = { HospitalHome: undefined; SyncData: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack,'SyncData'> }
@@ -35,10 +34,12 @@ export default function SyncDataScreen({ navigation }: Props) {
 
   useFocusEffect(useCallback(() => { loadStatus(); const t = setInterval(loadStatus, 10_000); return () => clearInterval(t) }, [loadStatus]))
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // LINTFIX-5: disable comment moved to sit directly above the dependency
+  // array line, where eslint-plugin-react-hooks actually attaches the warning.
   useEffect(() => {
     if (syncing) { spinLoop.current = Animated.loop(Animated.timing(spinAnim,{toValue:1,duration:900,useNativeDriver:true})); spinLoop.current.start() }
     else { spinLoop.current?.stop(); spinAnim.setValue(0) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncing])
 
   const doSync = async () => {

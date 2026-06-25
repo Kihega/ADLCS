@@ -23,11 +23,11 @@ import AsyncStorage        from '@react-native-async-storage/async-storage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
-  Cross, FileText, Sun, Moon, Bell, LogOut,
-  MapPin, RefreshCw, ChevronRight, Shield, Building2, Heart,
+  Cross,  Sun, Moon, Bell, LogOut,
+  MapPin,  ChevronRight, Shield, Building2, Heart,
   Wifi, WifiOff, AlertTriangle, BarChart3, User, Lock,
-  Menu, X, Download, WifiLow, UserPlus, Navigation,
-  Landmark, IdCard, Home,
+  Menu, X, Download, WifiLow,  
+   IdCard, 
 } from 'lucide-react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -152,10 +152,11 @@ const ic = StyleSheet.create({
 })
 
 // ─── Sidebar (identical pattern to Hospital — stable, no freeze) ──────────────
-function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, navigation }: {
+// LINTFIX-4: removed unused 'navigation' prop (destructured/typed but
+// never referenced in the component body).
+function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile }: {
   open:boolean; onClose:()=>void; officer:Record<string,any>
   onLogout:()=>void; loggingOut:boolean; onShowProfile:()=>void
-  navigation:Props['navigation']
 }) {
   const { theme:T } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -344,7 +345,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     }
     setLoading(false)
     setRefreshing(false)
-  }, [navigation])
+  }, [])
 
   // Refresh on focus (picks up new citizen/death registrations immediately)
   useFocusEffect(useCallback(() => { loadData() }, [loadData]))
@@ -364,7 +365,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
         navigation.replace('Login')
       }},
     ])
-  }, [navigation])
+  }, [])
 
   const downloadReport = async (period:string) => {
     const lines = [
@@ -385,17 +386,13 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
   const ConnIcon = connQuality==='Good' ? Wifi : connQuality==='Fair' ? WifiLow : WifiOff
   const initials = officer.officerName.split(' ').filter(Boolean).slice(0,2).map((n:string)=>n[0]).join('').toUpperCase() || 'VO'
 
+  // PATCH-5: Village Officer has only 3 core actions per notes (NIN, Marriage, Death)
+  // All records are posted/retrieved from the database via backend API.
   type AD = { id:string; icon:React.ReactNode; label:string; sub:string; bg:string }
   const ACTIONS: AD[] = [
-    { id:'citizen',  icon:<UserPlus    size={18} color="#fff"/>, label:'Register',  sub:'Citizen',     bg:TZ.blue      },
-    { id:'marriage', icon:<Heart       size={18} color="#fff"/>, label:'Register',  sub:'Marriage',    bg:'#e11d48'    },
-    { id:'death',    icon:<Cross       size={18} color="#fff"/>, label:'Record',    sub:'Death',       bg:'#dc2626'    },
-    { id:'building', icon:<Home        size={18} color="#fff"/>, label:'Register',  sub:'Building',    bg:'#7c3aed'    },
-    { id:'infra',    icon:<Landmark    size={18} color="#fff"/>, label:'Register',  sub:'Infrastructure',bg:'#0e7490'  },
-    { id:'migration',icon:<Navigation  size={18} color="#fff"/>, label:'Track',     sub:'Migration',   bg:'#f97316'    },
-    { id:'records',  icon:<FileText    size={18} color="#fff"/>, label:'View',      sub:'Records',     bg:G            },
-    { id:'sync',     icon:<RefreshCw   size={18} color="#fff"/>, label:'Sync',      sub:'Data',        bg:'#4b5563'    },
-    { id:'nin',      icon:<IdCard      size={18} color="#fff"/>, label:'NIN',       sub:'Registration',bg:'#0f766e'    },
+    { id:'nin',      icon:<IdCard   size={18} color="#fff"/>, label:'NIN',      sub:'Issuance',    bg:'#0f766e'    },
+    { id:'marriage', icon:<Heart    size={18} color="#fff"/>, label:'Register', sub:'Marriage',    bg:'#e11d48'    },
+    { id:'death',    icon:<Cross    size={18} color="#fff"/>, label:'Record',   sub:'Death',       bg:'#dc2626'    },
   ]
 
   const navigate = (id:string) => {
@@ -420,7 +417,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     <SafeAreaView style={{flex:1,backgroundColor:T.bg}} edges={['top']}>
       <Sidebar open={sidebarOpen} onClose={()=>setSidebarOpen(false)} officer={officer}
         onLogout={handleLogout} loggingOut={loggingOut}
-        onShowProfile={()=>setProfileOpen(true)} navigation={navigation}/>
+        onShowProfile={()=>setProfileOpen(true)}/>
       <OfficerIdCard visible={profileOpen} onClose={()=>setProfileOpen(false)} officer={officer}/>
 
       {/* ── HEADER (identical structure to Hospital) ── */}
@@ -512,14 +509,9 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
         <View style={s.sectionHead}>
           <Text style={[s.sectionTitle,{color:T.text}]}>Quick Actions</Text>
         </View>
+        {/* PATCH-5: Single row — NIN Issuance | Marriage | Death */}
         <View style={{flexDirection:'row',paddingHorizontal:12,gap:8}}>
-          {ACTIONS.slice(0,4).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
-        </View>
-        <View style={{flexDirection:'row',paddingHorizontal:12,gap:8,marginTop:8}}>
-          {ACTIONS.slice(4,8).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
-        </View>
-        <View style={{flexDirection:'row',paddingHorizontal:12,gap:8,marginTop:8}}>
-          {ACTIONS.slice(8).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
+          {ACTIONS.map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)}/>)}
         </View>
 
         {/* Village info card */}
@@ -622,7 +614,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
             <View style={{width:8,backgroundColor:TZ.yellow,height:3}}/><View style={{width:6,backgroundColor:TZ.black,height:3}}/>
             <View style={{width:8,backgroundColor:TZ.yellow,height:3}}/><View style={{flex:1,backgroundColor:TZ.blue,height:3,borderRadius:1}}/>
           </View>
-          <Text style={{fontSize:9,color:T.textDim}}>National Bureau of Statistics · Village Officer Reporting</Text>
+          <Text style={{fontSize:9,color:T.textDim}}>NBS-CRVS · Village Officer Civil Registration System</Text>
           <Text style={{fontSize:9,color:T.textDim}}>© {new Date().getFullYear()} The United Republic of Tanzania</Text>
         </View>
       </ScrollView>

@@ -149,9 +149,9 @@ function Toast({ message, visible }: { message:string; visible:boolean }) {
 }
 
 // ─── Success Modal ─────────────────────────────────────────────────────────────
-function SuccessModal({ visible, onClose, birth, pdfPath, onDownload, downloading }: {
+function SuccessModal({ visible, onClose, birth, _pdfPath, onDownload, downloading }: {
   visible:boolean; onClose:()=>void; birth:LocalBirth|null
-  pdfPath:string; onDownload:()=>void; downloading:boolean
+  _pdfPath:string; onDownload:()=>void; downloading:boolean
 }) {
   const { theme: T } = useTheme()
   const scale = useRef(new Animated.Value(0.7)).current
@@ -303,7 +303,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [savedBirth, setSavedBirth] = useState<LocalBirth|null>(null)
-  const [pdfPath, setPdfPath] = useState('')
+  const [_pdfPath, setPdfPath] = useState('')
   const [downloading, setDownloading] = useState(false)
 
   // Auto-fill child names from father — only if user hasn't typed them yet in Step 1
@@ -425,7 +425,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const handleDownload = async () => {
     setDownloading(true)
     try {
-      let path = pdfPath
+      let path = _pdfPath
       if (!path && savedBirth) {
         path = await generateBirthPdf(savedBirth)
         await updateBirthCertPath(savedBirth.id, path)
@@ -632,7 +632,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       </KeyboardAvoidingView>
 
       <CalPicker visible={showCal} title="Select Date of Birth" onSelect={d=>{setChildDOB(d);setShowCal(false)}} onClose={()=>setShowCal(false)} />
-      <SuccessModal visible={showSuccess} birth={savedBirth} pdfPath={pdfPath} onDownload={handleDownload} downloading={downloading} onClose={()=>{setShowSuccess(false);navigation.goBack()}} />
+      <SuccessModal visible={showSuccess} birth={savedBirth} _pdfPath={_pdfPath} onDownload={handleDownload} downloading={downloading} onClose={()=>{setShowSuccess(false);navigation.goBack()}} />
     </SafeAreaView>
   )
 }

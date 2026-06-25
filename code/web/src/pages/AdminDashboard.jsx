@@ -311,6 +311,49 @@ function DemographicsSection({ role }) {
           )}
         </div>
       </Card>
+
+      {/* PATCH-3: Population Pyramid Card — mirrors male(left)/female(right) per age band */}
+      <Card className="mt-4">
+        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">
+          Population Pyramid — {filters.regionId ? 'Selected Region' : filters.districtId ? 'Selected District' : 'National'}
+        </p>
+        {population?.pyramid?.length ? (
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart
+              layout="vertical"
+              data={population.pyramid.map(b => ({
+                age: b.age,
+                Male: -(b.male || 0),
+                Female: b.female || 0,
+              }))}
+              margin={{ left: 10, right: 10, top: 4, bottom: 4 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
+              <XAxis
+                type="number"
+                tickFormatter={v => Math.abs(v).toLocaleString()}
+                tick={{ fill: '#94a3b8', fontSize: 10 }}
+              />
+              <YAxis
+                dataKey="age"
+                type="category"
+                tick={{ fill: '#94a3b8', fontSize: 10 }}
+                width={48}
+              />
+              <Tooltip
+                formatter={(value, name) => [Math.abs(value).toLocaleString(), name]}
+                contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', borderRadius: 8, fontSize: 11 }}
+                labelStyle={{ color: '#e2e8f0' }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+              <Bar dataKey="Male"   fill="#3b82f6" radius={[0,3,3,0]} />
+              <Bar dataKey="Female" fill="#ec4899" radius={[0,3,3,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-gray-600 text-xs py-8 text-center">No pyramid data — select a filter or wait for population data to load.</p>
+        )}
+      </Card>
     </div>
   )
 }
@@ -814,6 +857,174 @@ function MarriagesSection() {
 }
 // ── Navigation config ────────────────────────────────────────────────────────
 
+
+// ── PATCH-4: Section: RITA — Births / Deaths / Marriages trends ──────────────
+function RITASection({ role }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState({})
+  const [deleting, setDeleting] = useState(false)
+
+  // LINTFIX-2-v2: reverted to the exact same load()-useCallback pattern
+  // already used successfully by every other section in this file
+  // (OverviewSection, PopulationSection, OfficersSection, etc.). Inlining
+  // the fetch directly into useEffect (the v1 attempt) actually made the
+  // set-state-in-effect error WORSE, because eslint-plugin-react-hooks v7
+  // flags any setState lexically written inside the effect body itself —
+  // it does NOT flag setState calls inside a separate function that the
+  // effect merely invokes. This is why every other section's identical
+  // `useEffect(() => { load() }, [load])` one-liner passes cleanly.
+  const load = useCallback((f = filters) => {
+    setLoading(true)
+    api.apiGetRITA(f)
+      .then(r => setData(r.data))
+      .catch(e => console.error('[RITA]', e))
+      .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(filters) }, [filters, load])
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete ALL birth records? This cannot be undone. Test parent citizens will be preserved.')) return
+    setDeleting(true)
+    try {
+      const r = await api.apiDeleteBirths()
+      alert(r.message || 'Births deleted')
+      load(filters)
+    } catch(e) { alert('Failed: ' + e.message) }
+    finally { setDeleting(false) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-white font-bold text-lg">RITA — Registration Trends</h2>
+        {role === 'super_admin' && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+          >
+            <Trash2 size={13} />
+            {deleting ? 'Deleting…' : 'Clear All Births (Test Reset)'}
+          </button>
+        )}
+      </div>
+      <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
+
+      {loading ? (
+        <Card><p className="text-gray-500 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading RITA data…</p></Card>
+      ) : (
+        <>
+          {/* Totals */}
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard Icon={Users}  label="Total Births"    value={(data?.totals?.births    ?? 0).toLocaleString()} accent="text-[#3b82f6]" />
+            <StatCard Icon={AlertTriangle} label="Total Deaths" value={(data?.totals?.deaths ?? 0).toLocaleString()} accent="text-red-400" />
+            <StatCard Icon={Heart}  label="Total Marriages" value={(data?.totals?.marriages ?? 0).toLocaleString()} accent="text-pink-400" />
+          </div>
+
+          {/* Births trend */}
+          <Card>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Birth Registrations — Monthly Trend</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={data?.births || []}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
+                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
+                <Bar dataKey="count" fill="#3b82f6" name="Births" radius={[3,3,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+
+          {/* Deaths trend */}
+          <Card>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Death Registrations — Monthly Trend</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={data?.deaths || []}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
+                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
+                <Bar dataKey="count" fill="#ef4444" name="Deaths" radius={[3,3,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+
+          {/* Marriages trend */}
+          <Card>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Marriage Registrations — Monthly Trend</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={data?.marriages || []}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
+                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
+                <Bar dataKey="count" fill="#ec4899" name="Marriages" radius={[3,3,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── PATCH-4: Section: NIDA — NIN Issuance trends ─────────────────────────────
+function NIDASection({ role }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState({})
+
+  // LINTFIX-2-v2: same load()-useCallback pattern as every other section
+  // in this file (see RITASection above for the full explanation of why
+  // the v1 inline-fetch attempt was wrong).
+  const load = useCallback((f = filters) => {
+    setLoading(true)
+    api.apiGetNIDA(f)
+      .then(r => setData(r.data))
+      .catch(e => console.error('[NIDA]', e))
+      .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(filters) }, [filters, load])
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-white font-bold text-lg">NIDA — NIN Issuance Trends</h2>
+      <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
+
+      {loading ? (
+        <Card><p className="text-gray-500 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading NIDA data…</p></Card>
+      ) : (
+        <>
+          <StatCard Icon={UserCheck} label="Total NIDs Issued" value={(data?.total ?? 0).toLocaleString()} accent="text-[#00d4ff]" />
+          <Card>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">NIN Issuances — Monthly Trend</p>
+            {data?.ninIssuances?.length ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={data.ninIssuances}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
+                  <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
+                  <Bar dataKey="count" fill="#00d4ff" name="NIDs Issued" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-gray-600 text-xs py-8 text-center">No NIN issuance data found. Issue some NIDs via the Village Officer app first.</p>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  )
+}
+
 const NAV = [
   { key: 'dashboard',           label: 'Dashboard',            Icon: LayoutDashboard, roles: ['super_admin', 'district_admin'] },
   { key: 'demographics',        label: 'Demographics',         Icon: MapIcon,         roles: ['super_admin', 'district_admin'] },
@@ -826,6 +1037,8 @@ const NAV = [
   { key: 'audit_logs',          label: 'System Log Reports',   Icon: FileText,        roles: ['super_admin', 'district_admin'] },
   { key: 'security_alerts',     label: 'Security Alerts',      Icon: ShieldAlert,     roles: ['super_admin', 'district_admin'] },
   { key: 'system_performance',  label: 'System Performance',   Icon: Cpu,             roles: ['super_admin'] },
+  { key: 'rita',               label: 'RITA',                 Icon: FileText,        roles: ['super_admin', 'district_admin'] },
+  { key: 'nida',               label: 'NIDA',                 Icon: Shield,          roles: ['super_admin', 'district_admin'] },
 ]
 
 const SECTION_TITLE = {
@@ -868,6 +1081,8 @@ export default function AdminDashboard({ role }) {
       case 'audit_logs':          return <AuditLogsSection />
       case 'security_alerts':     return <AuditLogsSection securityOnly />
       case 'system_performance':  return <SystemPerformanceSection />
+      case 'rita':               return <RITASection role={role} />
+      case 'nida':               return <NIDASection role={role} />
       default:                    return null
     }
   }

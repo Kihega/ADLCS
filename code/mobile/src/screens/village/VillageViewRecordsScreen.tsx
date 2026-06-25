@@ -1,5 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import {
+  TextInput,
+  ScrollView,
   View, Text, TouchableOpacity,
   ActivityIndicator,
 } from 'react-native'
@@ -8,8 +10,8 @@ import { ArrowLeft } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { isOnline, apiGet } from '../../services/syncService'
-import { FileText, Cross, Heart, Home, Landmark, Navigation,
-         Users, Search, ChevronRight, WifiOff, RefreshCw } from 'lucide-react-native'
+import {      
+          Search, ChevronRight, WifiOff, RefreshCw } from 'lucide-react-native'
 import { FlatList, RefreshControl } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { getAllDeaths } from '../../services/localDb'
