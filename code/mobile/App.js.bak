@@ -1,0 +1,122 @@
+/**
+ * App.js -- NBS-CRVS Mobile Root  v8.1  ONLINE-ONLY
+ *
+ * PATCH fix_render_error.py -- fixes:
+ *   "Objects are not valid as a React child (found: object with keys {animation})"
+ *
+ * Root cause: passing `animation` inside a plain-object `screenOptions` on
+ * Stack.Navigator causes @react-navigation/native-stack v7.3.10 to leak the
+ * options object into the React child tree under Expo SDK 54 + RN 0.81.
+ *
+ * Fix:
+ *   1. screenOptions changed from plain object to arrow function (always safe).
+ *   2. contentStyle removed from screenOptions; background colour set via
+ *      NavigationContainer theme prop (correct React Navigation v7 API).
+ *   3. All per-screen animation overrides kept unchanged.
+ */
+import React from 'react'
+import { NavigationContainer, DarkTheme } from '@react-navigation/native'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+
+import { ThemeProvider }    from './src/context/ThemeContext'
+import { GeofenceProvider } from './src/context/GeofenceContext'
+import { navigationRef }    from './src/navigation/navigationService'
+
+// -- Shared -------------------------------------------------------------------
+import SplashScreen  from './src/screens/SplashScreen'
+import LoginScreen   from './src/screens/auth/LoginScreen'
+
+// -- Hospital officer ---------------------------------------------------------
+import HospitalHomeScreen     from './src/screens/hospital/HospitalHomeScreen'
+import RegisterBirthScreen    from './src/screens/hospital/RegisterBirthScreen'
+import RecordDeathScreen      from './src/screens/hospital/RecordDeathScreen'
+import IssueCertificateScreen from './src/screens/hospital/IssueCertificateScreen'
+import ViewRecordsScreen      from './src/screens/hospital/ViewRecordsScreen'
+import PendingCasesScreen     from './src/screens/hospital/PendingCasesScreen'
+import SyncDataScreen         from './src/screens/hospital/SyncDataScreen'
+
+// -- Village officer ----------------------------------------------------------
+import VillageHomeScreen            from './src/screens/village/VillageHomeScreen'
+import RegisterCitizenScreen        from './src/screens/village/RegisterCitizenScreen'
+import RegisterMarriageScreen       from './src/screens/village/RegisterMarriageScreen'
+import VillageRecordDeathScreen     from './src/screens/village/VillageRecordDeathScreen'
+import RegisterBuildingScreen       from './src/screens/village/RegisterBuildingScreen'
+import RegisterInfrastructureScreen from './src/screens/village/RegisterInfrastructureScreen'
+import TrackMigrationScreen         from './src/screens/village/TrackMigrationScreen'
+import VillageViewRecordsScreen     from './src/screens/village/VillageViewRecordsScreen'
+import NINRegistrationScreen        from './src/screens/village/NINRegistrationScreen'
+
+const Stack = createNativeStackNavigator()
+
+/**
+ * Custom nav theme -- sets the background colour globally instead of using
+ * contentStyle in screenOptions (which conflicts with native-stack v7 header).
+ */
+const NAV_THEME = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: '#050d1a',
+    card:        '#050d1a',
+  },
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        {/* GeofenceProvider is a no-op stub -- geofencing disabled for dev */}
+        <GeofenceProvider>
+          <NavigationContainer ref={navigationRef} theme={NAV_THEME}>
+            <Stack.Navigator
+              initialRouteName="Splash"
+              screenOptions={() => ({
+                headerShown: false,
+                animation:   'fade',
+              })}
+            >
+              {/* -- Shared ------------------------------------------------ */}
+              <Stack.Screen name="Splash"   component={SplashScreen} />
+              <Stack.Screen name="Login"    component={LoginScreen} />
+
+              {/* -- Hospital Officer -------------------------------------- */}
+              <Stack.Screen name="HospitalHome"     component={HospitalHomeScreen} />
+              <Stack.Screen name="RegisterBirth"    component={RegisterBirthScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="RecordDeath"      component={RecordDeathScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="IssueCertificate" component={IssueCertificateScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="ViewRecords"      component={ViewRecordsScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="PendingCases"     component={PendingCasesScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="SyncData"         component={SyncDataScreen}
+                options={{ animation: 'slide_from_bottom' }} />
+
+              {/* -- Village Officer --------------------------------------- */}
+              <Stack.Screen name="VillageHome"             component={VillageHomeScreen} />
+              <Stack.Screen name="RegisterCitizen"         component={RegisterCitizenScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="RegisterMarriage"        component={RegisterMarriageScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="VillageRecordDeath"      component={VillageRecordDeathScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="RegisterBuilding"        component={RegisterBuildingScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="RegisterInfrastructure"  component={RegisterInfrastructureScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="TrackMigration"          component={TrackMigrationScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="VillageViewRecords"      component={VillageViewRecordsScreen}
+                options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="NINRegistration"         component={NINRegistrationScreen}
+                options={{ animation: 'slide_from_right' }} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </GeofenceProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
+  )
+}
