@@ -13,7 +13,7 @@
  *   4. expo-sharing.shareAsync     → share sheet (download/print/email)
  */
 
-import * as Print   from 'expo-print'
+import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system/legacy'
 import type { LocalBirth, LocalDeath } from './localDb'
@@ -24,23 +24,41 @@ function fmtDate(d: string): string {
   if (!d) return '—'
   if (d.includes('/')) {
     const [day, mo, yr] = d.split('/')
-    const MONTHS = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE',
-                    'JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER']
-    return `${day} ${MONTHS[(parseInt(mo,10) - 1)] ?? mo} ${yr}`
+    const MONTHS = [
+      'JANUARY',
+      'FEBRUARY',
+      'MARCH',
+      'APRIL',
+      'MAY',
+      'JUNE',
+      'JULY',
+      'AUGUST',
+      'SEPTEMBER',
+      'OCTOBER',
+      'NOVEMBER',
+      'DECEMBER',
+    ]
+    return `${day} ${MONTHS[parseInt(mo, 10) - 1] ?? mo} ${yr}`
   }
   try {
     const dt = new Date(d)
-    return dt.toLocaleDateString('en-TZ', { day:'2-digit', month:'long', year:'numeric' }).toUpperCase()
-  } catch { return d }
+    return dt
+      .toLocaleDateString('en-TZ', { day: '2-digit', month: 'long', year: 'numeric' })
+      .toUpperCase()
+  } catch {
+    return d
+  }
 }
 
 function _today(): string {
-  return new Date().toLocaleDateString('en-TZ', { day:'2-digit', month:'long', year:'numeric' }).toUpperCase()
+  return new Date()
+    .toLocaleDateString('en-TZ', { day: '2-digit', month: 'long', year: 'numeric' })
+    .toUpperCase()
 }
 
 // ─── Birth Certificate HTML ────────────────────────────────────────────────────
 export function buildBirthCertHtml(b: LocalBirth): string {
-  const entryNo = b.certNo.replace(' A','').trim()
+  const entryNo = b.certNo.replace(' A', '').trim()
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -123,7 +141,7 @@ export function buildBirthCertHtml(b: LocalBirth): string {
     <table>
       <tr><td class="fn">(1)</td><td class="fk">Entry No.</td><td class="fv">${entryNo}</td></tr>
       <tr><td class="fn">(2)</td><td class="fk">Where Born</td><td class="fv">${b.facilityName || '—'}, ${b.facilityDistrict || '—'}, ${b.facilityRegion || '—'}</td></tr>
-      <tr><td class="fn">(3)</td><td class="fk">Child's Name</td><td class="fv">${([b.childFirstName, b.childMiddleName, b.childSurname].filter(Boolean).join(' ')).toUpperCase()}</td></tr>
+      <tr><td class="fn">(3)</td><td class="fk">Child's Name</td><td class="fv">${[b.childFirstName, b.childMiddleName, b.childSurname].filter(Boolean).join(' ').toUpperCase()}</td></tr>
       <tr><td class="fn">(4)</td><td class="fk">Sex</td><td class="fv">${b.gender.toUpperCase()}</td></tr>
       <tr><td class="fn">(5)</td><td class="fk">Father's Name</td><td class="fv">${b.fatherName.toUpperCase() || '—'}</td></tr>
       <tr><td class="fn">(6)</td><td class="fk">Father's Country</td><td class="fv">TANZANIA</td></tr>
@@ -140,7 +158,7 @@ export function buildBirthCertHtml(b: LocalBirth): string {
       <div class="date-line">Dated this &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; day of &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${new Date().getFullYear()}</div>
       <div class="footer-row">
         <div class="qr-block">
-          <div class="qr-box">VERIFY: /api/verify/birth/${b.certNo.replace(/ /g,'-')}<br>NID:${b.nationalId}</div>
+          <div class="qr-box">VERIFY: /api/verify/birth/${b.certNo.replace(/ /g, '-')}<br>NID:${b.nationalId}</div>
           <div style="margin-top:3px;">Scan to verify</div>
         </div>
         <div class="sig-block">
@@ -157,7 +175,7 @@ export function buildBirthCertHtml(b: LocalBirth): string {
 
 // ─── Death Certificate HTML ────────────────────────────────────────────────────
 export function buildDeathCertHtml(d: LocalDeath): string {
-  const entryNo = d.certNo.replace('TZ-D-','').replace(' A','').trim()
+  const entryNo = d.certNo.replace('TZ-D-', '').replace(' A', '').trim()
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -220,7 +238,7 @@ export function buildDeathCertHtml(d: LocalDeath): string {
       <tr><td class="fn">(6)</td><td class="fk">Occupation</td><td class="fv">—</td></tr>
       <tr><td class="fn">(7)</td><td class="fk">Nationality</td><td class="fv">TANZANIAN</td></tr>
       <tr><td class="fn">(8)</td><td class="fk">Date of Death</td><td class="fv">${fmtDate(d.dateOfDeath)}</td></tr>
-      <tr><td class="fn">(9)</td><td class="fk">Place of Death</td><td class="fv">${d.locationType.replace(/_/g,' ').toUpperCase()} — ${d.facilityName || '—'}</td></tr>
+      <tr><td class="fn">(9)</td><td class="fk">Place of Death</td><td class="fv">${d.locationType.replace(/_/g, ' ').toUpperCase()} — ${d.facilityName || '—'}</td></tr>
       <tr><td class="fn">(10)</td><td class="fk">Cause of Death</td><td class="fv">${d.causeOfDeath.toUpperCase()}</td></tr>
       <tr><td class="fn">(11)</td><td class="fk">Informant Name &amp; Address</td><td class="fv">${d.informantName.toUpperCase() || '—'}</td></tr>
       <tr><td class="fn">(12)</td><td class="fk">Date of Registration</td><td class="fv">${fmtDate(d.registeredAt)}</td></tr>
@@ -231,7 +249,7 @@ export function buildDeathCertHtml(d: LocalDeath): string {
       <div class="date-line">Dated this &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; day of &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${new Date().getFullYear()}</div>
       <div class="footer-row">
         <div>
-          <div class="qr-box">VERIFY: /api/verify/death/${d.certNo.replace(/ /g,'-')}</div>
+          <div class="qr-box">VERIFY: /api/verify/death/${d.certNo.replace(/ /g, '-')}</div>
           <div style="font-size:8pt;color:#777;margin-top:3px;">Scan to verify</div>
         </div>
         <div class="sig-block">
@@ -256,18 +274,18 @@ async function ensureCertDir(): Promise<void> {
 
 export async function generateBirthPdf(birth: LocalBirth): Promise<string> {
   await ensureCertDir()
-  const html      = buildBirthCertHtml(birth)
-  const { uri }   = await Print.printToFileAsync({ html, base64: false })
-  const dest      = CERT_DIR + `birth_${birth.certNo.replace(/ /g,'_')}.pdf`
+  const html = buildBirthCertHtml(birth)
+  const { uri } = await Print.printToFileAsync({ html, base64: false })
+  const dest = CERT_DIR + `birth_${birth.certNo.replace(/ /g, '_')}.pdf`
   await FileSystem.copyAsync({ from: uri, to: dest })
   return dest
 }
 
 export async function generateDeathPdf(death: LocalDeath): Promise<string> {
   await ensureCertDir()
-  const html    = buildDeathCertHtml(death)
+  const html = buildDeathCertHtml(death)
   const { uri } = await Print.printToFileAsync({ html, base64: false })
-  const dest    = CERT_DIR + `death_${death.certNo.replace(/ /g,'_').replace(/-/g,'_')}.pdf`
+  const dest = CERT_DIR + `death_${death.certNo.replace(/ /g, '_').replace(/-/g, '_')}.pdf`
   await FileSystem.copyAsync({ from: uri, to: dest })
   return dest
 }

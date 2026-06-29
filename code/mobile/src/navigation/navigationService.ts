@@ -13,16 +13,16 @@
 import { createNavigationContainerRef } from '@react-navigation/native'
 
 export type RootStack = {
-  Splash:              undefined
-  Login:               undefined
-  VillageHome:         undefined
-  HospitalHome:        undefined
-  RegisterBirth:       undefined
-  RecordDeath:         undefined
-  IssueCertificate:    undefined
-  ViewRecords:         undefined
-  PendingCases:        undefined
-  SyncData:            undefined
+  Splash: undefined
+  Login: undefined
+  VillageHome: undefined
+  HospitalHome: undefined
+  RegisterBirth: undefined
+  RecordDeath: undefined
+  IssueCertificate: undefined
+  ViewRecords: undefined
+  PendingCases: undefined
+  SyncData: undefined
 }
 
 export const navigationRef = createNavigationContainerRef<RootStack>()

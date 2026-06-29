@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Tanzania Digital Live Census Model",
-    "slug": "poptz-researchmodel",
+    "name": "TzCRVS",
+    "slug": "tzcrvs",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -28,9 +28,6 @@
       }
     },
     "owner": "mangentechnologies-026",
-    "plugins": [
-      "expo-asset",
-      "expo-sqlite"
-    ]
+    "plugins": ["expo-asset"]
   }
 }

@@ -11,74 +11,144 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator,
-  Image, ImageBackground, RefreshControl,
-  Animated, Modal, TouchableWithoutFeedback,
-  Share, Dimensions, InteractionManager,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Image,
+  ImageBackground,
+  RefreshControl,
+  Animated,
+  Modal,
+  TouchableWithoutFeedback,
+  Share,
+  Dimensions,
+  InteractionManager,
 } from 'react-native'
-import AsyncStorage        from '@react-native-async-storage/async-storage'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
-  Baby, Cross, FileText, Clock, Sun, Moon, Bell, LogOut,
-  MapPin, RefreshCw, ChevronRight, Shield, Building2,
-  Wifi, WifiOff, AlertTriangle, BarChart3, User, Lock,
-  Menu, X, Download, WifiLow, Stethoscope, IdCard,
-  Eye, EyeOff,
+  Baby,
+  Cross,
+  FileText,
+  Clock,
+  Sun,
+  Moon,
+  Bell,
+  LogOut,
+  MapPin,
+  RefreshCw,
+  ChevronRight,
+  Shield,
+  Building2,
+  Wifi,
+  WifiOff,
+  AlertTriangle,
+  BarChart3,
+  User,
+  Lock,
+  Menu,
+  X,
+  Download,
+  WifiLow,
+  Stethoscope,
+  IdCard,
+  Eye,
+  EyeOff,
 } from 'lucide-react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import {
-  fetchRemoteDashboard, fetchRemoteActivity,
-  checkConnQuality, ConnQuality,
+  fetchRemoteDashboard,
+  fetchRemoteActivity,
+  checkConnQuality,
+  ConnQuality,
 } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
-import { useGeofence } from '../../context/GeofenceContext'
 
 type RootStack = {
-  Splash: undefined; Login: undefined; VillageHome: undefined; HospitalHome: undefined
-  RegisterBirth: undefined; RecordDeath: undefined; IssueCertificate: undefined
-  ViewRecords: undefined; PendingCases: undefined; SyncData: undefined
+  Splash: undefined
+  Login: undefined
+  VillageHome: undefined
+  HospitalHome: undefined
+  RegisterBirth: undefined
+  RecordDeath: undefined
+  IssueCertificate: undefined
+  ViewRecords: undefined
+  PendingCases: undefined
+  SyncData: undefined
 }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'HospitalHome'> }
 
-const H       = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
-const W       = Dimensions.get('window').width
+const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
+const W = Dimensions.get('window').width
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
-const CONN_COLORS: Record<ConnQuality, string> = { Good: '#4ade80', Fair: '#fbbf24', Offline: '#f87171' }
+const CONN_COLORS: Record<ConnQuality, string> = {
+  Good: '#4ade80',
+  Fair: '#fbbf24',
+  Offline: '#f87171',
+}
 
 // ─── Change Password Modal ─────────────────────────────────────────────────────
 function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { theme: T } = useTheme()
-  const [currentPwd,  setCurrentPwd]  = useState('')
-  const [newPwd,      setNewPwd]      = useState('')
-  const [confirmPwd,  setConfirmPwd]  = useState('')
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState('')
+  const [currentPwd, setCurrentPwd] = useState('')
+  const [newPwd, setNewPwd] = useState('')
+  const [confirmPwd, setConfirmPwd] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [showCurrent, setShowCurrent] = useState(false)
-  const [showNew,     setShowNew]     = useState(false)
+  const [showNew, setShowNew] = useState(false)
 
-  const reset = () => { setCurrentPwd(''); setNewPwd(''); setConfirmPwd(''); setError('') }
+  const reset = () => {
+    setCurrentPwd('')
+    setNewPwd('')
+    setConfirmPwd('')
+    setError('')
+  }
 
-  const handleClose = () => { reset(); onClose() }
+  const handleClose = () => {
+    reset()
+    onClose()
+  }
 
   const handleSubmit = async () => {
-    if (!currentPwd)          { setError('Enter your current password'); return }
-    if (newPwd.length < 8)    { setError('New password must be at least 8 characters'); return }
-    if (newPwd !== confirmPwd) { setError('Passwords do not match'); return }
-    setError(''); setLoading(true)
+    if (!currentPwd) {
+      setError('Enter your current password')
+      return
+    }
+    if (newPwd.length < 8) {
+      setError('New password must be at least 8 characters')
+      return
+    }
+    if (newPwd !== confirmPwd) {
+      setError('Passwords do not match')
+      return
+    }
+    setError('')
+    setLoading(true)
     try {
       const token = await AsyncStorage.getItem('adlcs_access_token')
-      const res   = await fetch(`${API_BASE}/auth/change-password`, {
-        method:  'POST',
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
+        body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.message ?? 'Failed to change password'); return }
-      Alert.alert('Success ✓', 'Your password has been changed. Please use your new password next time you sign in.')
+      if (!res.ok) {
+        setError(data.message ?? 'Failed to change password')
+        return
+      }
+      Alert.alert(
+        'Success ✓',
+        'Your password has been changed. Please use your new password next time you sign in.'
+      )
       reset()
       onClose()
     } catch {
@@ -90,90 +160,245 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.65)', justifyContent:'flex-end' }}>
-        <View style={{ backgroundColor:T.card, borderTopLeftRadius:24, borderTopRightRadius:24, padding:24, paddingBottom:40 }}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }}>
+        <View
+          style={{
+            backgroundColor: T.card,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            padding: 24,
+            paddingBottom: 40,
+          }}
+        >
           {/* Handle */}
-          <View style={{ width:40, height:4, borderRadius:2, backgroundColor:T.border, alignSelf:'center', marginBottom:16 }} />
+          <View
+            style={{
+              width: 40,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: T.border,
+              alignSelf: 'center',
+              marginBottom: 16,
+            }}
+          />
 
           {/* Title row */}
-          <View style={{ flexDirection:'row', alignItems:'center', gap:12, marginBottom:4 }}>
-            <View style={{ width:40, height:40, borderRadius:10, backgroundColor:`${H.primary}18`, alignItems:'center', justifyContent:'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                backgroundColor: `${H.primary}18`,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <Lock size={18} color={H.primaryL} />
             </View>
             <View>
-              <Text style={{ fontSize:16, fontWeight:'800', color:T.text }}>Change Password</Text>
-              <Text style={{ fontSize:11, color:T.textSub, marginTop:2 }}>Update your account password</Text>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>
+                Change Password
+              </Text>
+              <Text style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>
+                Update your account password
+              </Text>
             </View>
           </View>
 
           {/* Error banner */}
           {!!error && (
-            <View style={{ flexDirection:'row', alignItems:'center', gap:8, backgroundColor:'rgba(239,68,68,0.10)', borderRadius:10, padding:12, marginTop:14, borderWidth:1, borderColor:'rgba(239,68,68,0.28)' }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                backgroundColor: 'rgba(239,68,68,0.10)',
+                borderRadius: 10,
+                padding: 12,
+                marginTop: 14,
+                borderWidth: 1,
+                borderColor: 'rgba(239,68,68,0.28)',
+              }}
+            >
               <AlertTriangle size={13} color="#f87171" />
-              <Text style={{ fontSize:11, color:'#f87171', flex:1 }}>{error}</Text>
+              <Text style={{ fontSize: 11, color: '#f87171', flex: 1 }}>{error}</Text>
             </View>
           )}
 
           {/* Current Password */}
-          <Text style={{ fontSize:10, color:T.textDim, fontWeight:'700', letterSpacing:1, textTransform:'uppercase', marginTop:16, marginBottom:6 }}>Current Password</Text>
-          <View style={{ flexDirection:'row', alignItems:'center', backgroundColor:T.bg, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14 }}>
+          <Text
+            style={{
+              fontSize: 10,
+              color: T.textDim,
+              fontWeight: '700',
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              marginTop: 16,
+              marginBottom: 6,
+            }}
+          >
+            Current Password
+          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: T.bg,
+              borderWidth: 1,
+              borderColor: T.border,
+              borderRadius: 10,
+              paddingHorizontal: 14,
+            }}
+          >
             <TextInput
-              style={{ flex:1, color:T.text, fontSize:13, paddingVertical:12 }}
-              value={currentPwd} onChangeText={t=>{ setCurrentPwd(t); setError('') }}
-              secureTextEntry={!showCurrent} placeholder="Current password"
-              placeholderTextColor={T.textDim} autoCapitalize="none" autoCorrect={false}
+              style={{ flex: 1, color: T.text, fontSize: 13, paddingVertical: 12 }}
+              value={currentPwd}
+              onChangeText={(t) => {
+                setCurrentPwd(t)
+                setError('')
+              }}
+              secureTextEntry={!showCurrent}
+              placeholder="Current password"
+              placeholderTextColor={T.textDim}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
-            <TouchableOpacity onPress={()=>setShowCurrent(!showCurrent)} style={{ padding:4 }}>
-              {showCurrent ? <EyeOff size={16} color={T.textDim}/> : <Eye size={16} color={T.textDim}/>}
+            <TouchableOpacity onPress={() => setShowCurrent(!showCurrent)} style={{ padding: 4 }}>
+              {showCurrent ? (
+                <EyeOff size={16} color={T.textDim} />
+              ) : (
+                <Eye size={16} color={T.textDim} />
+              )}
             </TouchableOpacity>
           </View>
 
           {/* New Password */}
-          <Text style={{ fontSize:10, color:T.textDim, fontWeight:'700', letterSpacing:1, textTransform:'uppercase', marginTop:14, marginBottom:6 }}>New Password</Text>
-          <View style={{ flexDirection:'row', alignItems:'center', backgroundColor:T.bg, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14 }}>
+          <Text
+            style={{
+              fontSize: 10,
+              color: T.textDim,
+              fontWeight: '700',
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              marginTop: 14,
+              marginBottom: 6,
+            }}
+          >
+            New Password
+          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: T.bg,
+              borderWidth: 1,
+              borderColor: T.border,
+              borderRadius: 10,
+              paddingHorizontal: 14,
+            }}
+          >
             <TextInput
-              style={{ flex:1, color:T.text, fontSize:13, paddingVertical:12 }}
-              value={newPwd} onChangeText={t=>{ setNewPwd(t); setError('') }}
-              secureTextEntry={!showNew} placeholder="Min. 8 characters"
-              placeholderTextColor={T.textDim} autoCapitalize="none" autoCorrect={false}
+              style={{ flex: 1, color: T.text, fontSize: 13, paddingVertical: 12 }}
+              value={newPwd}
+              onChangeText={(t) => {
+                setNewPwd(t)
+                setError('')
+              }}
+              secureTextEntry={!showNew}
+              placeholder="Min. 8 characters"
+              placeholderTextColor={T.textDim}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
-            <TouchableOpacity onPress={()=>setShowNew(!showNew)} style={{ padding:4 }}>
-              {showNew ? <EyeOff size={16} color={T.textDim}/> : <Eye size={16} color={T.textDim}/>}
+            <TouchableOpacity onPress={() => setShowNew(!showNew)} style={{ padding: 4 }}>
+              {showNew ? (
+                <EyeOff size={16} color={T.textDim} />
+              ) : (
+                <Eye size={16} color={T.textDim} />
+              )}
             </TouchableOpacity>
           </View>
 
           {/* Confirm New Password */}
-          <Text style={{ fontSize:10, color:T.textDim, fontWeight:'700', letterSpacing:1, textTransform:'uppercase', marginTop:14, marginBottom:6 }}>Confirm New Password</Text>
-          <View style={{ backgroundColor:T.bg, borderWidth:1, borderColor:T.border, borderRadius:10, paddingHorizontal:14 }}>
+          <Text
+            style={{
+              fontSize: 10,
+              color: T.textDim,
+              fontWeight: '700',
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              marginTop: 14,
+              marginBottom: 6,
+            }}
+          >
+            Confirm New Password
+          </Text>
+          <View
+            style={{
+              backgroundColor: T.bg,
+              borderWidth: 1,
+              borderColor: T.border,
+              borderRadius: 10,
+              paddingHorizontal: 14,
+            }}
+          >
             <TextInput
-              style={{ color:T.text, fontSize:13, paddingVertical:12 }}
-              value={confirmPwd} onChangeText={t=>{ setConfirmPwd(t); setError('') }}
-              secureTextEntry placeholder="Repeat new password"
-              placeholderTextColor={T.textDim} autoCapitalize="none" autoCorrect={false}
+              style={{ color: T.text, fontSize: 13, paddingVertical: 12 }}
+              value={confirmPwd}
+              onChangeText={(t) => {
+                setConfirmPwd(t)
+                setError('')
+              }}
+              secureTextEntry
+              placeholder="Repeat new password"
+              placeholderTextColor={T.textDim}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
           {/* Strength hint */}
           {newPwd.length > 0 && newPwd.length < 8 && (
-            <Text style={{ fontSize:10, color:'#f97316', marginTop:4 }}>⚠ Password too short ({newPwd.length}/8 chars)</Text>
+            <Text style={{ fontSize: 10, color: '#f97316', marginTop: 4 }}>
+              ⚠ Password too short ({newPwd.length}/8 chars)
+            </Text>
           )}
 
           {/* Buttons */}
-          <View style={{ flexDirection:'row', gap:10, marginTop:20 }}>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
             <TouchableOpacity
-              style={{ flex:1, borderRadius:12, borderWidth:1, borderColor:T.border, paddingVertical:13, alignItems:'center' }}
+              style={{
+                flex: 1,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: T.border,
+                paddingVertical: 13,
+                alignItems: 'center',
+              }}
               onPress={handleClose}
             >
-              <Text style={{ fontSize:13, fontWeight:'700', color:T.textSub }}>Cancel</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: T.textSub }}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{ flex:2, borderRadius:12, backgroundColor:H.primary, paddingVertical:13, alignItems:'center', opacity:loading?0.6:1 }}
-              onPress={handleSubmit} disabled={loading}
+              style={{
+                flex: 2,
+                borderRadius: 12,
+                backgroundColor: H.primary,
+                paddingVertical: 13,
+                alignItems: 'center',
+                opacity: loading ? 0.6 : 1,
+              }}
+              onPress={handleSubmit}
+              disabled={loading}
             >
-              {loading
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={{ fontSize:13, fontWeight:'800', color:'#fff' }}>Change Password</Text>
-              }
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#fff' }}>
+                  Change Password
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -183,14 +408,23 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
 }
 
 // ─── Officer ID Card Modal ─────────────────────────────────────────────────────
-function OfficerIdCard({ visible, onClose, officer }: {
+function OfficerIdCard({
+  visible,
+  onClose,
+  officer,
+}: {
   visible: boolean
   onClose: () => void
-  officer: Record<string,any>
+  officer: Record<string, any>
 }) {
   const { theme: T, isDark: _isDark } = useTheme()
-  const initials = (officer.officerName ?? 'HO').split(' ').filter(Boolean)
-    .slice(0,2).map((n:string)=>n[0]).join('').toUpperCase()
+  const initials = (officer.officerName ?? 'HO')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n: string) => n[0])
+    .join('')
+    .toUpperCase()
   const issueYear = new Date().getFullYear()
 
   return (
@@ -202,24 +436,30 @@ function OfficerIdCard({ visible, onClose, officer }: {
           {/* ─ Government ID Card ─ */}
           <View style={ic.card}>
             {/* Card header */}
-            <LinearGradient colors={['#02143c','#083250','#0891b2']} style={ic.cardHeader}>
+            <LinearGradient colors={['#02143c', '#083250', '#0891b2']} style={ic.cardHeader}>
               <View style={ic.headerFlag}>
-                <View style={{ flex:3, backgroundColor:TZ.green }} />
-                <View style={{ width:6, backgroundColor:TZ.yellow }} />
-                <View style={{ width:5, backgroundColor:TZ.black }} />
-                <View style={{ width:6, backgroundColor:TZ.yellow }} />
-                <View style={{ flex:3, backgroundColor:TZ.blue }} />
+                <View style={{ flex: 3, backgroundColor: TZ.green }} />
+                <View style={{ width: 6, backgroundColor: TZ.yellow }} />
+                <View style={{ width: 5, backgroundColor: TZ.black }} />
+                <View style={{ width: 6, backgroundColor: TZ.yellow }} />
+                <View style={{ flex: 3, backgroundColor: TZ.blue }} />
               </View>
               <View style={ic.headerContent}>
-                <Image source={require('../../../public/assets/court_of_arm.png')}
-                  style={{ width:36, height:36 }} resizeMode="contain" />
-                <View style={{ flex:1, alignItems:'center' }}>
+                <Image
+                  source={require('../../../public/assets/court_of_arm.png')}
+                  style={{ width: 36, height: 36 }}
+                  resizeMode="contain"
+                />
+                <View style={{ flex: 1, alignItems: 'center' }}>
                   <Text style={ic.headerTitle}>UNITED REPUBLIC OF TANZANIA</Text>
                   <Text style={ic.headerSub}>NATIONAL BUREAU OF STATISTICS</Text>
                   <Text style={ic.headerRole}>EMPLOYEE IDENTITY CARD</Text>
                 </View>
-                <Image source={require('../../../public/assets/longo_nbs.png')}
-                  style={{ width:36, height:36 }} resizeMode="contain" />
+                <Image
+                  source={require('../../../public/assets/longo_nbs.png')}
+                  style={{ width: 36, height: 36 }}
+                  resizeMode="contain"
+                />
               </View>
             </LinearGradient>
 
@@ -230,9 +470,16 @@ function OfficerIdCard({ visible, onClose, officer }: {
                 <View style={ic.photoBox}>
                   <Text style={ic.photoInitials}>{initials}</Text>
                 </View>
-                <View style={[ic.statusPill, { backgroundColor:`${TZ.green}20`, borderColor:`${TZ.green}50` }]}>
-                  <View style={{ width:6, height:6, borderRadius:3, backgroundColor:TZ.green }} />
-                  <Text style={{ fontSize:8, color:TZ.green, fontWeight:'700' }}>ACTIVE</Text>
+                <View
+                  style={[
+                    ic.statusPill,
+                    { backgroundColor: `${TZ.green}20`, borderColor: `${TZ.green}50` },
+                  ]}
+                >
+                  <View
+                    style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: TZ.green }}
+                  />
+                  <Text style={{ fontSize: 8, color: TZ.green, fontWeight: '700' }}>ACTIVE</Text>
                 </View>
               </View>
 
@@ -240,18 +487,25 @@ function OfficerIdCard({ visible, onClose, officer }: {
               <View style={ic.detailsCol}>
                 <Text style={ic.officerName}>{officer.officerName ?? '—'}</Text>
                 <Text style={ic.officerRole}>Health Facility Officer</Text>
-                <View style={{ height:1, backgroundColor:'rgba(0,0,0,0.08)', marginVertical:8 }} />
+                <View
+                  style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginVertical: 8 }}
+                />
                 {[
-                  ['Employee ID',  officer.employeeId   ?? `NBS-HO-${Date.now().toString().slice(-6)}`],
-                  ['Facility',     officer.facilityName ?? '—'],
-                  ['District',     officer.facilityDistrict ?? '—'],
-                  ['Region',       officer.facilityRegion   ?? '—'],
-                  ['Issued',       `${issueYear}`],
-                  ['Expires',      `${issueYear + 2}`],
-                ].map(([k,v])=>(
+                  [
+                    'Employee ID',
+                    officer.employeeId ?? `NBS-HO-${Date.now().toString().slice(-6)}`,
+                  ],
+                  ['Facility', officer.facilityName ?? '—'],
+                  ['District', officer.facilityDistrict ?? '—'],
+                  ['Region', officer.facilityRegion ?? '—'],
+                  ['Issued', `${issueYear}`],
+                  ['Expires', `${issueYear + 2}`],
+                ].map(([k, v]) => (
                   <View key={k} style={ic.detailRow}>
                     <Text style={ic.detailKey}>{k}:</Text>
-                    <Text style={ic.detailVal} numberOfLines={1}>{v}</Text>
+                    <Text style={ic.detailVal} numberOfLines={1}>
+                      {v}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -260,8 +514,16 @@ function OfficerIdCard({ visible, onClose, officer }: {
             {/* Card footer */}
             <View style={ic.cardFooter}>
               <View style={ic.barcodeArea}>
-                {Array.from({length:28},(_,i)=>(
-                  <View key={i} style={{ width:i%3===0?3:1.5, height:i%5===0?28:22, backgroundColor:'#1a1a1a', marginHorizontal:0.5 }} />
+                {Array.from({ length: 28 }, (_, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      width: i % 3 === 0 ? 3 : 1.5,
+                      height: i % 5 === 0 ? 28 : 22,
+                      backgroundColor: '#1a1a1a',
+                      marginHorizontal: 0.5,
+                    }}
+                  />
                 ))}
               </View>
               <Text style={ic.footerNote}>
@@ -271,7 +533,7 @@ function OfficerIdCard({ visible, onClose, officer }: {
           </View>
 
           <TouchableOpacity style={ic.closeBtn} onPress={onClose} activeOpacity={0.8}>
-            <Text style={{ color:'#fff', fontWeight:'800', fontSize:14 }}>Close</Text>
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Close</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -283,10 +545,22 @@ function OfficerIdCard({ visible, onClose, officer }: {
 // Key fix: animation completes BEFORE navigation, preventing app stack freeze.
 // LINTFIX-4: removed unused 'navigation' prop (was destructured and typed
 // but never referenced in the component body — genuinely dead code).
-function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, onChangePwd }: {
-  open: boolean; onClose: () => void
-  officer: Record<string,any>; onLogout: () => void; loggingOut: boolean
-  onShowProfile: () => void; onChangePwd: () => void
+function Sidebar({
+  open,
+  onClose,
+  officer,
+  onLogout,
+  loggingOut,
+  onShowProfile,
+  onChangePwd,
+}: {
+  open: boolean
+  onClose: () => void
+  officer: Record<string, any>
+  onLogout: () => void
+  loggingOut: boolean
+  onShowProfile: () => void
+  onChangePwd: () => void
 }) {
   const { theme: T } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -297,16 +571,16 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
     if (open) {
       setMounted(true)
       Animated.parallel([
-        Animated.timing(tx, { toValue: 0,   duration: 260, useNativeDriver: true }),
-        Animated.timing(bg, { toValue: 1,   duration: 260, useNativeDriver: true }),
+        Animated.timing(tx, { toValue: 0, duration: 260, useNativeDriver: true }),
+        Animated.timing(bg, { toValue: 1, duration: 260, useNativeDriver: true }),
       ]).start()
     } else {
       Animated.parallel([
-        Animated.timing(tx, { toValue: -W,  duration: 220, useNativeDriver: true }),
-        Animated.timing(bg, { toValue: 0,   duration: 220, useNativeDriver: true }),
-      ]).start(() => setMounted(false))  // unmount AFTER animation
+        Animated.timing(tx, { toValue: -W, duration: 220, useNativeDriver: true }),
+        Animated.timing(bg, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]).start(() => setMounted(false)) // unmount AFTER animation
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   if (!mounted) return null
@@ -315,7 +589,7 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
   const closeAndNavigate = (action: () => void) => {
     Animated.parallel([
       Animated.timing(tx, { toValue: -W, duration: 200, useNativeDriver: true }),
-      Animated.timing(bg, { toValue: 0,  duration: 200, useNativeDriver: true }),
+      Animated.timing(bg, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(() => {
       setMounted(false)
       onClose()
@@ -323,90 +597,160 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
     })
   }
 
-  const initials = (officer.officerName ?? 'HO').split(' ').filter(Boolean)
-    .slice(0,2).map((n:string)=>n[0]).join('').toUpperCase()
+  const initials = (officer.officerName ?? 'HO')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n: string) => n[0])
+    .join('')
+    .toUpperCase()
 
   const MENU = [
     {
-      section: 'FACILITY', items: [
-        { icon: <Building2 size={15} color={H.primaryL}/>, label: 'View Facility Details',
-          onPress: () => closeAndNavigate(() => Alert.alert('Facility Details',
-            `${officer.facilityName}\n${officer.facilityType?.replace(/_/g,' ')}\n${officer.facilityDistrict}, ${officer.facilityRegion}`
-          ))},
-      ]
+      section: 'FACILITY',
+      items: [
+        {
+          icon: <Building2 size={15} color={H.primaryL} />,
+          label: 'View Facility Details',
+          onPress: () =>
+            closeAndNavigate(() =>
+              Alert.alert(
+                'Facility Details',
+                `${officer.facilityName}\n${officer.facilityType?.replace(/_/g, ' ')}\n${officer.facilityDistrict}, ${officer.facilityRegion}`
+              )
+            ),
+        },
+      ],
     },
     {
-      section: 'ACCOUNT', items: [
-        { icon: <IdCard size={15} color={H.primaryL}/>,  label: 'View My ID Card',
-          onPress: () => closeAndNavigate(() => onShowProfile())},
-        { icon: <User   size={15} color={H.primaryL}/>,  label: 'View Profile',
-          onPress: () => closeAndNavigate(() => onShowProfile())},
-        { icon: <Lock   size={15} color={H.primaryL}/>,  label: 'Change Password',
-          onPress: () => closeAndNavigate(() => onChangePwd())},
-      ]
+      section: 'ACCOUNT',
+      items: [
+        {
+          icon: <IdCard size={15} color={H.primaryL} />,
+          label: 'View My ID Card',
+          onPress: () => closeAndNavigate(() => onShowProfile()),
+        },
+        {
+          icon: <User size={15} color={H.primaryL} />,
+          label: 'View Profile',
+          onPress: () => closeAndNavigate(() => onShowProfile()),
+        },
+        {
+          icon: <Lock size={15} color={H.primaryL} />,
+          label: 'Change Password',
+          onPress: () => closeAndNavigate(() => onChangePwd()),
+        },
+      ],
     },
     {
-      section: 'SESSION', items: [
-        { icon: <LogOut size={15} color="#f87171"/>, label: loggingOut ? 'Signing out…' : 'Sign Out',
+      section: 'SESSION',
+      items: [
+        {
+          icon: <LogOut size={15} color="#f87171" />,
+          label: loggingOut ? 'Signing out…' : 'Sign Out',
           danger: true,
-          onPress: () => closeAndNavigate(() => onLogout())},
-      ]
+          onPress: () => closeAndNavigate(() => onLogout()),
+        },
+      ],
     },
   ]
 
   return (
-    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal
+      visible={mounted}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
       <TouchableWithoutFeedback onPress={() => closeAndNavigate(() => {})}>
-        <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor:'rgba(0,0,0,0.55)', opacity:bg }]} />
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: 'rgba(0,0,0,0.55)', opacity: bg },
+          ]}
+        />
       </TouchableWithoutFeedback>
 
-      <Animated.View style={[s.drawer, { backgroundColor:T.card, transform:[{translateX:tx}] }]}>
+      <Animated.View
+        style={[s.drawer, { backgroundColor: T.card, transform: [{ translateX: tx }] }]}
+      >
         {/* Header */}
-        <LinearGradient colors={['#02143c','#083250']} style={s.drawerHeader}>
-          <View style={{ flexDirection:'row', height:4 }}>
-            <View style={{flex:3,backgroundColor:TZ.green}}/><View style={{width:7,backgroundColor:TZ.yellow}}/>
-            <View style={{width:5,backgroundColor:TZ.black}}/><View style={{width:7,backgroundColor:TZ.yellow}}/>
-            <View style={{flex:3,backgroundColor:TZ.blue}}/>
+        <LinearGradient colors={['#02143c', '#083250']} style={s.drawerHeader}>
+          <View style={{ flexDirection: 'row', height: 4 }}>
+            <View style={{ flex: 3, backgroundColor: TZ.green }} />
+            <View style={{ width: 7, backgroundColor: TZ.yellow }} />
+            <View style={{ width: 5, backgroundColor: TZ.black }} />
+            <View style={{ width: 7, backgroundColor: TZ.yellow }} />
+            <View style={{ flex: 3, backgroundColor: TZ.blue }} />
           </View>
-          <View style={{ flexDirection:'row', alignItems:'flex-start', padding:16, gap:12 }}>
-            <View style={s.drawerAvatar}><Text style={s.drawerAvatarText}>{initials}</Text></View>
-            <View style={{ flex:1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', padding: 16, gap: 12 }}>
+            <View style={s.drawerAvatar}>
+              <Text style={s.drawerAvatarText}>{initials}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
               <Text style={s.drawerName}>{officer.officerName ?? 'Officer'}</Text>
               <Text style={s.drawerFac}>{officer.facilityName ?? 'Facility'}</Text>
-              <View style={{ flexDirection:'row', alignItems:'center', gap:4, marginTop:4 }}>
-                <View style={{ width:5, height:5, borderRadius:2.5, backgroundColor:H.primaryL }}/>
-                <Text style={{ fontSize:8, fontWeight:'700', letterSpacing:0.6, color:H.primaryL }}>HEALTH FACILITY OFFICER</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <View
+                  style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: H.primaryL }}
+                />
+                <Text
+                  style={{ fontSize: 8, fontWeight: '700', letterSpacing: 0.6, color: H.primaryL }}
+                >
+                  HEALTH FACILITY OFFICER
+                </Text>
               </View>
             </View>
-            <TouchableOpacity onPress={()=>closeAndNavigate(()=>{})} style={{ padding:4 }}>
+            <TouchableOpacity onPress={() => closeAndNavigate(() => {})} style={{ padding: 4 }}>
               <X size={18} color="rgba(255,255,255,0.70)" />
             </TouchableOpacity>
           </View>
         </LinearGradient>
 
         {/* Menu */}
-        <ScrollView style={{ flex:1 }} showsVerticalScrollIndicator={false}>
-          {MENU.map(section => (
-            <View key={section.section} style={[s.drawerSection, { borderBottomColor:T.border }]}>
-              <Text style={[s.drawerSectionLabel, { color:T.textDim }]}>{section.section}</Text>
-              {section.items.map(item => (
-                <TouchableOpacity key={item.label}
-                  style={[s.drawerItem, { borderBottomColor:T.border }]}
-                  onPress={item.onPress} activeOpacity={0.7}
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {MENU.map((section) => (
+            <View key={section.section} style={[s.drawerSection, { borderBottomColor: T.border }]}>
+              <Text style={[s.drawerSectionLabel, { color: T.textDim }]}>{section.section}</Text>
+              {section.items.map((item) => (
+                <TouchableOpacity
+                  key={item.label}
+                  style={[s.drawerItem, { borderBottomColor: T.border }]}
+                  onPress={item.onPress}
+                  activeOpacity={0.7}
                 >
-                  <View style={[s.drawerItemIcon, { backgroundColor:(item as any).danger?'rgba(239,68,68,0.12)':`${H.primary}14` }]}>
+                  <View
+                    style={[
+                      s.drawerItemIcon,
+                      {
+                        backgroundColor: (item as any).danger
+                          ? 'rgba(239,68,68,0.12)'
+                          : `${H.primary}14`,
+                      },
+                    ]}
+                  >
                     {item.icon}
                   </View>
-                  <Text style={[s.drawerItemLabel, { color:(item as any).danger?'#f87171':T.text }]}>{item.label}</Text>
-                  <ChevronRight size={14} color={(item as any).danger?'#f87171':T.textDim} />
+                  <Text
+                    style={[
+                      s.drawerItemLabel,
+                      { color: (item as any).danger ? '#f87171' : T.text },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                  <ChevronRight size={14} color={(item as any).danger ? '#f87171' : T.textDim} />
                 </TouchableOpacity>
               ))}
             </View>
           ))}
         </ScrollView>
 
-        <View style={[s.drawerFooter, { borderTopColor:T.border }]}>
-          <Text style={[s.drawerFooterText, { color:T.textDim }]}>NBS-CRVS · NBS Tanzania · © {new Date().getFullYear()}</Text>
+        <View style={[s.drawerFooter, { borderTopColor: T.border }]}>
+          <Text style={[s.drawerFooterText, { color: T.textDim }]}>
+            NBS-CRVS · NBS Tanzania · © {new Date().getFullYear()}
+          </Text>
         </View>
       </Animated.View>
     </Modal>
@@ -415,49 +759,96 @@ function Sidebar({ open, onClose, officer, onLogout, loggingOut, onShowProfile, 
 
 // ─── StatCard / ActionCard ─────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-function StatCard({ icon, value, label, color, sub }: { icon:React.ReactNode; value:number; label:string; color:string; sub?:string }) {
-  const { theme:T } = useTheme()
+function StatCard({
+  icon,
+  value,
+  label,
+  color,
+  sub,
+}: {
+  icon: React.ReactNode
+  value: number
+  label: string
+  color: string
+  sub?: string
+}) {
+  const { theme: T } = useTheme()
   return (
-    <View style={[s.statCard, { backgroundColor:T.card, borderColor:T.border }]}>
-      <View style={[s.statIcon, { backgroundColor:`${color}18` }]}>{icon}</View>
+    <View style={[s.statCard, { backgroundColor: T.card, borderColor: T.border }]}>
+      <View style={[s.statIcon, { backgroundColor: `${color}18` }]}>{icon}</View>
       <Text style={[s.statValue, { color }]}>{value}</Text>
-      <Text style={[s.statLabel, { color:T.textSub }]}>{label}</Text>
-      {sub && <Text style={[s.statSub, { color:T.textDim }]}>{sub}</Text>}
+      <Text style={[s.statLabel, { color: T.textSub }]}>{label}</Text>
+      {sub && <Text style={[s.statSub, { color: T.textDim }]}>{sub}</Text>}
     </View>
   )
 }
-function ActionCard({ icon, label, sub, bg, onPress }: { icon:React.ReactNode; label:string; sub:string; bg:string; onPress:()=>void }) {
-  const { theme:T } = useTheme()
+function ActionCard({
+  icon,
+  label,
+  sub,
+  bg,
+  onPress,
+}: {
+  icon: React.ReactNode
+  label: string
+  sub: string
+  bg: string
+  onPress: () => void
+}) {
+  const { theme: T } = useTheme()
   return (
-    <TouchableOpacity style={[s.actionCard, { backgroundColor:T.card, borderColor:T.border }]} onPress={onPress} activeOpacity={0.75}>
-      <View style={[s.actionIcon, { backgroundColor:bg }]}>{icon}</View>
-      <Text style={[s.actionLabel, { color:T.text }]}>{label}</Text>
-      <Text style={[s.actionSub,   { color:T.textSub }]}>{sub}</Text>
+    <TouchableOpacity
+      style={[s.actionCard, { backgroundColor: T.card, borderColor: T.border }]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <View style={[s.actionIcon, { backgroundColor: bg }]}>{icon}</View>
+      <Text style={[s.actionLabel, { color: T.text }]}>{label}</Text>
+      <Text style={[s.actionSub, { color: T.textSub }]}>{sub}</Text>
     </TouchableOpacity>
   )
 }
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
-  const { theme:T, isDark, toggleTheme } = useTheme()
-  const { inZone, distanceKm, setGeofenceConfig } = useGeofence()
+  const { theme: T, isDark, toggleTheme } = useTheme()
 
-  const [loading,      setLoading]     = useState(true)
-  const [refreshing,   setRefreshing]  = useState(false)
-  const [loggingOut,   setLoggingOut]  = useState(false)
-  const [sidebarOpen,  setSidebarOpen]  = useState(false)
-  const [profileOpen,  setProfileOpen]  = useState(false)
-  const [changePwdOpen,setChangePwdOpen]= useState(false)
-  const [unread,       setUnread]      = useState(0)
-  const [connQuality,  setConnQuality] = useState<ConnQuality>('Offline')
-  const [activity,     setActivity]    = useState<any[]>([])
-  const [stats,        setStats]       = useState({ todayBirths:0, todayDeaths:0, monthBirths:0, monthDeaths:0, pendingSync:0, totalBirths:0, totalDeaths:0 })
-  const [officer,      setOfficer]     = useState<Record<string,any>>({ officerName:'Officer', facilityName:'Facility', facilityType:'hospital', facilityGrade:'', facilityRegion:'—', facilityDistrict:'—', facilityCertIssued:0, facilityDeliveries:0 })
-  const pollRef = useRef<ReturnType<typeof setInterval>|null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [changePwdOpen, setChangePwdOpen] = useState(false)
+  const [unread, setUnread] = useState(0)
+  const [connQuality, setConnQuality] = useState<ConnQuality>('Offline')
+  const [activity, setActivity] = useState<any[]>([])
+  const [stats, setStats] = useState({
+    todayBirths: 0,
+    todayDeaths: 0,
+    monthBirths: 0,
+    monthDeaths: 0,
+    pendingSync: 0,
+    totalBirths: 0,
+    totalDeaths: 0,
+  })
+  const [officer, setOfficer] = useState<Record<string, any>>({
+    officerName: 'Officer',
+    facilityName: 'Facility',
+    facilityType: 'hospital',
+    facilityGrade: '',
+    facilityRegion: '—',
+    facilityDistrict: '—',
+    facilityCertIssued: 0,
+    facilityDeliveries: 0,
+  })
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const loadData = useCallback(async (silent=false) => {
+  const loadData = useCallback(async (silent = false) => {
     const token = await AsyncStorage.getItem('adlcs_access_token')
-    if (!token) { navigation.replace('Login'); return }
+    if (!token) {
+      ;(_navigation as any).replace('Login')
+      return
+    }
 
     if (!silent) setLoading(true)
 
@@ -470,26 +861,25 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
     if (acts.length > 0) setActivity(acts)
     if (remote) {
       setOfficer({
-        officerName:        remote.officerName        ?? 'Officer',
-        facilityName:       remote.facilityName       ?? 'Facility',
-        facilityType:       remote.facilityType       ?? 'hospital',
-        facilityGrade:      remote.facilityGrade      ?? '',
-        facilityRegion:     remote.facilityRegion     ?? '—',
-        facilityDistrict:   remote.facilityDistrict   ?? '—',
-        facilityGpsLat:     String(remote.facilityGpsLat  ?? ''),
-        facilityGpsLng:     String(remote.facilityGpsLng  ?? ''),
+        officerName: remote.officerName ?? 'Officer',
+        facilityName: remote.facilityName ?? 'Facility',
+        facilityType: remote.facilityType ?? 'hospital',
+        facilityGrade: remote.facilityGrade ?? '',
+        facilityRegion: remote.facilityRegion ?? '—',
+        facilityDistrict: remote.facilityDistrict ?? '—',
+        facilityGpsLat: String(remote.facilityGpsLat ?? ''),
+        facilityGpsLng: String(remote.facilityGpsLng ?? ''),
         facilityCertIssued: Number(remote.facilityCertIssued ?? 0),
         facilityDeliveries: Number(remote.facilityDeliveries ?? 0),
       })
       if (remote.facilityGpsLat && remote.facilityGpsLng) {
-        setGeofenceConfig({ gps: { lat: Number(remote.facilityGpsLat), lng: Number(remote.facilityGpsLng) }, role: 'hospital_officer' })
       }
       // All counts come directly from PostgreSQL — no local merge needed
       setStats({
-        todayBirths: remote.todayBirths  ?? 0,
-        todayDeaths: remote.todayDeaths  ?? 0,
-        monthBirths: remote.monthBirths  ?? 0,
-        monthDeaths: remote.monthDeaths  ?? 0,
+        todayBirths: remote.todayBirths ?? 0,
+        todayDeaths: remote.todayDeaths ?? 0,
+        monthBirths: remote.monthBirths ?? 0,
+        monthDeaths: remote.monthDeaths ?? 0,
         pendingSync: remote.pendingCases ?? 0,
         totalBirths: 0,
         totalDeaths: 0,
@@ -499,31 +889,45 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
     }
     setLoading(false)
     setRefreshing(false)
-  // LINTFIX-4-v2: 'navigation' removed from deps — React Navigation
-  // guarantees it is referentially stable for the screen's lifetime, so
-  // it can never trigger a meaningful re-run and does not belong in the
-  // dependency array (it is still used directly in the callback body
-  // above via navigation.replace('Login'), this only removes the
-  // redundant tracking of an outer-scope value that never changes).
-  }, [setGeofenceConfig])
+    // LINTFIX-4-v2: 'navigation' removed from deps — React Navigation
+    // guarantees it is referentially stable for the screen's lifetime, so
+    // it can never trigger a meaningful re-run and does not belong in the
+    // dependency array (it is still used directly in the callback body
+    // above via navigation.replace('Login'), this only removes the
+    // redundant tracking of an outer-scope value that never changes).
+  }, [])
 
   // ← Refresh whenever screen comes back into focus (e.g. after RegisterBirth)
-  useFocusEffect(useCallback(() => { loadData() }, [loadData]))
+  useFocusEffect(
+    useCallback(() => {
+      loadData()
+    }, [loadData])
+  )
 
   // Background poll every 60s
   useEffect(() => {
     pollRef.current = setInterval(() => loadData(true), 60_000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
   }, [loadData])
 
   const handleLogout = useCallback(() => {
     Alert.alert('Confirm Sign Out', 'Are you sure you want to sign out?', [
-      { text:'Cancel', style:'cancel' },
-      { text:'Sign Out', style:'destructive', onPress: async () => {
-        setLoggingOut(true)
-        await AsyncStorage.multiRemove(['adlcs_access_token','adlcs_refresh_token','adlcs_role','adlcs_device_activated'])
-        navigation.replace('Login')
-      }},
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          setLoggingOut(true)
+          await AsyncStorage.multiRemove([
+            'adlcs_access_token',
+            'adlcs_refresh_token',
+            'adlcs_role',
+            'adlcs_device_activated',
+          ])(_navigation as any).replace('Login')
+        },
+      },
     ])
   }, [])
 
@@ -541,151 +945,393 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
       `Month deaths:  ${stats.monthDeaths}`,
       `Pending sync:  ${stats.pendingSync}`,
     ].join('\n')
-    await Share.share({ title:`NBS-CRVS ${period} ${type}`, message:lines })
+    await Share.share({ title: `NBS-CRVS ${period} ${type}`, message: lines })
   }
 
-  const ConnIcon = connQuality==='Good' ? Wifi : connQuality==='Fair' ? WifiLow : WifiOff
-  const initials = officer.officerName.split(' ').filter(Boolean).slice(0,2).map((n:string)=>n[0]).join('').toUpperCase() || 'HO'
+  const ConnIcon = connQuality === 'Good' ? Wifi : connQuality === 'Fair' ? WifiLow : WifiOff
+  const initials =
+    officer.officerName
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((n: string) => n[0])
+      .join('')
+      .toUpperCase() || 'HO'
 
-  type AD = { id:string; icon:React.ReactNode; label:string; sub:string; bg:string }
+  type AD = { id: string; icon: React.ReactNode; label: string; sub: string; bg: string }
   const actions: AD[] = [
-    { id:'birth',   icon:<Baby        size={20} color="#fff"/>, label:'Register',  sub:'Birth',       bg:TZ.green  },
-    { id:'death',   icon:<Cross       size={20} color="#fff"/>, label:'Record',    sub:'Death',       bg:'#dc2626' },
-    { id:'cert',    icon:<FileText    size={20} color="#fff"/>, label:'Issue',     sub:'Certificate', bg:H.primary },
-    { id:'view',    icon:<Stethoscope size={20} color="#fff"/>, label:'View',      sub:'Records',     bg:'#7c3aed' },
-    { id:'pending', icon:<Clock       size={20} color="#fff"/>, label:'Pending',   sub:'Cases',       bg:H.orange  },
-    { id:'sync',    icon:<RefreshCw   size={20} color="#fff"/>, label:'Sync',      sub:'Data',        bg:'#0e7490' },
+    {
+      id: 'birth',
+      icon: <Baby size={20} color="#fff" />,
+      label: 'Register',
+      sub: 'Birth',
+      bg: TZ.green,
+    },
+    {
+      id: 'death',
+      icon: <Cross size={20} color="#fff" />,
+      label: 'Record',
+      sub: 'Death',
+      bg: '#dc2626',
+    },
+    {
+      id: 'cert',
+      icon: <FileText size={20} color="#fff" />,
+      label: 'Issue',
+      sub: 'Certificate',
+      bg: H.primary,
+    },
+    {
+      id: 'view',
+      icon: <Stethoscope size={20} color="#fff" />,
+      label: 'View',
+      sub: 'Records',
+      bg: '#7c3aed',
+    },
+    {
+      id: 'pending',
+      icon: <Clock size={20} color="#fff" />,
+      label: 'Pending',
+      sub: 'Cases',
+      bg: H.orange,
+    },
+    {
+      id: 'sync',
+      icon: <RefreshCw size={20} color="#fff" />,
+      label: 'Sync',
+      sub: 'Data',
+      bg: '#0e7490',
+    },
   ]
-  const navigate = (id:string) => {
-    const m: Record<string,keyof RootStack> = {
-      birth:'RegisterBirth', death:'RecordDeath', cert:'IssueCertificate',
-      view:'ViewRecords', pending:'PendingCases', sync:'SyncData',
+  const navigate = (id: string) => {
+    const m: Record<string, keyof RootStack> = {
+      birth: 'RegisterBirth',
+      death: 'RecordDeath',
+      cert: 'IssueCertificate',
+      view: 'ViewRecords',
+      pending: 'PendingCases',
+      sync: 'SyncData',
     }
     if (m[id]) navigation.navigate(m[id])
   }
 
-  if (loading) return (
-    <View style={{ flex:1, alignItems:'center', justifyContent:'center', backgroundColor:T.bg }}>
-      <ActivityIndicator size="large" color={T.primary} />
-      <Text style={{ color:T.textSub, marginTop:12, fontSize:12 }}>Loading dashboard…</Text>
-    </View>
-  )
+  if (loading)
+    return (
+      <View
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: T.bg }}
+      >
+        <ActivityIndicator size="large" color={T.primary} />
+        <Text style={{ color: T.textSub, marginTop: 12, fontSize: 12 }}>Loading dashboard…</Text>
+      </View>
+    )
 
   return (
-    <SafeAreaView style={{ flex:1, backgroundColor:T.bg }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
       {/* Sidebar — stable mount/unmount, no app freeze */}
       <Sidebar
-        open={sidebarOpen} onClose={() => setSidebarOpen(false)}
-        officer={officer} onLogout={handleLogout} loggingOut={loggingOut}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        officer={officer}
+        onLogout={handleLogout}
+        loggingOut={loggingOut}
         onShowProfile={() => setProfileOpen(true)}
         onChangePwd={() => setChangePwdOpen(true)}
       />
 
       {/* Officer ID Card */}
-      <OfficerIdCard visible={profileOpen} onClose={() => setProfileOpen(false)} officer={officer} />
+      <OfficerIdCard
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        officer={officer}
+      />
 
       {/* Change Password Modal */}
       <ChangePasswordModal visible={changePwdOpen} onClose={() => setChangePwdOpen(false)} />
 
       {/* Header */}
-      <ImageBackground source={require('../../../public/assets/flag.jpg')} style={{ overflow:'hidden' }} blurRadius={2} resizeMode="cover">
-        <LinearGradient colors={isDark?['rgba(2,20,60,0.70)','rgba(8,50,80,0.65)']:['rgba(0,30,100,0.60)','rgba(4,60,80,0.58)']} style={StyleSheet.absoluteFill} />
-        <View style={{ flexDirection:'row', height:5 }}>
-          <View style={{flex:3,backgroundColor:TZ.green}}/><View style={{width:9,backgroundColor:TZ.yellow}}/>
-          <View style={{width:7,backgroundColor:TZ.black}}/><View style={{width:9,backgroundColor:TZ.yellow}}/>
-          <View style={{flex:3,backgroundColor:TZ.blue}}/>
+      <ImageBackground
+        source={require('../../../public/assets/flag.jpg')}
+        style={{ overflow: 'hidden' }}
+        blurRadius={2}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={
+            isDark
+              ? ['rgba(2,20,60,0.70)', 'rgba(8,50,80,0.65)']
+              : ['rgba(0,30,100,0.60)', 'rgba(4,60,80,0.58)']
+          }
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={{ flexDirection: 'row', height: 5 }}>
+          <View style={{ flex: 3, backgroundColor: TZ.green }} />
+          <View style={{ width: 9, backgroundColor: TZ.yellow }} />
+          <View style={{ width: 7, backgroundColor: TZ.black }} />
+          <View style={{ width: 9, backgroundColor: TZ.yellow }} />
+          <View style={{ flex: 3, backgroundColor: TZ.blue }} />
         </View>
-        <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:14, paddingTop:10, paddingBottom:8, gap:10 }}>
-          <View style={{ alignItems:'center', width:56 }}>
-            <View style={s.logoCircle}><Image source={require('../../../public/assets/longo_nbs.png')} style={{ width:32, height:32 }} resizeMode="contain" /></View>
-            <Text style={{ fontSize:8, fontWeight:'800', color:TZ.yellow, letterSpacing:1.5, marginTop:3 }}>NBS</Text>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 14,
+            paddingTop: 10,
+            paddingBottom: 8,
+            gap: 10,
+          }}
+        >
+          <View style={{ alignItems: 'center', width: 56 }}>
+            <View style={s.logoCircle}>
+              <Image
+                source={require('../../../public/assets/longo_nbs.png')}
+                style={{ width: 32, height: 32 }}
+                resizeMode="contain"
+              />
+            </View>
+            <Text
+              style={{
+                fontSize: 8,
+                fontWeight: '800',
+                color: TZ.yellow,
+                letterSpacing: 1.5,
+                marginTop: 3,
+              }}
+            >
+              NBS
+            </Text>
           </View>
-          <View style={{ flex:1, alignItems:'center' }}>
-            <Text style={{ fontSize:17, fontWeight:'900', color:'#fff', letterSpacing:2, textTransform:'uppercase' }}>NBS-CENSUS</Text>
-            <View style={{ height:2, width:44, backgroundColor:TZ.yellow, borderRadius:1, marginVertical:4 }} />
-            <Text style={{ fontSize:9, color:'rgba(255,255,255,0.72)', letterSpacing:1.1, textTransform:'uppercase' }}>Census for Development</Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text
+              style={{
+                fontSize: 17,
+                fontWeight: '900',
+                color: '#fff',
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+              }}
+            >
+              NBS-CENSUS
+            </Text>
+            <View
+              style={{
+                height: 2,
+                width: 44,
+                backgroundColor: TZ.yellow,
+                borderRadius: 1,
+                marginVertical: 4,
+              }}
+            />
+            <Text
+              style={{
+                fontSize: 9,
+                color: 'rgba(255,255,255,0.72)',
+                letterSpacing: 1.1,
+                textTransform: 'uppercase',
+              }}
+            >
+              Census for Development
+            </Text>
           </View>
-          <View style={{ alignItems:'center', width:56 }}>
-            <View style={s.coatCircle}><Image source={require('../../../public/assets/court_of_arm.png')} style={{ width:42, height:42 }} resizeMode="contain" /></View>
-            <Text style={{ fontSize:7, fontWeight:'700', color:'rgba(255,255,255,0.60)', letterSpacing:1.2, marginTop:3 }}>TANZANIA</Text>
+          <View style={{ alignItems: 'center', width: 56 }}>
+            <View style={s.coatCircle}>
+              <Image
+                source={require('../../../public/assets/court_of_arm.png')}
+                style={{ width: 42, height: 42 }}
+                resizeMode="contain"
+              />
+            </View>
+            <Text
+              style={{
+                fontSize: 7,
+                fontWeight: '700',
+                color: 'rgba(255,255,255,0.60)',
+                letterSpacing: 1.2,
+                marginTop: 3,
+              }}
+            >
+              TANZANIA
+            </Text>
           </View>
         </View>
-        <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:12, paddingBottom:12, paddingTop:2, gap:8 }}>
-          <TouchableOpacity style={s.iconBtn} onPress={() => setSidebarOpen(true)} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingBottom: 12,
+            paddingTop: 2,
+            gap: 8,
+          }}
+        >
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => setSidebarOpen(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Menu size={17} color="rgba(255,255,255,0.90)" />
           </TouchableOpacity>
-          <View style={{ flex:1 }}>
-            <Text style={{ fontSize:11, fontWeight:'800', color:'#fff' }} numberOfLines={1}>{officer.facilityName}</Text>
-            <Text style={{ fontSize:9, color:'rgba(255,255,255,0.55)', marginTop:2 }} numberOfLines={1}>📍 {officer.facilityRegion}, {officer.facilityDistrict}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#fff' }} numberOfLines={1}>
+              {officer.facilityName}
+            </Text>
+            <Text
+              style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}
+              numberOfLines={1}
+            >
+              📍 {officer.facilityRegion}, {officer.facilityDistrict}
+            </Text>
           </View>
           <TouchableOpacity style={s.iconBtn} onPress={toggleTheme}>
-            {isDark ? <Sun size={14} color={TZ.yellow}/> : <Moon size={14} color={TZ.yellow}/>}
+            {isDark ? <Sun size={14} color={TZ.yellow} /> : <Moon size={14} color={TZ.yellow} />}
           </TouchableOpacity>
           <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('PendingCases')}>
             <Bell size={15} color="rgba(255,255,255,0.80)" />
-            {unread > 0 && <View style={s.badge}><Text style={{ fontSize:8, fontWeight:'800', color:'#fff' }}>{unread}</Text></View>}
+            {unread > 0 && (
+              <View style={s.badge}>
+                <Text style={{ fontSize: 8, fontWeight: '800', color: '#fff' }}>{unread}</Text>
+              </View>
+            )}
           </TouchableOpacity>
           <View style={s.avatarRing}>
-            <View style={[s.avatar, { backgroundColor:H.primaryL }]}>
-              <Text style={{ fontSize:11, fontWeight:'900', color:TZ.navy }}>{initials}</Text>
+            <View style={[s.avatar, { backgroundColor: H.primaryL }]}>
+              <Text style={{ fontSize: 11, fontWeight: '900', color: TZ.navy }}>{initials}</Text>
             </View>
           </View>
         </View>
       </ImageBackground>
 
       {/* Body */}
-      <ScrollView showsVerticalScrollIndicator={false} style={{ backgroundColor:T.bg }} contentContainerStyle={{ paddingBottom:36 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData() }} tintColor={T.primary} />}>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={{ backgroundColor: T.bg }}
+        contentContainerStyle={{ paddingBottom: 36 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true)
+              loadData()
+            }}
+            tintColor={T.primary}
+          />
+        }
+      >
         {/* Welcome */}
-        <View style={[s.welcomeCard, { backgroundColor:T.card, borderColor:T.border }]}>
-          <View style={{ flex:1 }}>
-            <Text style={{ fontSize:11, color:T.textSub }}>Welcome back,</Text>
-            <Text style={{ fontSize:18, fontWeight:'800', color:T.text, marginTop:2 }}>{officer.officerName}</Text>
-            <Text style={{ fontSize:10, color:T.textDim, marginTop:3 }}>{new Date().toLocaleDateString('en-TZ',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</Text>
+        <View style={[s.welcomeCard, { backgroundColor: T.card, borderColor: T.border }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, color: T.textSub }}>Welcome back,</Text>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: T.text, marginTop: 2 }}>
+              {officer.officerName}
+            </Text>
+            <Text style={{ fontSize: 10, color: T.textDim, marginTop: 3 }}>
+              {new Date().toLocaleDateString('en-TZ', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </Text>
           </View>
-          <View style={{ alignItems:'flex-end', gap:6 }}>
-            <View style={[s.zoneBadge, { borderColor:inZone?`${H.primary}60`:'rgba(239,68,68,0.38)', backgroundColor:inZone?`${H.primary}18`:'rgba(239,68,68,0.12)' }]}>
-              {inZone ? <MapPin size={9} color={H.primaryL}/> : <AlertTriangle size={9} color="#f87171"/>}
-              <Text style={[s.zoneTxt, { color:inZone?H.primaryL:'#f87171' }]}>
-                {inZone ? `✓ In Zone · ${distanceKm!=null?distanceKm.toFixed(2):'0.00'} km` : `⚠ Out · ${distanceKm!=null?distanceKm.toFixed(2):'—'} km`}
+          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+            <View
+              style={[
+                s.zoneBadge,
+                {
+                  borderColor: inZone ? `${H.primary}60` : 'rgba(239,68,68,0.38)',
+                  backgroundColor: inZone ? `${H.primary}18` : 'rgba(239,68,68,0.12)',
+                },
+              ]}
+            >
+              {inZone ? (
+                <MapPin size={9} color={H.primaryL} />
+              ) : (
+                <AlertTriangle size={9} color="#f87171" />
+              )}
+              <Text style={[s.zoneTxt, { color: inZone ? H.primaryL : '#f87171' }]}>
+                {inZone
+                  ? `✓ In Zone · ${distanceKm != null ? distanceKm.toFixed(2) : '0.00'} km`
+                  : `⚠ Out · ${distanceKm != null ? distanceKm.toFixed(2) : '—'} km`}
               </Text>
             </View>
-            <View style={{ flexDirection:'row', alignItems:'center', gap:4 }}>
-              <ConnIcon size={10} color={CONN_COLORS[connQuality]}/>
-              <Text style={{ fontSize:10, fontWeight:'700', color:CONN_COLORS[connQuality] }}>{connQuality} Mode</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <ConnIcon size={10} color={CONN_COLORS[connQuality]} />
+              <Text style={{ fontSize: 10, fontWeight: '700', color: CONN_COLORS[connQuality] }}>
+                {connQuality} Mode
+              </Text>
             </View>
           </View>
         </View>
 
         {/* Quick Actions */}
-        <View style={s.sectionHead}><Text style={[s.sectionTitle, { color:T.text }]}>Quick Actions</Text></View>
-        <View style={{ flexDirection:'row', paddingHorizontal:12, gap:8 }}>
-          {actions.slice(0,3).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)} />)}
+        <View style={s.sectionHead}>
+          <Text style={[s.sectionTitle, { color: T.text }]}>Quick Actions</Text>
         </View>
-        <View style={{ flexDirection:'row', paddingHorizontal:12, gap:8, marginTop:8 }}>
-          {actions.slice(3).map(a=><ActionCard key={a.id} icon={a.icon} label={a.label} sub={a.sub} bg={a.bg} onPress={()=>navigate(a.id)} />)}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 12, gap: 8 }}>
+          {actions.slice(0, 3).map((a) => (
+            <ActionCard
+              key={a.id}
+              icon={a.icon}
+              label={a.label}
+              sub={a.sub}
+              bg={a.bg}
+              onPress={() => navigate(a.id)}
+            />
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 12, gap: 8, marginTop: 8 }}>
+          {actions.slice(3).map((a) => (
+            <ActionCard
+              key={a.id}
+              icon={a.icon}
+              label={a.label}
+              sub={a.sub}
+              bg={a.bg}
+              onPress={() => navigate(a.id)}
+            />
+          ))}
         </View>
 
         {/* Facility info */}
-        <View style={s.sectionHead}><Text style={[s.sectionTitle, { color:T.text }]}>Facility Information</Text></View>
-        <View style={[s.facilityCard, { backgroundColor:T.card, borderColor:T.border }]}>
-          <LinearGradient colors={[`${H.primary}22`,`${H.primary}08`]} start={{x:0,y:0}} end={{x:1,y:0}} style={{ flexDirection:'row', alignItems:'center', gap:12, padding:16 }}>
-            <View style={[s.facilityIcon, { backgroundColor:`${H.primary}25` }]}><Building2 size={22} color={H.primaryL}/></View>
-            <View style={{ flex:1 }}>
-              <Text style={{ fontSize:13, fontWeight:'800', color:T.text, marginBottom:2 }}>{officer.facilityName}</Text>
-              <Text style={{ fontSize:11, color:T.textSub, marginBottom:2 }}>{officer.facilityType?.replace(/_/g,' ')} · {officer.facilityGrade}</Text>
-              <Text style={{ fontSize:10, color:T.textDim, marginBottom:4 }}>{officer.facilityDistrict}, {officer.facilityRegion}</Text>
-              <View style={{ flexDirection:'row', alignItems:'center', gap:4 }}>
-                <Shield size={10} color={H.primaryL}/><Text style={{ fontSize:10, color:T.textDim }}>Authorised RITA reporting facility</Text>
+        <View style={s.sectionHead}>
+          <Text style={[s.sectionTitle, { color: T.text }]}>Facility Information</Text>
+        </View>
+        <View style={[s.facilityCard, { backgroundColor: T.card, borderColor: T.border }]}>
+          <LinearGradient
+            colors={[`${H.primary}22`, `${H.primary}08`]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}
+          >
+            <View style={[s.facilityIcon, { backgroundColor: `${H.primary}25` }]}>
+              <Building2 size={22} color={H.primaryL} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: T.text, marginBottom: 2 }}>
+                {officer.facilityName}
+              </Text>
+              <Text style={{ fontSize: 11, color: T.textSub, marginBottom: 2 }}>
+                {officer.facilityType?.replace(/_/g, ' ')} · {officer.facilityGrade}
+              </Text>
+              <Text style={{ fontSize: 10, color: T.textDim, marginBottom: 4 }}>
+                {officer.facilityDistrict}, {officer.facilityRegion}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Shield size={10} color={H.primaryL} />
+                <Text style={{ fontSize: 10, color: T.textDim }}>
+                  Authorised RITA reporting facility
+                </Text>
               </View>
             </View>
           </LinearGradient>
-          <View style={[s.facilityStats, { borderTopColor:T.border }]}>
-            {[{label:'Deliveries',v:officer.facilityDeliveries,c:TZ.green},{label:'Certs Issued',v:officer.facilityCertIssued,c:H.primary},{label:'Pending',v:stats.pendingSync,c:H.orange}].map(stat=>(
-              <View key={stat.label} style={{ flex:1, alignItems:'center' }}>
-                <Text style={{ fontSize:18, fontWeight:'900', color:stat.c }}>{stat.v}</Text>
-                <Text style={{ fontSize:9, color:T.textDim, marginTop:2 }}>{stat.label}</Text>
+          <View style={[s.facilityStats, { borderTopColor: T.border }]}>
+            {[
+              { label: 'Deliveries', v: officer.facilityDeliveries, c: TZ.green },
+              { label: 'Certs Issued', v: officer.facilityCertIssued, c: H.primary },
+              { label: 'Pending', v: stats.pendingSync, c: H.orange },
+            ].map((stat) => (
+              <View key={stat.label} style={{ flex: 1, alignItems: 'center' }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: stat.c }}>{stat.v}</Text>
+                <Text style={{ fontSize: 9, color: T.textDim, marginTop: 2 }}>{stat.label}</Text>
               </View>
             ))}
           </View>
@@ -695,23 +1341,40 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
         {activity.length > 0 && (
           <>
             <View style={s.sectionHead}>
-              <Text style={[s.sectionTitle, { color:T.text }]}>Recent Activity</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('ViewRecords')}><Text style={[s.sectionLink, { color:T.primaryL }]}>All →</Text></TouchableOpacity>
+              <Text style={[s.sectionTitle, { color: T.text }]}>Recent Activity</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('ViewRecords')}>
+                <Text style={[s.sectionLink, { color: T.primaryL }]}>All →</Text>
+              </TouchableOpacity>
             </View>
-            <View style={[s.actCard, { backgroundColor:T.card, borderColor:T.border }]}>
-              {activity.map((item,idx)=>(
+            <View style={[s.actCard, { backgroundColor: T.card, borderColor: T.border }]}>
+              {activity.map((item, idx) => (
                 <View key={item.id}>
-                  <View style={{ flexDirection:'row', alignItems:'center', padding:14 }}>
-                    <View style={{ width:38, height:38, borderRadius:19, backgroundColor:`${item.color}22`, alignItems:'center', justifyContent:'center' }}>
-                      <Text style={{ fontSize:15 }}>{item.icon}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
+                    <View
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 19,
+                        backgroundColor: `${item.color}22`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 15 }}>{item.icon}</Text>
                     </View>
-                    <View style={{ flex:1, marginLeft:12 }}>
-                      <Text style={{ fontSize:10, color:T.textSub, marginBottom:2 }}>{item.label}</Text>
-                      <Text style={{ fontSize:12, fontWeight:'600', color:T.text }}>{item.name}</Text>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={{ fontSize: 10, color: T.textSub, marginBottom: 2 }}>
+                        {item.label}
+                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: T.text }}>
+                        {item.name}
+                      </Text>
                     </View>
-                    <Text style={{ fontSize:9, color:T.textDim }}>{item.time}</Text>
+                    <Text style={{ fontSize: 9, color: T.textDim }}>{item.time}</Text>
                   </View>
-                  {idx<activity.length-1 && <View style={{ height:1, backgroundColor:T.border, marginLeft:60 }}/>}
+                  {idx < activity.length - 1 && (
+                    <View style={{ height: 1, backgroundColor: T.border, marginLeft: 60 }} />
+                  )}
                 </View>
               ))}
             </View>
@@ -720,36 +1383,76 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
 
         {/* Report Card */}
         <View style={s.sectionHead}>
-          <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
-            <BarChart3 size={14} color={T.primaryL}/>
-            <Text style={[s.sectionTitle, { color:T.text }]}>Daily Report Card</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <BarChart3 size={14} color={T.primaryL} />
+            <Text style={[s.sectionTitle, { color: T.text }]}>Daily Report Card</Text>
           </View>
-          <Text style={{ fontSize:11, color:T.textDim }}>{new Date().toLocaleDateString('en-TZ',{day:'numeric',month:'short',year:'numeric'})}</Text>
+          <Text style={{ fontSize: 11, color: T.textDim }}>
+            {new Date().toLocaleDateString('en-TZ', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </Text>
         </View>
-        <View style={[s.reportCard, { backgroundColor:T.card, borderColor:T.border }]}>
+        <View style={[s.reportCard, { backgroundColor: T.card, borderColor: T.border }]}>
           {[
-            {label:'Births registered today',       value:stats.todayBirths,  color:TZ.green },
-            {label:'Deaths recorded today',         value:stats.todayDeaths,  color:'#f87171'},
-            {label:'Total births this month',       value:stats.monthBirths,  color:TZ.green },
-            {label:'Total deaths this month',       value:stats.monthDeaths,  color:'#f87171'},
-            {label:'Records pending sync',          value:stats.pendingSync,  color:H.orange },
-          ].map((row,i,arr)=>(
-            <View key={row.label} style={[s.reportRow, { borderBottomWidth:i<arr.length-1?1:0, borderBottomColor:T.border }]}>
-              <Text style={{ fontSize:12, color:T.textSub }}>{row.label}</Text>
-              <Text style={{ fontSize:16, fontWeight:'900', color:row.color }}>{row.value}</Text>
+            { label: 'Births registered today', value: stats.todayBirths, color: TZ.green },
+            { label: 'Deaths recorded today', value: stats.todayDeaths, color: '#f87171' },
+            { label: 'Total births this month', value: stats.monthBirths, color: TZ.green },
+            { label: 'Total deaths this month', value: stats.monthDeaths, color: '#f87171' },
+            { label: 'Records pending sync', value: stats.pendingSync, color: H.orange },
+          ].map((row, i, arr) => (
+            <View
+              key={row.label}
+              style={[
+                s.reportRow,
+                { borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: T.border },
+              ]}
+            >
+              <Text style={{ fontSize: 12, color: T.textSub }}>{row.label}</Text>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: row.color }}>{row.value}</Text>
             </View>
           ))}
-          <View style={[s.downloadSection, { borderTopColor:T.border }]}>
-            <Text style={{ fontSize:11, fontWeight:'700', color:T.textSub, marginBottom:12 }}>Download Report</Text>
-            <View style={{ flexDirection:'row', gap:8 }}>
-              {(['Daily','Weekly','Monthly','Annual'] as const).map(period=>(
-                <View key={period} style={{ flex:1, gap:4 }}>
-                  <Text style={{ fontSize:9, fontWeight:'600', color:T.textDim, textAlign:'center' }}>{period}</Text>
-                  <TouchableOpacity style={[s.dlBtn, { backgroundColor:`${TZ.green}18`, borderColor:`${TZ.green}40` }]} onPress={()=>downloadReport(period,'births')}>
-                    <Download size={10} color={TZ.green}/><Text style={{ fontSize:9, fontWeight:'700', color:TZ.green }}>Births</Text>
+          <View style={[s.downloadSection, { borderTopColor: T.border }]}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: T.textSub, marginBottom: 12 }}>
+              Download Report
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {(['Daily', 'Weekly', 'Monthly', 'Annual'] as const).map((period) => (
+                <View key={period} style={{ flex: 1, gap: 4 }}>
+                  <Text
+                    style={{
+                      fontSize: 9,
+                      fontWeight: '600',
+                      color: T.textDim,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {period}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      s.dlBtn,
+                      { backgroundColor: `${TZ.green}18`, borderColor: `${TZ.green}40` },
+                    ]}
+                    onPress={() => downloadReport(period, 'births')}
+                  >
+                    <Download size={10} color={TZ.green} />
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: TZ.green }}>Births</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[s.dlBtn, { backgroundColor:'rgba(220,38,38,0.22)', borderColor:'rgba(220,38,38,0.50)' }]} onPress={()=>downloadReport(period,'deaths')}>
-                    <Download size={10} color="#f87171"/><Text style={{ fontSize:9, fontWeight:'700', color:'#ef4444' }}>Deaths</Text>
+                  <TouchableOpacity
+                    style={[
+                      s.dlBtn,
+                      {
+                        backgroundColor: 'rgba(220,38,38,0.22)',
+                        borderColor: 'rgba(220,38,38,0.50)',
+                      },
+                    ]}
+                    onPress={() => downloadReport(period, 'deaths')}
+                  >
+                    <Download size={10} color="#f87171" />
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: '#ef4444' }}>Deaths</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -758,16 +1461,20 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
         </View>
 
         {/* Footer */}
-        <View style={{ alignItems:'center', paddingTop:24, gap:6 }}>
-          <View style={{ flexDirection:'row', width:80, height:3, marginBottom:8 }}>
-            <View style={{ flex:1, backgroundColor:TZ.green, height:3, borderRadius:1 }}/>
-            <View style={{ width:8, backgroundColor:TZ.yellow, height:3 }}/>
-            <View style={{ width:6, backgroundColor:TZ.black, height:3 }}/>
-            <View style={{ width:8, backgroundColor:TZ.yellow, height:3 }}/>
-            <View style={{ flex:1, backgroundColor:TZ.blue, height:3, borderRadius:1 }}/>
+        <View style={{ alignItems: 'center', paddingTop: 24, gap: 6 }}>
+          <View style={{ flexDirection: 'row', width: 80, height: 3, marginBottom: 8 }}>
+            <View style={{ flex: 1, backgroundColor: TZ.green, height: 3, borderRadius: 1 }} />
+            <View style={{ width: 8, backgroundColor: TZ.yellow, height: 3 }} />
+            <View style={{ width: 6, backgroundColor: TZ.black, height: 3 }} />
+            <View style={{ width: 8, backgroundColor: TZ.yellow, height: 3 }} />
+            <View style={{ flex: 1, backgroundColor: TZ.blue, height: 3, borderRadius: 1 }} />
           </View>
-          <Text style={{ fontSize:9, color:T.textDim }}>National Bureau of Statistics · Health Facility Reporting</Text>
-          <Text style={{ fontSize:9, color:T.textDim }}>© {new Date().getFullYear()} The United Republic of Tanzania</Text>
+          <Text style={{ fontSize: 9, color: T.textDim }}>
+            National Bureau of Statistics · Health Facility Reporting
+          </Text>
+          <Text style={{ fontSize: 9, color: T.textDim }}>
+            © {new Date().getFullYear()} The United Republic of Tanzania
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -776,75 +1483,294 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
 
 // ─── ID Card Styles ────────────────────────────────────────────────────────────
 const ic = StyleSheet.create({
-  overlay:      { flex:1, backgroundColor:'rgba(0,0,0,0.65)', justifyContent:'flex-end' },
-  sheet:        { backgroundColor:'#f8fafc', borderTopLeftRadius:24, borderTopRightRadius:24, padding:20, paddingBottom:36 },
-  sheetHandle:  { width:40, height:4, borderRadius:2, alignSelf:'center', marginBottom:16 },
-  card:         { borderRadius:16, overflow:'hidden', shadowColor:'#000', shadowOffset:{width:0,height:8}, shadowOpacity:0.35, shadowRadius:16, elevation:16 },
-  cardHeader:   { paddingBottom:12 },
-  headerFlag:   { flexDirection:'row', height:5 },
-  headerContent:{ flexDirection:'row', alignItems:'center', paddingHorizontal:14, paddingTop:12, paddingBottom:8, gap:10 },
-  headerTitle:  { fontSize:8, fontWeight:'900', color:'#fff', letterSpacing:1.5, textAlign:'center' },
-  headerSub:    { fontSize:7, color:'rgba(255,255,255,0.75)', textAlign:'center', marginTop:2 },
-  headerRole:   { fontSize:10, fontWeight:'900', color:TZ.yellow, letterSpacing:2, textAlign:'center', marginTop:4 },
-  cardBody:     { flexDirection:'row', backgroundColor:'#fff', padding:14, gap:12 },
-  photoCol:     { alignItems:'center', gap:8 },
-  photoBox:     { width:80, height:90, borderRadius:8, backgroundColor:'#e8f4fd', borderWidth:2, borderColor:'#0891b2', alignItems:'center', justifyContent:'center' },
-  photoInitials:{ fontSize:28, fontWeight:'900', color:'#0891b2' },
-  statusPill:   { flexDirection:'row', alignItems:'center', gap:4, borderWidth:1, borderRadius:20, paddingHorizontal:8, paddingVertical:3 },
-  detailsCol:   { flex:1 },
-  officerName:  { fontSize:15, fontWeight:'900', color:'#0f172a' },
-  officerRole:  { fontSize:10, color:'#0891b2', fontWeight:'600', marginTop:2 },
-  detailRow:    { flexDirection:'row', marginBottom:3 },
-  detailKey:    { fontSize:9, color:'#64748b', width:72 },
-  detailVal:    { fontSize:9, fontWeight:'700', color:'#0f172a', flex:1 },
-  cardFooter:   { backgroundColor:'#1e293b', paddingHorizontal:14, paddingVertical:10, alignItems:'center', gap:6 },
-  barcodeArea:  { flexDirection:'row', alignItems:'center', height:32 },
-  footerNote:   { fontSize:7, color:'rgba(255,255,255,0.50)', textAlign:'center' },
-  closeBtn:     { backgroundColor:'#0891b2', borderRadius:12, paddingVertical:13, alignItems:'center', marginTop:14 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#f8fafc',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  card: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 16,
+  },
+  cardHeader: { paddingBottom: 12 },
+  headerFlag: { flexDirection: 'row', height: 5 },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  headerTitle: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 1.5,
+    textAlign: 'center',
+  },
+  headerSub: { fontSize: 7, color: 'rgba(255,255,255,0.75)', textAlign: 'center', marginTop: 2 },
+  headerRole: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: TZ.yellow,
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  cardBody: { flexDirection: 'row', backgroundColor: '#fff', padding: 14, gap: 12 },
+  photoCol: { alignItems: 'center', gap: 8 },
+  photoBox: {
+    width: 80,
+    height: 90,
+    borderRadius: 8,
+    backgroundColor: '#e8f4fd',
+    borderWidth: 2,
+    borderColor: '#0891b2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoInitials: { fontSize: 28, fontWeight: '900', color: '#0891b2' },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  detailsCol: { flex: 1 },
+  officerName: { fontSize: 15, fontWeight: '900', color: '#0f172a' },
+  officerRole: { fontSize: 10, color: '#0891b2', fontWeight: '600', marginTop: 2 },
+  detailRow: { flexDirection: 'row', marginBottom: 3 },
+  detailKey: { fontSize: 9, color: '#64748b', width: 72 },
+  detailVal: { fontSize: 9, fontWeight: '700', color: '#0f172a', flex: 1 },
+  cardFooter: {
+    backgroundColor: '#1e293b',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 6,
+  },
+  barcodeArea: { flexDirection: 'row', alignItems: 'center', height: 32 },
+  footerNote: { fontSize: 7, color: 'rgba(255,255,255,0.50)', textAlign: 'center' },
+  closeBtn: {
+    backgroundColor: '#0891b2',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 14,
+  },
 })
 
 // ─── Screen Styles ─────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  drawer:           { position:'absolute', top:0, bottom:0, left:0, width:W*0.78, shadowColor:'#000', shadowOffset:{width:6,height:0}, shadowOpacity:0.40, shadowRadius:20, elevation:20 },
-  drawerHeader:     { paddingBottom:4 },
-  drawerAvatar:     { width:52, height:52, borderRadius:26, backgroundColor:'#22d3ee', alignItems:'center', justifyContent:'center', borderWidth:2, borderColor:TZ.yellow },
-  drawerAvatarText: { fontSize:18, fontWeight:'900', color:'#003087' },
-  drawerName:       { fontSize:14, fontWeight:'800', color:'#fff', marginBottom:3 },
-  drawerFac:        { fontSize:11, color:'rgba(255,255,255,0.65)' },
-  drawerSection:    { paddingVertical:8, borderBottomWidth:1 },
-  drawerSectionLabel:{ fontSize:9, fontWeight:'700', letterSpacing:1, paddingHorizontal:16, paddingVertical:8 },
-  drawerItem:       { flexDirection:'row', alignItems:'center', gap:12, paddingHorizontal:16, paddingVertical:14, borderBottomWidth:StyleSheet.hairlineWidth },
-  drawerItemIcon:   { width:32, height:32, borderRadius:8, alignItems:'center', justifyContent:'center' },
-  drawerItemLabel:  { flex:1, fontSize:14, fontWeight:'600' },
-  drawerFooter:     { paddingVertical:14, paddingHorizontal:16, borderTopWidth:1 },
-  drawerFooterText: { fontSize:9 },
-  logoCircle:       { width:46, height:46, borderRadius:23, backgroundColor:'transparent', borderWidth:1.5, borderColor:'rgba(252,209,22,0.55)', alignItems:'center', justifyContent:'center' },
-  coatCircle:       { width:50, height:50, borderRadius:25, backgroundColor:'transparent', borderWidth:1.5, borderColor:'rgba(252,209,22,0.48)', alignItems:'center', justifyContent:'center' },
-  iconBtn:          { width:30, height:30, borderRadius:8, backgroundColor:'rgba(255,255,255,0.20)', alignItems:'center', justifyContent:'center' },
-  badge:            { position:'absolute', top:-4, right:-4, width:14, height:14, borderRadius:7, backgroundColor:'#ef4444', alignItems:'center', justifyContent:'center' },
-  avatarRing:       { width:34, height:34, borderRadius:17, borderWidth:2, borderColor:TZ.yellow, padding:2 },
-  avatar:           { flex:1, borderRadius:15, alignItems:'center', justifyContent:'center' },
-  welcomeCard:      { marginHorizontal:14, marginTop:12, borderRadius:14, borderWidth:1, padding:14, flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start' },
-  zoneBadge:        { flexDirection:'row', alignItems:'center', gap:4, borderWidth:1, borderRadius:20, paddingHorizontal:8, paddingVertical:3 },
-  zoneTxt:          { fontSize:9, fontWeight:'600' },
-  sectionHead:      { flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingHorizontal:16, marginTop:18, marginBottom:10 },
-  sectionTitle:     { fontSize:14, fontWeight:'800' },
-  sectionLink:      { fontSize:11 },
-  statCard:         { flex:1, borderRadius:14, borderWidth:1, padding:10, alignItems:'center', gap:3 },
-  statIcon:         { width:34, height:34, borderRadius:17, alignItems:'center', justifyContent:'center' },
-  statValue:        { fontSize:20, fontWeight:'900' },
-  statLabel:        { fontSize:9, textAlign:'center', fontWeight:'600' },
-  statSub:          { fontSize:8, textAlign:'center' },
-  actionCard:       { flex:1, borderRadius:14, borderWidth:1, padding:12, alignItems:'center', gap:6 },
-  actionIcon:       { width:46, height:46, borderRadius:12, alignItems:'center', justifyContent:'center' },
-  actionLabel:      { fontSize:11, fontWeight:'700', textAlign:'center' },
-  actionSub:        { fontSize:9, textAlign:'center' },
-  facilityCard:     { marginHorizontal:14, borderRadius:14, borderWidth:1, overflow:'hidden' },
-  facilityIcon:     { width:46, height:46, borderRadius:12, alignItems:'center', justifyContent:'center' },
-  facilityStats:    { flexDirection:'row', borderTopWidth:1, paddingVertical:12, paddingHorizontal:16 },
-  actCard:          { marginHorizontal:14, borderRadius:14, borderWidth:1, overflow:'hidden' },
-  reportCard:       { marginHorizontal:14, borderRadius:14, borderWidth:1, overflow:'hidden' },
-  reportRow:        { flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingVertical:11, paddingHorizontal:16 },
-  downloadSection:  { borderTopWidth:1, paddingHorizontal:16, paddingVertical:14 },
-  dlBtn:            { flexDirection:'row', alignItems:'center', justifyContent:'center', gap:3, borderWidth:1, borderRadius:8, paddingVertical:6 },
+  drawer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: W * 0.78,
+    shadowColor: '#000',
+    shadowOffset: { width: 6, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  drawerHeader: { paddingBottom: 4 },
+  drawerAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#22d3ee',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: TZ.yellow,
+  },
+  drawerAvatarText: { fontSize: 18, fontWeight: '900', color: '#003087' },
+  drawerName: { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 3 },
+  drawerFac: { fontSize: 11, color: 'rgba(255,255,255,0.65)' },
+  drawerSection: { paddingVertical: 8, borderBottomWidth: 1 },
+  drawerSectionLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  drawerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  drawerItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerItemLabel: { flex: 1, fontSize: 14, fontWeight: '600' },
+  drawerFooter: { paddingVertical: 14, paddingHorizontal: 16, borderTopWidth: 1 },
+  drawerFooterText: { fontSize: 9 },
+  logoCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(252,209,22,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coatCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(252,209,22,0.48)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarRing: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: TZ.yellow,
+    padding: 2,
+  },
+  avatar: { flex: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  welcomeCard: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  zoneBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  zoneTxt: { fontSize: 9, fontWeight: '600' },
+  sectionHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  sectionTitle: { fontSize: 14, fontWeight: '800' },
+  sectionLink: { fontSize: 11 },
+  statCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 10,
+    alignItems: 'center',
+    gap: 3,
+  },
+  statIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: { fontSize: 20, fontWeight: '900' },
+  statLabel: { fontSize: 9, textAlign: 'center', fontWeight: '600' },
+  statSub: { fontSize: 8, textAlign: 'center' },
+  actionCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  actionSub: { fontSize: 9, textAlign: 'center' },
+  facilityCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
+  facilityIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  facilityStats: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  actCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
+  reportCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
+  reportRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+  },
+  downloadSection: { borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
+  dlBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 6,
+  },
 })

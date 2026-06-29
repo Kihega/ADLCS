@@ -9,15 +9,29 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  FlatList, ActivityIndicator, RefreshControl,
-  Alert, Modal, ScrollView,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  Modal,
+  ScrollView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
-  ArrowLeft, FileText, Baby, Cross,
-  Download, Printer, ChevronRight,
-  CheckCircle2, Clock, RefreshCw,
+  ArrowLeft,
+  FileText,
+  Baby,
+  Cross,
+  Download,
+  Printer,
+  ChevronRight,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
@@ -32,24 +46,24 @@ type Props = { navigation: NativeStackNavigationProp<RootStack, 'IssueCertificat
 type FilterTab = 'all' | 'birth' | 'death'
 
 interface CertRow {
-  id:           string
-  type:         'birth' | 'death'
-  certNo:       string
-  name:         string
-  date:         string
-  synced:       boolean
-  certPdfPath:  string
-  raw:          LocalBirth | LocalDeath
+  id: string
+  type: 'birth' | 'death'
+  certNo: string
+  name: string
+  date: string
+  synced: boolean
+  certPdfPath: string
+  raw: LocalBirth | LocalDeath
 }
 
 export default function IssueCertificateScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
-  const [tab,        setTab]       = useState<FilterTab>('all')
-  const [rows,       setRows]      = useState<CertRow[]>([])
-  const [loading,    setLoading]   = useState(true)
-  const [refreshing, setRefreshing]= useState(false)
-  const [actionId,   setActionId]  = useState<string | null>(null) // cert ID being processed
-  const [selected,   setSelected]  = useState<CertRow | null>(null)
+  const [tab, setTab] = useState<FilterTab>('all')
+  const [rows, setRows] = useState<CertRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [actionId, setActionId] = useState<string | null>(null) // cert ID being processed
+  const [selected, setSelected] = useState<CertRow | null>(null)
 
   // ── Load from local DB ────────────────────────────────────────────────────
   const loadCerts = useCallback(async (silent = false) => {
@@ -61,26 +75,26 @@ export default function IssueCertificateScreen({ navigation }: Props) {
         const birthRows: CertRow[] = json.data
           .filter((r: any) => r.type === 'birth')
           .map((r: any) => ({
-            id:          r.id,
-            type:        'birth' as const,
-            certNo:      r.certNo  ?? '—',
-            name:        r.name    ?? '—',
-            date:        r.date    ?? '—',
-            synced:      r.ritaSynced ?? true,
+            id: r.id,
+            type: 'birth' as const,
+            certNo: r.certNo ?? '—',
+            name: r.name ?? '—',
+            date: r.date ?? '—',
+            synced: r.ritaSynced ?? true,
             certPdfPath: r.certIssued ? 'issued' : '',
-            raw:         r as any,
+            raw: r as any,
           }))
         const deathRows: CertRow[] = json.data
           .filter((r: any) => r.type === 'death')
           .map((r: any) => ({
-            id:          r.id,
-            type:        'death' as const,
-            certNo:      r.certNo  ?? '—',
-            name:        r.name    ?? '—',
-            date:        r.date    ?? '—',
-            synced:      r.ritaSynced ?? true,
+            id: r.id,
+            type: 'death' as const,
+            certNo: r.certNo ?? '—',
+            name: r.name ?? '—',
+            date: r.date ?? '—',
+            synced: r.ritaSynced ?? true,
             certPdfPath: r.certIssued ? 'issued' : '',
-            raw:         r as any,
+            raw: r as any,
           }))
         // API already returns in date-desc order
         setRows([...birthRows, ...deathRows])
@@ -90,13 +104,17 @@ export default function IssueCertificateScreen({ navigation }: Props) {
     } catch (e) {
       console.warn('loadCerts error', e)
       setRows([])
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    finally { setLoading(false); setRefreshing(false) }
   }, [])
 
-  useEffect(() => { loadCerts() }, [loadCerts])
+  useEffect(() => {
+    loadCerts()
+  }, [loadCerts])
 
-  const filtered = tab === 'all' ? rows : rows.filter(r => r.type === tab)
+  const filtered = tab === 'all' ? rows : rows.filter((r) => r.type === tab)
 
   // ── Download PDF ──────────────────────────────────────────────────────────
   const handleDownload = async (row: CertRow) => {
@@ -104,8 +122,11 @@ export default function IssueCertificateScreen({ navigation }: Props) {
     // Only show for records registered in this session (row.certPdfPath already set).
     if (row.certPdfPath && row.certPdfPath !== 'issued') {
       setActionId(row.id)
-      try { await sharePdf(row.certPdfPath) }
-      catch { Alert.alert('Error', 'Could not open PDF file.') }
+      try {
+        await sharePdf(row.certPdfPath)
+      } catch {
+        Alert.alert('Error', 'Could not open PDF file.')
+      }
       setActionId(null)
       return
     }
@@ -132,7 +153,12 @@ export default function IssueCertificateScreen({ navigation }: Props) {
     const color = isBirth ? TZ.green : '#dc2626'
 
     return (
-      <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
+      <Modal
+        visible={!!selected}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelected(null)}
+      >
         <View style={s.modalOverlay}>
           <View style={[s.modalSheet, { backgroundColor: T.card }]}>
             <View style={s.sheetHandle} />
@@ -153,7 +179,12 @@ export default function IssueCertificateScreen({ navigation }: Props) {
               {isBirth ? (
                 <>
                   {[
-                    ['Child', [b.childFirstName, b.childMiddleName, b.childSurname].filter(Boolean).join(' ')],
+                    [
+                      'Child',
+                      [b.childFirstName, b.childMiddleName, b.childSurname]
+                        .filter(Boolean)
+                        .join(' '),
+                    ],
                     ['Date of Birth', b.dateOfBirth],
                     ['Gender', b.gender],
                     ['Father', b.fatherName || '—'],
@@ -200,14 +231,20 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
               <TouchableOpacity
                 style={[s.modalBtn, { backgroundColor: `${color}18`, borderColor: `${color}50` }]}
-                onPress={() => { setSelected(null); setTimeout(() => handlePrint(selected), 300) }}
+                onPress={() => {
+                  setSelected(null)
+                  setTimeout(() => handlePrint(selected), 300)
+                }}
               >
                 <Printer size={14} color={color} />
                 <Text style={[s.modalBtnText, { color }]}>Print</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.modalBtn, { flex: 2, backgroundColor: color, borderColor: color }]}
-                onPress={() => { setSelected(null); setTimeout(() => handleDownload(selected), 300) }}
+                onPress={() => {
+                  setSelected(null)
+                  setTimeout(() => handleDownload(selected), 300)
+                }}
               >
                 <Download size={14} color="#fff" />
                 <Text style={[s.modalBtnText, { color: '#fff' }]}>Download PDF</Text>
@@ -221,9 +258,9 @@ export default function IssueCertificateScreen({ navigation }: Props) {
 
   // ── Row item ──────────────────────────────────────────────────────────────
   const renderItem = ({ item }: { item: CertRow }) => {
-    const isBirth    = item.type === 'birth'
-    const color      = isBirth ? TZ.green : '#dc2626'
-    const isWorking  = actionId === item.id
+    const isBirth = item.type === 'birth'
+    const color = isBirth ? TZ.green : '#dc2626'
+    const isWorking = actionId === item.id
     const isPrinting = actionId === `print-${item.id}`
 
     return (
@@ -237,19 +274,28 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             {isBirth ? <Baby size={18} color={color} /> : <Cross size={18} color={color} />}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[s.cardName, { color: T.text }]} numberOfLines={1}>{item.name}</Text>
+            <Text style={[s.cardName, { color: T.text }]} numberOfLines={1}>
+              {item.name}
+            </Text>
             <Text style={[s.cardCert, { color: color }]}>{item.certNo}</Text>
             <View style={{ flexDirection: 'row', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
               <View style={[s.tag, { backgroundColor: `${color}18`, borderColor: `${color}40` }]}>
                 <Text style={[s.tagText, { color }]}>{isBirth ? 'BIRTH' : 'DEATH'}</Text>
               </View>
-              <View style={[s.tag, {
-                backgroundColor: item.synced ? `${TZ.green}18` : '#f9731618',
-                borderColor:     item.synced ? `${TZ.green}40` : '#f9731640',
-              }]}>
-                {item.synced
-                  ? <CheckCircle2 size={9} color={TZ.green} />
-                  : <Clock        size={9} color="#f97316"  />}
+              <View
+                style={[
+                  s.tag,
+                  {
+                    backgroundColor: item.synced ? `${TZ.green}18` : '#f9731618',
+                    borderColor: item.synced ? `${TZ.green}40` : '#f9731640',
+                  },
+                ]}
+              >
+                {item.synced ? (
+                  <CheckCircle2 size={9} color={TZ.green} />
+                ) : (
+                  <Clock size={9} color="#f97316" />
+                )}
                 <Text style={[s.tagText, { color: item.synced ? TZ.green : '#f97316' }]}>
                   {item.synced ? 'Synced' : 'Pending sync'}
                 </Text>
@@ -275,9 +321,11 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             onPress={() => handlePrint(item)}
             disabled={!!actionId}
           >
-            {isPrinting
-              ? <ActivityIndicator size="small" color={color} />
-              : <Printer size={13} color={T.textSub} />}
+            {isPrinting ? (
+              <ActivityIndicator size="small" color={color} />
+            ) : (
+              <Printer size={13} color={T.textSub} />
+            )}
             <Text style={[s.cardBtnText, { color: T.textSub }]}>Print</Text>
           </TouchableOpacity>
           <View style={{ width: 1, backgroundColor: T.border }} />
@@ -286,9 +334,11 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             onPress={() => handleDownload(item)}
             disabled={!!actionId}
           >
-            {isWorking
-              ? <ActivityIndicator size="small" color={color} />
-              : <Download size={13} color={color} />}
+            {isWorking ? (
+              <ActivityIndicator size="small" color={color} />
+            ) : (
+              <Download size={13} color={color} />
+            )}
             <Text style={[s.cardBtnText, { color }]}>
               {item.certPdfPath ? 'Download PDF' : 'Generate & Download'}
             </Text>
@@ -319,14 +369,18 @@ export default function IssueCertificateScreen({ navigation }: Props) {
 
       {/* Filter tabs */}
       <View style={[s.tabs, { backgroundColor: T.card, borderBottomColor: T.border }]}>
-        {(['all', 'birth', 'death'] as FilterTab[]).map(t => (
+        {(['all', 'birth', 'death'] as FilterTab[]).map((t) => (
           <TouchableOpacity
             key={t}
             style={[s.tab === t && { borderBottomWidth: 2, borderBottomColor: T.primary }]}
             onPress={() => setTab(t)}
           >
             <Text style={[s.tabText, { color: tab === t ? T.primary : T.textSub }]}>
-              {t === 'all' ? `All (${rows.length})` : t === 'birth' ? `Births (${rows.filter(r=>r.type==='birth').length})` : `Deaths (${rows.filter(r=>r.type==='death').length})`}
+              {t === 'all'
+                ? `All (${rows.length})`
+                : t === 'birth'
+                  ? `Births (${rows.filter((r) => r.type === 'birth').length})`
+                  : `Deaths (${rows.filter((r) => r.type === 'death').length})`}
             </Text>
           </TouchableOpacity>
         ))}
@@ -339,14 +393,17 @@ export default function IssueCertificateScreen({ navigation }: Props) {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={i => i.id}
+          keyExtractor={(i) => i.id}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); loadCerts(true) }}
+              onRefresh={() => {
+                setRefreshing(true)
+                loadCerts(true)
+              }}
               tintColor={T.primary}
             />
           }
@@ -370,33 +427,99 @@ export default function IssueCertificateScreen({ navigation }: Props) {
 }
 
 const s = StyleSheet.create({
-  header:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  backBtn:      { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  headerTitle:  { fontSize: 15, fontWeight: '800' },
-  headerSub:    { fontSize: 11, marginTop: 2 },
-  tabs:         { flexDirection: 'row', borderBottomWidth: 1 },
-  tab:          { flex: 1, alignItems: 'center', paddingVertical: 11 },
-  tabText:      { fontSize: 12, fontWeight: '700' },
-  card:         { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  typeIcon:     { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  cardName:     { fontSize: 13, fontWeight: '700' },
-  cardCert:     { fontSize: 12, fontWeight: '800', marginTop: 2, letterSpacing: 0.5 },
-  cardDate:     { fontSize: 10 },
-  tag:          { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
-  tagText:      { fontSize: 9, fontWeight: '700' },
-  cardActions:  { flexDirection: 'row', borderTopWidth: 1, marginTop: 10 },
-  cardBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
-  cardBtnText:  { fontSize: 12, fontWeight: '700' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 15, fontWeight: '800' },
+  headerSub: { fontSize: 11, marginTop: 2 },
+  tabs: { flexDirection: 'row', borderBottomWidth: 1 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 11 },
+  tabText: { fontSize: 12, fontWeight: '700' },
+  card: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
+  typeIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardName: { fontSize: 13, fontWeight: '700' },
+  cardCert: { fontSize: 12, fontWeight: '800', marginTop: 2, letterSpacing: 0.5 },
+  cardDate: { fontSize: 10 },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  tagText: { fontSize: 9, fontWeight: '700' },
+  cardActions: { flexDirection: 'row', borderTopWidth: 1, marginTop: 10 },
+  cardBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  cardBtnText: { fontSize: 12, fontWeight: '700' },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
-  modalSheet:   { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, maxHeight: '80%' },
-  sheetHandle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: '#ccc', alignSelf: 'center', marginBottom: 16 },
-  sheetTypeIcon:{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  sheetTitle:   { fontSize: 14, fontWeight: '800' },
-  sheetCertNo:  { fontSize: 12, fontWeight: '700', marginTop: 2 },
-  sheetClose:   { padding: 8 },
-  detailRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1 },
-  detailKey:    { fontSize: 12, width: '40%' },
-  detailVal:    { fontSize: 12, fontWeight: '600', flex: 1, textAlign: 'right' },
-  modalBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: 12, paddingVertical: 13 },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+    maxHeight: '80%',
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#ccc',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  sheetTypeIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetTitle: { fontSize: 14, fontWeight: '800' },
+  sheetCertNo: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  sheetClose: { padding: 8 },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  detailKey: { fontSize: 12, width: '40%' },
+  detailVal: { fontSize: 12, fontWeight: '600', flex: 1, textAlign: 'right' },
+  modalBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 13,
+  },
   modalBtnText: { fontSize: 13, fontWeight: '800' },
 })

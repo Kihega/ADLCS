@@ -24,17 +24,15 @@
 // process.env.EXPO_PUBLIC_* is inlined by babel-preset-expo at bundle time.
 // babel.config.js MUST exist in the project root for this to work.
 const REMOTE: string | undefined =
-  process.env.EXPO_PUBLIC_API_URL ||
-  process.env.EXPO_PUBLIC_API_URL_PRIMARY ||
-  undefined
+  process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_API_URL_PRIMARY || undefined
 
 // Android emulator maps 10.0.2.2 → host machine's localhost
 const LOCAL_ANDROID = 'http://10.0.2.2:5000/api'
 // iOS simulator uses localhost directly
-const LOCAL_IOS     = 'http://localhost:5000/api'
+const LOCAL_IOS = 'http://localhost:5000/api'
 
-const TIMEOUT  = 5_000   // ms — max wait per probe attempt
-const CACHE_MS = 60_000  // ms — re-probe after 60 seconds
+const TIMEOUT = 5_000 // ms — max wait per probe attempt
+const CACHE_MS = 60_000 // ms — re-probe after 60 seconds
 
 let _cached: string | null = null
 let _cachedAt = 0
@@ -46,7 +44,7 @@ let _cachedAt = 0
  * AbortSignal.timeout() is NOT available in Hermes; use setTimeout instead.
  */
 function makeSignal(ms: number): { signal: AbortSignal; clear: () => void } {
-  const ctrl  = new AbortController()
+  const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), ms)
   return { signal: ctrl.signal, clear: () => clearTimeout(timer) }
 }
@@ -82,7 +80,7 @@ export async function resolveBase(): Promise<string> {
 
   // 1. Try the configured remote (Render deployment)
   //    Guard: skip if REMOTE is undefined — fetch("undefined/health") crashes.
-  if (REMOTE && await probe(REMOTE)) {
+  if (REMOTE && (await probe(REMOTE))) {
     _cached = REMOTE
     _cachedAt = Date.now()
     console.log('[apiResolver] ✓ using remote:', REMOTE)
@@ -110,7 +108,7 @@ export async function resolveBase(): Promise<string> {
   console.error('[apiResolver] ✗ no backend reachable. Tried:', tried)
   throw new Error(
     'Unable to reach the NBS-CRVS backend.\n' +
-    'Check your internet connection or start the local backend server.'
+      'Check your internet connection or start the local backend server.'
   )
 }
 
@@ -119,6 +117,6 @@ export async function resolveBase(): Promise<string> {
  * Call this after app resume or network reconnect.
  */
 export function resetResolver(): void {
-  _cached   = null
+  _cached = null
   _cachedAt = 0
 }
