@@ -93,7 +93,7 @@ export default function SplashScreen({ navigation }: Props) {
       {/* ── Background gradient (matches Image 1: top-blue → bottom-dark) ── */}
       <LinearGradient
         colors={[C.bg2, C.bg1, C.bg3]}
-        locations={[0.55, 1]}
+        locations={[0, 0.55, 1]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -109,20 +109,13 @@ export default function SplashScreen({ navigation }: Props) {
         <LinearGradient colors={[`${C.cyan}28`, `${C.cyan}10`]} style={s.circleBg}>
           {/* Inner ring */}
           <View style={s.circleInner}>
-            {/* ADLCS lettering — styled like PoPtz bold text */}
-            <Text style={s.circleTitle}>NBS-CRVS</Text>
-            <View style={s.circleDivider} />
-            <Text style={s.circleSubtitle}>NBS · Tanzania</Text>
-            <Text style={s.circleVersion}>V 1.X.X</Text>
+            {/* TzCRVS — centered single word */}
+            <Text style={s.circleTitle}>TzCRVS</Text>
           </View>
         </LinearGradient>
       </Animated.View>
 
-      {/* ── App name below circle ────────────────────────────────────────── */}
-      <View style={s.labelBlock}>
-        <Text style={s.labelMain}>NBS Civil Registration &amp; Vital Statistics</Text>
-        <Text style={s.labelSub}>National Bureau of Statistics</Text>
-      </View>
+      {/* App name block removed (branding update) */}
 
       {/* ── Loading bar (the extra element Image 1 doesn't have) ─────────── */}
       <View style={s.barArea}>

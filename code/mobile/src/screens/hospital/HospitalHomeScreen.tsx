@@ -9,7 +9,11 @@
  *  • Stats: local SQLite first (instant), merge remote in background
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, {
+
+
+
+ useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -48,7 +52,6 @@ import {
   Building2,
   Wifi,
   WifiOff,
-  AlertTriangle,
   BarChart3,
   User,
   Lock,
@@ -895,7 +898,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
     // dependency array (it is still used directly in the callback body
     // above via navigation.replace('Login'), this only removes the
     // redundant tracking of an outer-scope value that never changes).
-  }, [])
+  }, [_navigation])
 
   // ← Refresh whenever screen comes back into focus (e.g. after RegisterBirth)
   useFocusEffect(
@@ -929,7 +932,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
         },
       },
     ])
-  }, [])
+  }, [_navigation])
 
   const downloadReport = async (period: string, type: string) => {
     const lines = [
@@ -1233,24 +1236,19 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                        {/* GEO-BADGE REMOVED — static active indicator */}
             <View
               style={[
                 s.zoneBadge,
                 {
-                  borderColor: inZone ? `${H.primary}60` : 'rgba(239,68,68,0.38)',
-                  backgroundColor: inZone ? `${H.primary}18` : 'rgba(239,68,68,0.12)',
+                  borderColor: `${H.primary}60`,
+                  backgroundColor: `${H.primary}18`,
                 },
               ]}
             >
-              {inZone ? (
-                <MapPin size={9} color={H.primaryL} />
-              ) : (
-                <AlertTriangle size={9} color="#f87171" />
-              )}
-              <Text style={[s.zoneTxt, { color: inZone ? H.primaryL : '#f87171' }]}>
-                {inZone
-                  ? `✓ In Zone · ${distanceKm != null ? distanceKm.toFixed(2) : '0.00'} km`
-                  : `⚠ Out · ${distanceKm != null ? distanceKm.toFixed(2) : '—'} km`}
+              <MapPin size={9} color={H.primaryL} />
+              <Text style={[s.zoneTxt, { color: H.primaryL }]}>
+                ✓ Active · Online
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

@@ -232,7 +232,7 @@ if (_adminType) {
             <img src="/assets/court_of_arm.png" alt="CoA" className="w-28 h-28 object-contain drop-shadow-xl" />
           </div>
           <div className="w-20 h-0.5 bg-yellow-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-extrabold tracking-wide drop-shadow mb-1">National Bureau of Statistics</h1>
+          <h1 className="text-2xl font-extrabold tracking-wide drop-shadow mb-1">TzCRVS ADMINS PORTAL</h1>
           <p className="text-sm text-white/70 uppercase tracking-widest mb-0.5">Automated Digital Live Census</p>
           <p className="text-xs text-white/50 font-mono mb-8">Research Model (V 1.X.X)</p>
           <div className="w-20 h-20 rounded-2xl border-2 border-white/30 bg-transparent flex items-center justify-center mb-6">
@@ -241,7 +241,7 @@ if (_adminType) {
           <p className="text-sm italic text-yellow-200/80">&ldquo;Statistics for Development&rdquo;</p>
         </div>
         <p className="relative z-10 text-[10px] text-white/30">
-          © 2026 National Bureau of Statistics · All rights reserved
+          © 2026 TzCRVS · All rights reserved
         </p>
       </div>
 
