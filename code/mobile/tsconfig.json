@@ -7,9 +7,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "App.tsx"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", "App.tsx"]
 }
