@@ -19,7 +19,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Modal,
+  _Modal,
   Animated,
   Image,
 } from 'react-native'
@@ -48,7 +48,7 @@ import {
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
-import { apiGet, apiPost, fetchRemoteDashboard } from '../../services/syncService'
+import { apiGet, _apiPost, fetchRemoteDashboard } from '../../services/syncService'
 
 type VStack = { VillageHome: undefined; NINRegistration: undefined }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'NINRegistration'> }
@@ -76,7 +76,7 @@ function fmtDOB(iso: string): string {
     return iso
   }
 }
-function today(): string {
+function _today(): string {
   return new Date()
     .toLocaleDateString('en-TZ', { day: '2-digit', month: 'long', year: 'numeric' })
     .toUpperCase()
@@ -154,7 +154,7 @@ function cardMarkup(d: CardData): { css: string; html: string } {
 // CR-80 (85.6×54mm) card-sized HTML — used with Print.printAsync() so the
 // native print dialog (and any connected card printer driver) receives a
 // correctly-sized page instead of a tiny card on a default A4/Letter sheet.
-function buildCardHtml(d: CardData): string {
+function _buildCardHtml(d: CardData): string {
   const { css, html } = cardMarkup(d)
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 @page{size:85.6mm 54mm;margin:0}
@@ -445,7 +445,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
   // Step 3
   const [submitting, setSubmitting] = useState(false)
   const [issuedNIN, setIssuedNIN] = useState<string | null>(null)
-  const [cardHtml, setCardHtml] = useState<string | null>(null)
+  const [cardHtml, _setCardHtml] = useState<string | null>(null)
   const [cardData, setCardData] = useState<CardData | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -581,7 +581,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
       expiryDate: expiryStr,
       photoBase64: photoBase64 ?? undefined,
     })
-  }, [birthRecord, photoBase64, fpLeft, fpRight, officer])
+  }, [birthRecord, photoBase64, fpLeft, fpRight, fp2Valid, officer])
 
   // Print Card — opens the native print dialog (officer selects a connected
   // card printer or any other printer). Uses CR-80-sized HTML.

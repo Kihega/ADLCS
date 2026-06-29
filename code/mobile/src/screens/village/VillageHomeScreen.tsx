@@ -13,7 +13,11 @@
  *  Row 2: Register Infrastructure | Track Migration | View Records  | Sync Data
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, {
+
+
+
+ useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -614,7 +618,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       setLoading(false)
       setRefreshing(false)
     },
-    [_navigation]
+    []
   )
 
   // Refresh on focus (picks up new citizen/death registrations immediately)
@@ -650,7 +654,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
         },
       },
     ])
-  }, [_navigation])
+  }, [])
 
   const downloadReport = async (period: string) => {
     const lines = [
@@ -669,6 +673,13 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
   }
 
   const ConnIcon = connQuality === 'Good' ? Wifi : connQuality === 'Fair' ? WifiLow : WifiOff
+  const initials = (officer.officerName ?? 'VO')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n: string) => n[0])
+    .join('')
+    .toUpperCase()
 
   // PATCH-5: Village Officer has only 3 core actions per notes (NIN, Marriage, Death)
   // All records are posted/retrieved from the database via backend API.
