@@ -1,5 +1,5 @@
 /**
- * apiResolver.js — Dual-backend resolver for ADLCS Web Dashboard
+ * apiResolver.js — Dual-backend resolver for TzCRVS Web Dashboard
  *
  * Priority:
  *   1. VITE_API_BASE_URL env var  (your Render URL — set in .env)

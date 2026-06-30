@@ -41,9 +41,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { generateDeathCertNo, updateDeathCertPath } from '../../services/localDb'
 import { sharePdf } from '../../services/certificateService'
 import { triggerSync, saveAndSyncDeath } from '../../services/syncService'
+import { resolveBase } from '../../services/apiResolver'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 type RootStack = { HospitalHome: undefined; RecordDeath: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RecordDeath'> }
 type LocationType = 'health_facility' | 'home' | 'public_place' | 'other'
@@ -257,7 +257,7 @@ interface FieldProps {
   multiline?: boolean
   returnKeyType?: 'next' | 'done'
   onSubmitEditing?: () => void
-  inputRef?: React.RefObject<TextInput>
+  inputRef?: React.RefObject<TextInput | null>
   bg: string
   bc: string
   tc: string
@@ -425,12 +425,13 @@ export default function RecordDeathScreen({ navigation }: Props) {
     }
     setLookupLoad(true)
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (token) {
+        const base = await resolveBase()
         const _c1 = new AbortController()
         const _t1 = setTimeout(() => _c1.abort(), 5000)
         const res = await fetch(
-          `${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
+          `${base}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
           { headers: { Authorization: `Bearer ${token}` }, signal: _c1.signal }
         )
         clearTimeout(_t1)
@@ -466,12 +467,13 @@ export default function RecordDeathScreen({ navigation }: Props) {
     setErr('')
     setData(null)
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (token) {
+        const base = await resolveBase()
         const _c2 = new AbortController()
         const _t2 = setTimeout(() => _c2.abort(), 5000)
         const res = await fetch(
-          `${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(nid.trim())}`,
+          `${base}/officer/citizen-lookup?q=${encodeURIComponent(nid.trim())}`,
           { headers: { Authorization: `Bearer ${token}` }, signal: _c2.signal }
         )
         clearTimeout(_t2)
@@ -517,14 +519,15 @@ export default function RecordDeathScreen({ navigation }: Props) {
     setSubmitting(true)
 
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       let officerName = '',
         facilityName = ''
       if (token) {
         try {
+          const base = await resolveBase()
           const _dc = new AbortController()
           const _dt = setTimeout(() => _dc.abort(), 5000)
-          const r = await fetch(`${API_BASE}/officer/dashboard`, {
+          const r = await fetch(`${base}/officer/dashboard`, {
             headers: { Authorization: `Bearer ${token}` },
             signal: _dc.signal,
           })

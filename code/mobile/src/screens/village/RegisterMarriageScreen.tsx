@@ -30,6 +30,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
+import { resolveBase } from '../../services/apiResolver'
 
 // ── Reusable calendar picker (no external packages) ──────────────────────────
 function CalPicker({
@@ -379,12 +380,11 @@ function ScreenHeader({
 type VStack = { VillageHome: undefined; RegisterMarriage: undefined }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'RegisterMarriage'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
-
 async function lookupCitizen(nid: string, token: string | null): Promise<any | null> {
   if (!token || !isOnline()) return null
   try {
-    const r = await fetch(`${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(nid)}`, {
+    const base = await resolveBase()
+    const r = await fetch(`${base}/officer/citizen-lookup?q=${encodeURIComponent(nid)}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: (() => {
         const __c = new AbortController()
@@ -433,7 +433,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
     const setLoading = party === 'husband' ? setHusbandLoading : setWifeLoading
     const setData = party === 'husband' ? setHusbandData : setWifeData
     setLoading(true)
-    const token = await AsyncStorage.getItem('adlcs_access_token')
+    const token = await AsyncStorage.getItem('tzcrvs_access_token')
     const found = await lookupCitizen(nid.trim(), token)
     if (found) setData(found)
     else Alert.alert('Not Found', 'Citizen not found. Enter name manually or check NID.')
@@ -453,7 +453,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
     try {
       const cert = genCertNo()
       setCertNo(cert)
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (isOnline() && token) {
         try {
           await apiPost('/village/marriage', {

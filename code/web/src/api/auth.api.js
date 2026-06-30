@@ -1,5 +1,5 @@
 /**
- * auth.api.js — ADLCS Auth API Client
+ * auth.api.js — TzCRVS Auth API Client
  *
  * Wraps all /api/auth/* endpoints with a shared axios instance.
  * The request interceptor injects the Bearer access token automatically.

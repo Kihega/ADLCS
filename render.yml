@@ -1,5 +1,11 @@
 # ─────────────────────────────────────────────────────────────
-# Render deployment configuration — ADLCS
+# Render deployment configuration — TzCRVS
+# NOTE: the service slug below (name: adlcs-backend) is the LIVE
+# Render service identifier and is intentionally left unchanged —
+# renaming it here would not rename the already-deployed service
+# and would only create a mismatch. Rename it in the Render
+# dashboard first if you want the live service renamed too, then
+# update this file to match.
 # ─────────────────────────────────────────────────────────────
 
 services:

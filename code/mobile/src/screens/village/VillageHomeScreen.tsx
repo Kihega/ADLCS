@@ -558,6 +558,15 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [_bellDismissed, _setBellDismissed] = useState(false)
+  const _todayKey = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+  }
+  const _dismissBell = () => {
+    _setBellDismissed(true)
+    AsyncStorage.setItem('tzcrvs_bell_dismissed_date', _todayKey()).catch(() => {})
+  }
   const [connQuality, setConnQuality] = useState<ConnQuality>('Offline')
   const [activity, setActivity] = useState<any[]>([])
   const [stats, setStats] = useState({
@@ -580,9 +589,9 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
 
   const loadData = useCallback(
     async (silent = false) => {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (!token) {
-        navigation.replace('Login')
+        _navigation.replace('Login')
         return
       }
 
@@ -594,7 +603,20 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       // Fetch live data from Supabase (via backend)
       const [remote, acts] = await Promise.all([fetchRemoteDashboard(), fetchRemoteActivity()])
 
-      if (acts.length > 0) setActivity(acts)
+      if (acts.length > 0) {
+      const _now = new Date()
+      const _isSameLocalDay = (iso: string) => {
+        const d = new Date(iso)
+        return (
+          d.getFullYear() === _now.getFullYear() &&
+          d.getMonth() === _now.getMonth() &&
+          d.getDate() === _now.getDate()
+        )
+      }
+      setActivity(acts.filter((a) => !a.registeredAt || _isSameLocalDay(a.registeredAt)))
+    } else {
+      setActivity([])
+    }
       if (remote) {
         setOfficer({
           officerName: remote.officerName ?? 'Village Officer',
@@ -614,11 +636,14 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           totalDeaths: 0,
         })
         setUnread(remote.pendingCases ?? 0)
+      AsyncStorage.getItem('tzcrvs_bell_dismissed_date')
+        .then((d) => _setBellDismissed(d === _todayKey()))
+        .catch(() => {})
       }
       setLoading(false)
       setRefreshing(false)
     },
-    []
+    [_navigation]
   )
 
   // Refresh on focus (picks up new citizen/death registrations immediately)
@@ -645,20 +670,20 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
         onPress: async () => {
           setLoggingOut(true)
           await AsyncStorage.multiRemove([
-            'adlcs_access_token',
-            'adlcs_refresh_token',
-            'adlcs_role',
-            'adlcs_device_activated',
+            'tzcrvs_access_token',
+            'tzcrvs_refresh_token',
+            'tzcrvs_role',
+            'tzcrvs_device_activated',
           ])
-          navigation.replace('Login')
+          _navigation.replace('Login')
         },
       },
     ])
-  }, [])
+  }, [_navigation])
 
   const downloadReport = async (period: string) => {
     const lines = [
-      `ADLCS — ${period.toUpperCase()} VILLAGE REPORT`,
+      `TzCRVS — ${period.toUpperCase()} VILLAGE REPORT`,
       `Village:   ${officer.villageName}`,
       `Ward:      ${officer.wardName}`,
       `Officer:   ${officer.officerName}`,
@@ -892,9 +917,9 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           <TouchableOpacity style={s.iconBtn} onPress={toggleTheme}>
             {isDark ? <Sun size={14} color={TZ.yellow} /> : <Moon size={14} color={TZ.yellow} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('SyncData')}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => { _navigation.navigate('SyncData'); _dismissBell() }}>
             <Bell size={15} color="rgba(255,255,255,0.80)" />
-            {unread > 0 && (
+            {unread > 0 && !_bellDismissed && (
               <View style={s.badge}>
                 <Text style={{ fontSize: 8, fontWeight: '800', color: '#fff' }}>{unread}</Text>
               </View>

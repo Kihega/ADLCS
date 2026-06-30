@@ -1,5 +1,5 @@
 /**
- * seed.js — ADLCS Test Data Seeder  v2.1
+ * seed.js — TzCRVS Test Data Seeder  v2.1
  *
  * Creates all data needed to run the Hospital Officer birth-registration
  * flow end-to-end, including real geography, a health facility, staff
@@ -52,7 +52,7 @@ async function getOrCreate(modelName, findWhere, createData) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('🌱  ADLCS Seed v2.1 — Starting…\n')
+  console.log('🌱  TzCRVS Seed v2.1 — Starting…\n')
 
   // ── STEP 0: Delete existing test accounts so hashes are always fresh ──────
   // This is the fix for "wrong credentials" — stale bcrypt hashes in the DB

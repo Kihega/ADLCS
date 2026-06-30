@@ -1,5 +1,5 @@
 /**
- * LoginPage.jsx — ADLCS Secure Login
+ * LoginPage.jsx — TzCRVS Secure Login
  *
  * UI/UX: adlcs-ui-ux-main (unchanged)
  * Integration: real API calls via apiLogin / apiMfaVerify
@@ -35,7 +35,7 @@ const ROLE_ROUTE = {
 
 // ── QR setup placeholder (real secret generated server-side in a later sprint) ─
 const MOCK_TOTP_SECRET = 'JBSWY3DPEHPK3PXP'
-const MOCK_QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=otpauth://totp/NBS-ADLCS:admin@nbs.go.tz?secret=${MOCK_TOTP_SECRET}%26issuer=NBS-Tanzania`
+const MOCK_QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=otpauth://totp/NBS-TzCRVS:admin@nbs.go.tz?secret=${MOCK_TOTP_SECRET}%26issuer=NBS-Tanzania`
 
 // ── Lint note ──────────────────────────────────────────────────────────────────
 // QrCode is imported above but the visible icon slot is filled by Shield/
@@ -367,7 +367,7 @@ if (_adminType) {
               {mode === 'mfa_verify' && (<>
                 <div className="p-3 rounded-lg border border-[#00d4ff]/20 bg-[#00d4ff]/5">
                   <p className="text-[#00d4ff] text-xs">
-                    Open Google Authenticator and enter the 6-digit TOTP code for NBS-ADLCS.
+                    Open Google Authenticator and enter the 6-digit TOTP code for NBS-TzCRVS.
                   </p>
                 </div>
                 <div>

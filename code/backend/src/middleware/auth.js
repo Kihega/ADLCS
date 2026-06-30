@@ -1,5 +1,5 @@
 /**
- * auth.js — ADLCS Authentication Middleware
+ * auth.js — TzCRVS Authentication Middleware
  *
  * requireAuth      — verifies Bearer access token on every protected route
  * requireRole      — restricts a route to one or more specific roles

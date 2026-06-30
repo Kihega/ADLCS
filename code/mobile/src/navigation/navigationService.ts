@@ -1,5 +1,5 @@
 /**
- * navigationService.ts — ADLCS Navigation Reference Singleton
+ * navigationService.ts — TzCRVS Navigation Reference Singleton
  *
  * Provides a ref-based navigation helper so contexts (ThemeContext,
  * GeofenceContext) can trigger navigation without prop-drilling or
@@ -23,6 +23,10 @@ export type RootStack = {
   ViewRecords: undefined
   PendingCases: undefined
   SyncData: undefined
+  RegisterCitizen: undefined
+  RegisterMarriage: undefined
+  VillageRecordDeath: undefined
+  NINRegistration: undefined
 }
 
 export const navigationRef = createNavigationContainerRef<RootStack>()

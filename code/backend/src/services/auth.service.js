@@ -1,5 +1,5 @@
 /**
- * auth.service.js — ADLCS Authentication Service
+ * auth.service.js — TzCRVS Authentication Service
  *
  * Handles all auth business logic for 5 user roles:
  *   super_admin, district_admin, village_officer, hospital_officer, public_user

@@ -1,5 +1,5 @@
 /**
- * admin.api.js — ADLCS Admin Dashboard API Client
+ * admin.api.js — TzCRVS Admin Dashboard API Client
  *
  * Wraps every /api/admin/* endpoint used by the Super Admin and
  * District Admin dashboards. Uses the shared `apiClient` axios instance

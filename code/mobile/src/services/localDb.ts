@@ -37,6 +37,7 @@ export interface LocalBirth {
   synced: number // 0 | 1
   certPdfPath: string
   rawJson: string
+  nationalId?: string // NIN — undefined/empty until issued at age 18
 }
 
 export interface LocalDeath {

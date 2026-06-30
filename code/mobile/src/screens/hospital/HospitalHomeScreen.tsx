@@ -63,6 +63,7 @@ import {
   IdCard,
   Eye,
   EyeOff,
+  AlertTriangle,
 } from 'lucide-react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -73,6 +74,7 @@ import {
   checkConnQuality,
   ConnQuality,
 } from '../../services/syncService'
+import { resolveBase } from '../../services/apiResolver'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = {
@@ -91,7 +93,6 @@ type Props = { navigation: NativeStackNavigationProp<RootStack, 'HospitalHome'> 
 
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const W = Dimensions.get('window').width
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 const CONN_COLORS: Record<ConnQuality, string> = {
   Good: '#4ade80',
   Fair: '#fbbf24',
@@ -137,8 +138,9 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
     setError('')
     setLoading(true)
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
-      const res = await fetch(`${API_BASE}/auth/change-password`, {
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
+      const base = await resolveBase()
+      const res = await fetch(`${base}/auth/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
@@ -823,6 +825,15 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
   const [profileOpen, setProfileOpen] = useState(false)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [_bellDismissed, _setBellDismissed] = useState(false)
+  const _todayKey = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+  }
+  const _dismissBell = () => {
+    _setBellDismissed(true)
+    AsyncStorage.setItem('tzcrvs_bell_dismissed_date', _todayKey()).catch(() => {})
+  }
   const [connQuality, setConnQuality] = useState<ConnQuality>('Offline')
   const [activity, setActivity] = useState<any[]>([])
   const [stats, setStats] = useState({
@@ -847,7 +858,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const loadData = useCallback(async (silent = false) => {
-    const token = await AsyncStorage.getItem('adlcs_access_token')
+    const token = await AsyncStorage.getItem('tzcrvs_access_token')
     if (!token) {
       ;(_navigation as any).replace('Login')
       return
@@ -861,7 +872,20 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
     // Fetch live stats + officer info from Supabase (via backend)
     const [remote, acts] = await Promise.all([fetchRemoteDashboard(), fetchRemoteActivity()])
 
-    if (acts.length > 0) setActivity(acts)
+    if (acts.length > 0) {
+      const _now = new Date()
+      const _isSameLocalDay = (iso: string) => {
+        const d = new Date(iso)
+        return (
+          d.getFullYear() === _now.getFullYear() &&
+          d.getMonth() === _now.getMonth() &&
+          d.getDate() === _now.getDate()
+        )
+      }
+      setActivity(acts.filter((a) => !a.registeredAt || _isSameLocalDay(a.registeredAt)))
+    } else {
+      setActivity([])
+    }
     if (remote) {
       setOfficer({
         officerName: remote.officerName ?? 'Officer',
@@ -889,6 +913,9 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
       })
       // Bell badge = births/deaths that still need certificates
       setUnread(remote.pendingCases ?? 0)
+      AsyncStorage.getItem('tzcrvs_bell_dismissed_date')
+        .then((d) => _setBellDismissed(d === _todayKey()))
+        .catch(() => {})
     }
     setLoading(false)
     setRefreshing(false)
@@ -924,11 +951,12 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
         onPress: async () => {
           setLoggingOut(true)
           await AsyncStorage.multiRemove([
-            'adlcs_access_token',
-            'adlcs_refresh_token',
-            'adlcs_role',
-            'adlcs_device_activated',
-          ])(_navigation as any).replace('Login')
+            'tzcrvs_access_token',
+            'tzcrvs_refresh_token',
+            'tzcrvs_role',
+            'tzcrvs_device_activated',
+          ])
+          _navigation.replace('Login')
         },
       },
     ])
@@ -1015,7 +1043,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
       pending: 'PendingCases',
       sync: 'SyncData',
     }
-    if (m[id]) navigation.navigate(m[id])
+    if (m[id]) _navigation.navigate(m[id])
   }
 
   if (loading)
@@ -1187,9 +1215,9 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
           <TouchableOpacity style={s.iconBtn} onPress={toggleTheme}>
             {isDark ? <Sun size={14} color={TZ.yellow} /> : <Moon size={14} color={TZ.yellow} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('PendingCases')}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => { _navigation.navigate('PendingCases'); _dismissBell() }}>
             <Bell size={15} color="rgba(255,255,255,0.80)" />
-            {unread > 0 && (
+            {unread > 0 && !_bellDismissed && (
               <View style={s.badge}>
                 <Text style={{ fontSize: 8, fontWeight: '800', color: '#fff' }}>{unread}</Text>
               </View>
@@ -1340,7 +1368,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
           <>
             <View style={s.sectionHead}>
               <Text style={[s.sectionTitle, { color: T.text }]}>Recent Activity</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('ViewRecords')}>
+              <TouchableOpacity onPress={() => _navigation.navigate('ViewRecords')}>
                 <Text style={[s.sectionLink, { color: T.primaryL }]}>All →</Text>
               </TouchableOpacity>
             </View>

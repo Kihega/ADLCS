@@ -1,5 +1,5 @@
 /**
- * index.js — ADLCS Backend Entry Point  v2.0
+ * index.js — TzCRVS Backend Entry Point  v2.0
  *
  * Registers all API route modules and starts the HTTP server.
  * The server start is guarded with require.main === module so Jest
@@ -89,7 +89,7 @@ async function startServer() {
     // an unhandled exception instead of failing with a clear message.
     const server = app.listen(PORT, () => {
       console.log('═══════════════════════════════════════════════')
-      console.log('  ADLCS — Tanzania Automated Digital Census API')
+      console.log('  TzCRVS — Tanzania Automated Digital Census API')
       console.log(`  🚀 Port     : ${PORT}`)
       console.log(`  🌍 Env      : ${process.env.NODE_ENV || 'development'}`)
       console.log(`  📡 Health   : http://localhost:${PORT}/api/health`)

@@ -59,12 +59,12 @@ import {
 } from '../../services/localDb'
 import { generateBirthPdf, sharePdf } from '../../services/certificateService'
 import { triggerSync, saveAndSyncBirth } from '../../services/syncService'
+import { resolveBase } from '../../services/apiResolver'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const { width: W } = Dimensions.get('window')
 
@@ -756,12 +756,13 @@ export default function RegisterBirthScreen({ navigation }: Props) {
 
     // 1. Try backend
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (token) {
+        const base = await resolveBase()
         const _bc = new AbortController()
         const _bt = setTimeout(() => _bc.abort(), 5000)
         const res = await fetch(
-          `${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(nid.trim())}`,
+          `${base}/officer/citizen-lookup?q=${encodeURIComponent(nid.trim())}`,
           { headers: { Authorization: `Bearer ${token}` }, signal: _bc.signal }
         )
         clearTimeout(_bt)
@@ -834,13 +835,14 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const handleSubmit = useCallback(async () => {
     setSubmitting(true)
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       const cache = token
         ? await (async () => {
             try {
+              const base = await resolveBase()
               const _bdc = new AbortController()
               const _bdt = setTimeout(() => _bdc.abort(), 5000)
-              const r = await fetch(`${API_BASE}/officer/dashboard`, {
+              const r = await fetch(`${base}/officer/dashboard`, {
                 headers: { Authorization: `Bearer ${token}` },
                 signal: _bdc.signal,
               })

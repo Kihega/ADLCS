@@ -1,5 +1,5 @@
 /**
- * App.jsx — ADLCS Web Router
+ * App.jsx — TzCRVS Web Router
  *
  * Web portal serves ADMIN roles only:
  *   /super-admin    → ProtectedRoute [super_admin]    → AdminDashboard (role="super_admin")

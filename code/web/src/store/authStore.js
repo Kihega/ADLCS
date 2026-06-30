@@ -1,5 +1,5 @@
 /**
- * authStore.js — ADLCS Global Auth State (Zustand)
+ * authStore.js — TzCRVS Global Auth State (Zustand)
  *
  * Holds the authenticated user's session in memory.
  * The access token lives only in this store (never written to localStorage).
@@ -11,7 +11,7 @@
 import { create } from 'zustand'
 
 // Key used in localStorage for the refresh token
-const REFRESH_KEY = 'adlcs_rt'
+const REFRESH_KEY = 'tzcrvs_rt'
 
 export const useAuthStore = create((set) => ({
   // ── State ───────────────────────────────────────────────────────────────────
