@@ -16,11 +16,19 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#050d1a"
       },
-      "package": "tz.go.nbs.census.model"
+      "package": "tz.go.nbs.census.model",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "tz.go.nbs.census.model"
+      "bundleIdentifier": "tz.go.nbs.census.model",
+      "infoPlist": {
+        "NSCameraUsageDescription": "TzCRVS needs camera access so officers can capture the citizen's photo during NIN registration.",
+        "NSPhotoLibraryUsageDescription": "TzCRVS needs photo library access so officers can select a citizen photo if the camera is unavailable."
+      }
     },
     "extra": {
       "eas": {
@@ -28,6 +36,15 @@
       }
     },
     "owner": "mangentechnologies-026",
-    "plugins": ["expo-asset"]
+    "plugins": [
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "TzCRVS needs camera access so officers can capture the citizen's photo during NIN registration.",
+          "photosPermission": "TzCRVS needs photo library access so officers can select a citizen photo if the camera is unavailable."
+        }
+      ]
+    ]
   }
 }

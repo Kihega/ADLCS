@@ -47,6 +47,7 @@ import {
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
+import { useResponsive } from '../../utils/responsive'
 import { apiGet, apiPost, fetchRemoteDashboard } from '../../services/syncService'
 
 type VStack = { VillageHome: undefined; NINRegistration: undefined }
@@ -177,7 +178,9 @@ ${css}
 }
 
 // ── On-screen ID card preview (CR-80 proportions) ────────────────────────────
-function IdCardPreview({ data }: { data: CardData | null }) {
+// `cardScale` lets callers grow the card on larger screens (tablets) instead
+// of rendering it at a fixed phone-sized 320×202 on every device.
+function IdCardPreview({ data, cardScale = 1 }: { data: CardData | null; cardScale?: number }) {
   if (!data) return null
   const initials = data.fullName
     .split(' ')
@@ -185,12 +188,16 @@ function IdCardPreview({ data }: { data: CardData | null }) {
     .slice(0, 2)
     .map((n: string) => n[0])
     .join('')
+  const cardWidth = Math.round(320 * cardScale)
+  const cardHeight = Math.round(202 * cardScale)
+  const photoWidth = Math.round(62 * cardScale)
+  const photoHeight = Math.round(76 * cardScale)
   return (
     <View
       style={{
         alignSelf: 'center',
-        width: 320,
-        height: 202,
+        width: cardWidth,
+        height: cardHeight,
         borderRadius: 10,
         overflow: 'hidden',
         backgroundColor: '#fff',
@@ -223,8 +230,8 @@ function IdCardPreview({ data }: { data: CardData | null }) {
         <View style={{ alignItems: 'center', gap: 5 }}>
           <View
             style={{
-              width: 62,
-              height: 76,
+              width: photoWidth,
+              height: photoHeight,
               borderRadius: 6,
               borderWidth: 2,
               borderColor: '#0f766e',
@@ -237,7 +244,7 @@ function IdCardPreview({ data }: { data: CardData | null }) {
             {data.photoBase64 ? (
               <Image
                 source={{ uri: data.photoBase64 }}
-                style={{ width: 62, height: 76 }}
+                style={{ width: photoWidth, height: photoHeight }}
                 resizeMode="cover"
               />
             ) : (
@@ -427,6 +434,7 @@ function Toast({ msg, vis }: { msg: string; vis: boolean }) {
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function NINRegistrationScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
+  const { isTablet, contentMaxWidth, scale: rscale } = useResponsive()
 
   // Step 1
   const [bid, setBid] = useState('')
@@ -438,6 +446,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
   // Step 2
   const [photoUri, setPhotoUri] = useState<string | null>(null)
   const [photoBase64, setPhotoBase64] = useState<string | null>(null)
+  const [capturingPhoto, setCapturingPhoto] = useState(false)
   const [fpLeft, setFpLeft] = useState<'idle' | 'scanning' | 'done'>('idle')
   const [fpRight, setFpRight] = useState<'idle' | 'scanning' | 'done'>('idle')
   const fp2Valid = fpLeft === 'done' && fpRight === 'done'
@@ -510,36 +519,74 @@ export default function NINRegistrationScreen({ navigation }: Props) {
     setSearching(false)
   }, [bid])
 
-  // ── Step 2a: Photo (image picker) ──────────────────────────────────────
+  // ── Step 2a: Photo (device camera capture, gallery as fallback) ─────────
+  // NOTE: previously this called launchCameraAsync() with no try/catch and
+  // the deprecated `MediaTypeOptions.Images` enum, then silently chained a
+  // `.catch()` straight into the gallery picker. On real devices that meant
+  // any camera-activity error (permission race, low-memory activity kill,
+  // hardware busy) was swallowed in a way that left the picker promise in a
+  // bad state and the app appeared to "restart". This version explicitly
+  // requests camera permission first, guards against double-taps while the
+  // native camera is opening, and only falls back to the gallery on a real
+  // error instead of unconditionally racing both pickers at once.
   const openCamera = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync()
-    if (!perm.granted) {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!lib.granted) {
-        Alert.alert('Permission', 'Camera or gallery access required.')
+    if (capturingPhoto) return
+    setCapturingPhoto(true)
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert(
+          'Camera Permission Required',
+          'Please allow camera access to capture the citizen photo.'
+        )
         return
       }
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.7,
-      base64: true,
-    }).catch(async () =>
-      ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [3, 4],
         quality: 0.7,
         base64: true,
       })
-    )
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0]
-      setPhotoUri(asset.uri)
-      setPhotoBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null)
-      showToast('Photo selected successfully')
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0]
+        setPhotoUri(asset.uri)
+        setPhotoBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null)
+        showToast('Photo captured successfully')
+      }
+    } catch (cameraError: any) {
+      // Camera failed to open/capture — fall back to the gallery instead of
+      // letting the rejected promise bubble up unhandled.
+      try {
+        const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
+        if (!lib.granted) {
+          Alert.alert(
+            'Permission Required',
+            cameraError?.message ?? 'Camera or gallery access is required.'
+          )
+          return
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [3, 4],
+          quality: 0.7,
+          base64: true,
+        })
+        if (!result.canceled && result.assets && result.assets[0]) {
+          const asset = result.assets[0]
+          setPhotoUri(asset.uri)
+          setPhotoBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null)
+          showToast('Photo selected successfully')
+        }
+      } catch (galleryError: any) {
+        Alert.alert(
+          'Photo Capture Failed',
+          galleryError?.message ?? 'Could not capture or select a photo. Please try again.'
+        )
+      }
+    } finally {
+      setCapturingPhoto(false)
     }
   }
 
@@ -751,7 +798,13 @@ export default function NINRegistrationScreen({ navigation }: Props) {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 140 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: 140,
+          width: '100%',
+          maxWidth: contentMaxWidth,
+          alignSelf: 'center',
+        }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -948,8 +1001,8 @@ export default function NINRegistrationScreen({ navigation }: Props) {
               <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
                 <View
                   style={{
-                    width: 80,
-                    height: 96,
+                    width: rscale(80),
+                    height: rscale(96),
                     borderRadius: 8,
                     borderWidth: 2,
                     borderColor: photoUri ? TZ.green : T.border,
@@ -962,7 +1015,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
                   {photoUri ? (
                     <Image
                       source={{ uri: photoUri }}
-                      style={{ width: 80, height: 96 }}
+                      style={{ width: rscale(80), height: rscale(96) }}
                       resizeMode="cover"
                     />
                   ) : (
@@ -976,6 +1029,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
                   </Text>
                   <TouchableOpacity
                     onPress={openCamera}
+                    disabled={capturingPhoto}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -986,9 +1040,14 @@ export default function NINRegistrationScreen({ navigation }: Props) {
                       paddingHorizontal: 14,
                       borderWidth: photoUri ? 1 : 0,
                       borderColor: `${TZ.green}50`,
+                      opacity: capturingPhoto ? 0.7 : 1,
                     }}
                   >
-                    <ImageIcon size={14} color={photoUri ? TZ.green : '#fff'} />
+                    {capturingPhoto ? (
+                      <ActivityIndicator size="small" color={photoUri ? TZ.green : '#fff'} />
+                    ) : (
+                      <ImageIcon size={14} color={photoUri ? TZ.green : '#fff'} />
+                    )}
                     <Text
                       style={{
                         fontSize: 13,
@@ -996,7 +1055,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
                         color: photoUri ? TZ.green : '#fff',
                       }}
                     >
-                      {photoUri ? 'Change Photo' : 'Select Photo'}
+                      {capturingPhoto ? 'Opening Camera…' : photoUri ? 'Retake Photo' : 'Capture Photo'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -1198,7 +1257,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
               >
                 Card Preview
               </Text>
-              <IdCardPreview data={cardData} />
+              <IdCardPreview data={cardData} cardScale={isTablet ? 1.35 : 1} />
             </View>
 
             {[
