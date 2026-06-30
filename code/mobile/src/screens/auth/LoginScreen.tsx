@@ -1,5 +1,5 @@
 /**
- * LoginScreen.tsx — ADLCS Mobile Authentication  v8.0  ONLINE-ONLY
+ * LoginScreen.tsx — TzCRVS Mobile Authentication  v8.0  ONLINE-ONLY
  *
  * Onboarding removed for faster dev/test:
  *   • No OTP device activation
@@ -34,6 +34,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Eye, EyeOff, Shield, MapPin, Smartphone, AlertCircle } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { resolveBase } from '../../services/apiResolver'
+import { refreshThemeForCurrentSession } from '../../context/ThemeContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type RootStack = {
@@ -63,7 +64,7 @@ const C = {
   yellow: '#fcd116',
   tzGreen: '#1eb53a',
   tzBlue: '#00a3dd',
-  tzNavy: '#003087',
+  tzNavy: '#00a3dd', // was #003087 (near-invisible on dark navy page); now matches tzBlue for legibility
   white: '#ffffff',
 } as const
 
@@ -252,11 +253,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         setLoginMode('mfa_verify')
       } else {
         await AsyncStorage.multiSet([
-          ['adlcs_access_token', data.accessToken ?? ''],
-          ['adlcs_refresh_token', data.refreshToken ?? ''],
-          ['adlcs_role', data.profile?.role ?? ''],
-          ['adlcs_officer_name', data.profile?.full_name ?? 'Officer'],
-          ['adlcs_employee_id', data.profile?.employee_id ?? 'EMP-000'],
+          ['tzcrvs_access_token', data.accessToken ?? ''],
+          ['tzcrvs_refresh_token', data.refreshToken ?? ''],
+          ['tzcrvs_role', data.profile?.role ?? ''],
+          ['tzcrvs_officer_name', data.profile?.full_name ?? 'Officer'],
+          ['tzcrvs_employee_id', data.profile?.employee_id ?? 'EMP-000'],
         ])
         goHome(data.profile?.role ?? '')
       }
@@ -305,11 +306,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         return
       }
       await AsyncStorage.multiSet([
-        ['adlcs_access_token', data.accessToken ?? ''],
-        ['adlcs_refresh_token', data.refreshToken ?? ''],
-        ['adlcs_role', data.profile?.role ?? ''],
-        ['adlcs_officer_name', data.profile?.full_name ?? 'Officer'],
-        ['adlcs_employee_id', data.profile?.employee_id ?? 'EMP-000'],
+        ['tzcrvs_access_token', data.accessToken ?? ''],
+        ['tzcrvs_refresh_token', data.refreshToken ?? ''],
+        ['tzcrvs_role', data.profile?.role ?? ''],
+        ['tzcrvs_officer_name', data.profile?.full_name ?? 'Officer'],
+        ['tzcrvs_employee_id', data.profile?.employee_id ?? 'EMP-000'],
       ])
       goHome(data.profile?.role ?? '')
     } catch (err: unknown) {
@@ -325,6 +326,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   }
 
   const goHome = (role: string) => {
+    refreshThemeForCurrentSession()
     if (role === 'village_officer') navigation.replace('VillageHome')
     else if (role === 'hospital_officer') navigation.replace('HospitalHome')
     else Alert.alert('Access Denied', 'This app is for field officers only. Use the web portal.')
@@ -459,7 +461,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                 <Text style={s.footerTxt}>NBS Head Office · Dodoma, Tanzania</Text>
               </View>
               <Text style={s.footerTxt2}>Unauthorized access is prohibited and monitored</Text>
-              <Text style={s.footerTxt2}>© 2026 National Bureau of Statistics · ADLCS</Text>
+              <Text style={s.footerTxt2}>© 2026 National Bureau of Statistics · TzCRVS</Text>
             </Animated.View>
           </View>
         </ScrollView>

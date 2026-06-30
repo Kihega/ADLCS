@@ -1,5 +1,5 @@
 /**
- * jwt.js — ADLCS JWT token utilities
+ * jwt.js — TzCRVS JWT token utilities
  *
  * Three token types:
  *   access  — 15 min, authorises every protected API call

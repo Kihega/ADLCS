@@ -1,5 +1,5 @@
 /**
- * PlaceholderDashboard.jsx — ADLCS Role Dashboard (Sprint 1 Placeholder)
+ * PlaceholderDashboard.jsx — TzCRVS Role Dashboard (Sprint 1 Placeholder)
  *
  * Shown after login while the real dashboards are built.
  * Renders role-specific colour scheme, icon, badge, and stat cards.

@@ -3,7 +3,7 @@
  *
  * Shown when a village_officer or hospital_officer successfully authenticates
  * via the web portal (which is admin-only). Instructs them to use the
- * ADLCS mobile app instead.
+ * TzCRVS mobile app instead.
  *
  * The web LoginPage.jsx ROLE_ROUTE map sends these roles to /mobile-only.
  * No ProtectedRoute wrapper needed — the page itself is the terminal destination.
@@ -60,13 +60,13 @@ export default function MobileOnlyPage() {
         </h1>
 
         <p className="text-gray-400 text-sm leading-relaxed mb-2">
-          The <strong className="text-white">ADLCS web portal</strong> is for{' '}
+          The <strong className="text-white">TzCRVS web portal</strong> is for{' '}
           <strong className="text-white">administrators only</strong>.
         </p>
         <p className="text-gray-400 text-sm leading-relaxed mb-8">
           As a <strong className="text-[#fb923c]">{roleLabel}</strong>, your
           dashboard is accessed through the{' '}
-          <strong className="text-white">ADLCS mobile app</strong>. Please open
+          <strong className="text-white">TzCRVS mobile app</strong>. Please open
           the app on your registered device to continue.
         </p>
 
@@ -76,7 +76,7 @@ export default function MobileOnlyPage() {
             How to access your dashboard
           </p>
           {[
-            { n: '1', t: 'Open the ADLCS mobile app on your device' },
+            { n: '1', t: 'Open the TzCRVS mobile app on your device' },
             { n: '2', t: 'Log in with the same credentials you just used' },
             { n: '3', t: 'Your dashboard will load automatically' },
           ].map(step => (

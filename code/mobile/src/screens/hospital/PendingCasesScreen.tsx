@@ -27,6 +27,7 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { useTheme, TZ } from '../../context/ThemeContext'
+import { apiGet } from '../../services/syncService'
 
 type RootStack = { HospitalHome: undefined; PendingCases: undefined; IssueCertificate: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'PendingCases'> }
@@ -40,7 +41,7 @@ interface PendingRow {
   reasons: string[]
 }
 
-const REASON_LABELS: Record<string> = {
+const REASON_LABELS: Record<string, string> = {
   no_certificate: 'Certificate PDF not generated',
   rita_unsynced: 'Not synced to Central Database',
 }

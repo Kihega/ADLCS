@@ -1,5 +1,5 @@
 /**
- * ProtectedRoute.jsx — ADLCS Route Guard
+ * ProtectedRoute.jsx — TzCRVS Route Guard
  *
  * Wraps any route that requires authentication.
  * Optionally restricts access to specific roles.

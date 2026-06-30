@@ -1,5 +1,5 @@
 /**
- * AdminDashboard.jsx — ADLCS Super Admin / District Admin Dashboard
+ * AdminDashboard.jsx — TzCRVS Super Admin / District Admin Dashboard
  *
  * A single role-aware dashboard component used by both /super-admin and
  * /district-admin routes. Every section fetches live data from

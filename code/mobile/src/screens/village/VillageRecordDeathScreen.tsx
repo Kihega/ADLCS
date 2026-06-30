@@ -30,6 +30,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
+import { resolveBase } from '../../services/apiResolver'
 
 import { saveDeath, generateDeathCertNo } from '../../services/localDb'
 
@@ -381,7 +382,6 @@ function ScreenHeader({
 type VStack = { VillageHome: undefined; VillageRecordDeath: undefined }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageRecordDeath'> }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_URL_PRIMARY
 
 export default function VillageRecordDeathScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
@@ -416,10 +416,11 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
     if (lookupId.trim().length < 3) return
     setLookupLoad(true)
     try {
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (token && isOnline()) {
+        const base = await resolveBase()
         const r = await fetch(
-          `${API_BASE}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
+          `${base}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
           {
             headers: { Authorization: `Bearer ${token}` },
             signal: (() => {
@@ -460,12 +461,13 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
     try {
       const cert = generateDeathCertNo()
       setCertNo(cert)
-      const token = await AsyncStorage.getItem('adlcs_access_token')
+      const token = await AsyncStorage.getItem('tzcrvs_access_token')
       let officerName = '',
         facilityName = ''
       if (token && isOnline()) {
         try {
-          const r = await fetch(`${API_BASE}/officer/dashboard`, {
+          const base = await resolveBase()
+          const r = await fetch(`${base}/officer/dashboard`, {
             headers: { Authorization: `Bearer ${token}` },
             signal: (() => {
               const __c = new AbortController()

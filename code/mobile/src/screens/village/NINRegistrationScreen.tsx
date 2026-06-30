@@ -19,7 +19,6 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  _Modal,
   Animated,
   Image,
 } from 'react-native'
@@ -48,7 +47,7 @@ import {
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
-import { apiGet, _apiPost, fetchRemoteDashboard } from '../../services/syncService'
+import { apiGet, apiPost, fetchRemoteDashboard } from '../../services/syncService'
 
 type VStack = { VillageHome: undefined; NINRegistration: undefined }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'NINRegistration'> }
@@ -154,7 +153,7 @@ function cardMarkup(d: CardData): { css: string; html: string } {
 // CR-80 (85.6×54mm) card-sized HTML — used with Print.printAsync() so the
 // native print dialog (and any connected card printer driver) receives a
 // correctly-sized page instead of a tiny card on a default A4/Letter sheet.
-function _buildCardHtml(d: CardData): string {
+function buildCardHtml(d: CardData): string {
   const { css, html } = cardMarkup(d)
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 @page{size:85.6mm 54mm;margin:0}
@@ -441,11 +440,12 @@ export default function NINRegistrationScreen({ navigation }: Props) {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null)
   const [fpLeft, setFpLeft] = useState<'idle' | 'scanning' | 'done'>('idle')
   const [fpRight, setFpRight] = useState<'idle' | 'scanning' | 'done'>('idle')
+  const fp2Valid = fpLeft === 'done' && fpRight === 'done'
 
   // Step 3
   const [submitting, setSubmitting] = useState(false)
   const [issuedNIN, setIssuedNIN] = useState<string | null>(null)
-  const [cardHtml, _setCardHtml] = useState<string | null>(null)
+  const [cardHtml, setCardHtml] = useState<string | null>(null)
   const [cardData, setCardData] = useState<CardData | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -581,6 +581,18 @@ export default function NINRegistrationScreen({ navigation }: Props) {
       expiryDate: expiryStr,
       photoBase64: photoBase64 ?? undefined,
     })
+    setCardHtml(buildCardHtml({
+      nationalId: nin,
+      fullName: [birthRecord.childFirstName, birthRecord.childMiddleName, birthRecord.childSurname]
+        .filter(Boolean)
+        .join(' '),
+      gender: birthRecord.gender ?? '',
+      dob: fmtDOB(birthRecord.dateOfBirth),
+      village: officer?.villageName ?? '—',
+      issuedDate: issued,
+      expiryDate: expiryStr,
+      photoBase64: photoBase64 ?? undefined,
+    }))
   }, [birthRecord, photoBase64, fpLeft, fpRight, fp2Valid, officer])
 
   // Print Card — opens the native print dialog (officer selects a connected
@@ -625,21 +637,33 @@ export default function NINRegistrationScreen({ navigation }: Props) {
     return `NIN-${d || Date.now().toString().slice(-8)}`
   }
 
-  const fp2Valid = fpLeft === 'done' && fpRight === 'done'
   const canProceedStep2 = !!photoUri && fp2Valid
 
   const handleIssueNIN = async () => {
-    if (!birthRecord || !canProceedStep2) return
-
+    if (!birthRecord) return
     setSubmitting(true)
-
     try {
-      const nin = generateNationalId(birthRecord.dateOfBirth ?? '')
+      const json = await apiPost('/village/nin-issue', { birthId: birthRecord.birthId })
+      const nin = json?.data?.nationalId
+      if (!nin) {
+        Alert.alert('Issuance Failed', json?.message ?? 'The server did not return a National ID.')
+        setSubmitting(false)
+        return
+      }
       setIssuedNIN(nin)
-      setStep(3)
-      showToast('NIN issued successfully')
-    } catch {
-      Alert.alert('Error', 'Could not issue NIN')
+      // The preview card built earlier (Step 2 → Step 3 transition) used a
+      // placeholder NIN since the real one only exists once the server has
+      // issued it. Refresh the card data/HTML now with the REAL, persisted
+      // NIN so the printed/downloaded ID card matches what was saved to
+      // the database, not the placeholder shown during biometric capture.
+      setCardData((prev) => (prev ? { ...prev, nationalId: nin } : prev))
+      setCardHtml((prevHtml) => {
+        if (!cardData) return prevHtml
+        return buildCardHtml({ ...cardData, nationalId: nin })
+      })
+      showToast('NIN issued and saved successfully')
+    } catch (e: any) {
+      Alert.alert('Issuance Failed', e?.message ?? 'Network error — check connection and try again.')
     } finally {
       setSubmitting(false)
     }

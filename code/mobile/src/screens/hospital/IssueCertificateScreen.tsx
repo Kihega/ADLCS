@@ -372,7 +372,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
         {(['all', 'birth', 'death'] as FilterTab[]).map((t) => (
           <TouchableOpacity
             key={t}
-            style={[s.tab === t && { borderBottomWidth: 2, borderBottomColor: T.primary }]}
+            style={[tab === t && { borderBottomWidth: 2, borderBottomColor: T.primary }]}
             onPress={() => setTab(t)}
           >
             <Text style={[s.tabText, { color: tab === t ? T.primary : T.textSub }]}>

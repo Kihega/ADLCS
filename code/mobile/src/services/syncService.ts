@@ -41,7 +41,7 @@ function makeSignal(ms: number): { signal: AbortSignal; clear: () => void } {
 
 // ── Token ─────────────────────────────────────────────────────────────────────
 async function getToken(): Promise<string | null> {
-  return AsyncStorage.getItem('adlcs_access_token')
+  return AsyncStorage.getItem('tzcrvs_access_token')
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ export async function saveAndSyncBirth(
       registeredAt: now,
     })
     if (json.success || json.duplicate) {
-      await AsyncStorage.setItem('adlcs_last_sync', now)
+      await AsyncStorage.setItem('tzcrvs_last_sync', now)
       return { birth: { ...birth, synced: 1 }, syncedRemote: true }
     }
   } catch (e) {
@@ -172,7 +172,7 @@ export async function saveAndSyncDeath(
       registeredAt: now,
     })
     if (json.success || json.duplicate) {
-      await AsyncStorage.setItem('adlcs_last_sync', now)
+      await AsyncStorage.setItem('tzcrvs_last_sync', now)
       return { death: { ...death, synced: 1 }, syncedRemote: true }
     }
   } catch (e) {
@@ -235,7 +235,7 @@ export async function getSyncStatus() {
     const json = await apiGet('/officer/sync/status')
     if (json.success && json.data) {
       await AsyncStorage.setItem(
-        'adlcs_last_sync',
+        'tzcrvs_last_sync',
         json.data.lastSyncAt ?? new Date().toISOString()
       )
       return {
@@ -245,7 +245,7 @@ export async function getSyncStatus() {
       }
     }
   } catch {}
-  const lastSync = await AsyncStorage.getItem('adlcs_last_sync')
+  const lastSync = await AsyncStorage.getItem('tzcrvs_last_sync')
   return { unsyncedBirths: 0, unsyncedDeaths: 0, lastSyncAt: lastSync }
 }
 

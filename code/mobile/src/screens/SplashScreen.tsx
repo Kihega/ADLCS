@@ -1,10 +1,10 @@
 /**
- * SplashScreen.tsx — ADLCS Mobile Splash
+ * SplashScreen.tsx — TzCRVS Mobile Splash
  *
  * Layout (matches Image 1 / PoPtz style):
  *   • Full-screen dark-navy gradient background
  *   • Large centred cyan circle with subtle pulse
- *   • "ADLCS" text + "NBS" subtitle inside the circle
+ *   • "TzCRVS" text + "NBS" subtitle inside the circle
  *   • Thin loading bar that fills over 2.5 s
  *   • Fades out, then navigates to Login
  *

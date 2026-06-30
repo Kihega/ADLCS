@@ -1,5 +1,5 @@
 /**
- * admin.js — ADLCS Admin Dashboard API Routes  v1.0
+ * admin.js — TzCRVS Admin Dashboard API Routes  v1.0
  *
  * Serves the Super Admin and District Admin web dashboards.
  * All data is read from / written to the live Supabase Postgres

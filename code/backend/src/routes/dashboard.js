@@ -198,31 +198,32 @@ router.get('/activity', async (req, res) => {
     const items = []
     if (role === 'hospital_officer') {
       const births = await prisma.birth.findMany({
-        where:   { officerId: id },
+        where:   { officerId: id, registeredAt: { gte: startOfDay(), lte: endOfDay() } },
         orderBy: { registeredAt: 'desc' },
         take:    limit,
         select:  { id: true, childFirstName: true, childSurname: true, gender: true, registeredAt: true },
       })
       for (const b of births) {
         items.push({
-          id:    `birth-${b.id}`,
-          icon:  '👶',
-          label: 'Birth registered',
-          name:  `${b.childFirstName} ${b.childSurname} — ${b.gender === 'male' ? 'Baby Boy' : 'Baby Girl'}`,
-          time:  new Date(b.registeredAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
-          color: '#1eb53a',
+          id:           `birth-${b.id}`,
+          icon:         '👶',
+          label:        'Birth registered',
+          name:         `${b.childFirstName} ${b.childSurname} — ${b.gender === 'male' ? 'Baby Boy' : 'Baby Girl'}`,
+          time:         new Date(b.registeredAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+          registeredAt: b.registeredAt,
+          color:        '#1eb53a',
         })
       }
     }
     if (role === 'village_officer') {
       const [citizens, deaths] = await Promise.all([
         prisma.citizen.findMany({
-          where: { registeredById: id },
+          where: { registeredById: id, registeredAt: { gte: startOfDay(), lte: endOfDay() } },
           orderBy: { registeredAt: 'desc' }, take: limit,
           select: { id: true, firstName: true, surname: true, registeredAt: true },
         }),
         prisma.death.findMany({
-          where: { villageOfficerId: id },
+          where: { villageOfficerId: id, registeredAt: { gte: startOfDay(), lte: endOfDay() } },
           orderBy: { registeredAt: 'desc' }, take: limit,
           select: { id: true, deathCertNo: true, causeOfDeath: true, registeredAt: true },
         }).catch(() => []),
@@ -231,16 +232,18 @@ router.get('/activity', async (req, res) => {
         items.push({ id: `citizen-${c.id}`, icon: '👤', label: 'Citizen registered',
           name: `${c.firstName} ${c.surname}`,
           time: new Date(c.registeredAt ?? new Date()).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+          registeredAt: c.registeredAt,
           color: '#00a3dd' })
       }
       for (const d of deaths) {
         items.push({ id: `death-${d.id}`, icon: '✝', label: 'Death recorded',
           name: d.causeOfDeath ?? 'Cause unknown',
           time: new Date(d.registeredAt ?? new Date()).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+          registeredAt: d.registeredAt,
           color: '#dc2626' })
       }
-      // Sort by time desc
-      items.sort((a, b) => b.time.localeCompare(a.time))
+      // Sort by actual timestamp desc (today-only, so this is a same-day sort)
+      items.sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime())
     }
     return res.json({ success: true, data: items.slice(0, limit) })
   } catch (err) {

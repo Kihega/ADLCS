@@ -1,5 +1,5 @@
 /**
- * auth.test.js — ADLCS Auth Route Integration Tests
+ * auth.test.js — TzCRVS Auth Route Integration Tests
  *
  * All external dependencies (Prisma, Redis) are mocked so tests run
  * in CI without a real database or Redis instance.

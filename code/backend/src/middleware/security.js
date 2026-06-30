@@ -1,5 +1,5 @@
 /**
- * security.js — ADLCS Global Security Middleware
+ * security.js — TzCRVS Global Security Middleware
  *
  * Exports:
  *   helmetConfig   — hardened HTTP headers (CSP, HSTS, etc.)

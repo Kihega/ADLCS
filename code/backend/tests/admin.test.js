@@ -1,5 +1,5 @@
 /**
- * admin.test.js — ADLCS Admin Dashboard Route Integration Tests
+ * admin.test.js — TzCRVS Admin Dashboard Route Integration Tests
  *
  * All external dependencies (Prisma, Redis) are mocked so tests run
  * in CI without a real database or Redis instance.

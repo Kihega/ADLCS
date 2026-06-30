@@ -1,5 +1,5 @@
 /**
- * auth.js — ADLCS Auth Routes
+ * auth.js — TzCRVS Auth Routes
  *
  * POST /api/auth/login        — step 1: email + password         [rate-limited]
  * POST /api/auth/mfa/verify   — step 2: TOTP code               [rate-limited]
