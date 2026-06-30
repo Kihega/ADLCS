@@ -1,10 +1,9 @@
 /**
  * syncService.ts  v10.0  ONLINE-ONLY — real backend API
  *
- * Every function that reads or writes data goes to
- *   https://adlcs.onrender.com  →  Supabase PostgreSQL
- *
- * DATA FLOW: Mobile → Render (Node/Express) → Supabase (PostgreSQL)
+ * Every function that reads or writes data goes to the backend URL
+ * configured in EXPO_PUBLIC_API_URL (mobile/.env) → Supabase PostgreSQL.
+ * No backend URL is ever hardcoded here — see apiResolver.ts.
  *   • No SQLite, no local DB, no offline queue.
  *   • No NIN generated at birth — only BID (Birth Registration ID) + cert no.
  *   • NIN is issued by Village Officer at age 18 using the BID.
