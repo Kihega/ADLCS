@@ -58,6 +58,22 @@ export interface LocalDeath {
   rawJson: string
 }
 
+export interface LocalMarriage {
+  id: string
+  certNo: string
+  husbandName: string
+  husbandNid: string
+  wifeName: string
+  wifeNid: string
+  marriageDate: string // DD/MM/YYYY
+  marriagePlace: string
+  marriageType: string // civil | religious | customary
+  witness1Name: string
+  witness2Name: string
+  officerName: string
+  registeredAt: string // ISO
+}
+
 export interface OfficerCache {
   officerName: string
   facilityName: string

@@ -24,6 +24,8 @@ export type RootStack = {
   PendingCases: undefined
   SyncData: undefined
   RegisterCitizen: undefined
+  CitizenProfile: undefined
+  VillageViewRecords: undefined
   RegisterMarriage: undefined
   VillageRecordDeath: undefined
   NINRegistration: undefined

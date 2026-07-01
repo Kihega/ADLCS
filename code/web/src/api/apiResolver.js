@@ -25,9 +25,15 @@ async function probe(base) {
   const ctrl  = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT)
   try {
-    const res = await fetch(`${base}/health`, { signal: ctrl.signal })
+    // BUGFIX-7: any HTTP response (even a 503 from a degraded sub-system
+    // such as Redis) proves the backend is reachable. Requiring a strict
+    // 2xx here made resolveBase() throw "No internet connection" — and
+    // every admin dashboard card silently fail to load — whenever Redis
+    // hiccuped, even though Postgres (and therefore the real data) was
+    // completely fine.
+    await fetch(`${base}/health`, { signal: ctrl.signal })
     clearTimeout(timer)
-    return res.ok
+    return true
   } catch {
     clearTimeout(timer)
     return false

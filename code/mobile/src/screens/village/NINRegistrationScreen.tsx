@@ -48,6 +48,7 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { useResponsive } from '../../utils/responsive'
+import { compressImage } from '../../utils/imageCompression'
 import { apiGet, apiPost, fetchRemoteDashboard } from '../../services/syncService'
 
 type VStack = { VillageHome: undefined; NINRegistration: undefined }
@@ -546,12 +547,11 @@ export default function NINRegistrationScreen({ navigation }: Props) {
         allowsEditing: true,
         aspect: [3, 4],
         quality: 0.7,
-        base64: true,
       })
       if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0]
-        setPhotoUri(asset.uri)
-        setPhotoBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null)
+        const compressed = await compressImage(result.assets[0].uri)
+        setPhotoUri(compressed.uri)
+        setPhotoBase64(compressed.dataUri)
         showToast('Photo captured successfully')
       }
     } catch (cameraError: any) {
@@ -571,12 +571,11 @@ export default function NINRegistrationScreen({ navigation }: Props) {
           allowsEditing: true,
           aspect: [3, 4],
           quality: 0.7,
-          base64: true,
         })
         if (!result.canceled && result.assets && result.assets[0]) {
-          const asset = result.assets[0]
-          setPhotoUri(asset.uri)
-          setPhotoBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null)
+          const compressed = await compressImage(result.assets[0].uri)
+          setPhotoUri(compressed.uri)
+          setPhotoBase64(compressed.dataUri)
           showToast('Photo selected successfully')
         }
       } catch (galleryError: any) {
@@ -690,7 +689,10 @@ export default function NINRegistrationScreen({ navigation }: Props) {
     if (!birthRecord) return
     setSubmitting(true)
     try {
-      const json = await apiPost('/village/nin-issue', { birthId: birthRecord.birthId })
+      const json = await apiPost('/village/nin-issue', {
+        birthId: birthRecord.birthId,
+        photoBase64: photoBase64 ?? undefined,
+      })
       const nin = json?.data?.nationalId
       if (!nin) {
         Alert.alert('Issuance Failed', json?.message ?? 'The server did not return a National ID.')

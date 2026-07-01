@@ -24,6 +24,7 @@ import {
   CheckCircle2 as CC,
   Heart,
   Shield,
+  Download,
 } from 'lucide-react-native'
 import * as Clipboard from 'expo-clipboard'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -31,6 +32,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
 import { resolveBase } from '../../services/apiResolver'
+import { generateMarriagePdf, sharePdf } from '../../services/certificateService'
+import type { LocalMarriage } from '../../services/localDb'
 
 // ── Reusable calendar picker (no external packages) ──────────────────────────
 function CalPicker({
@@ -420,6 +423,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
   const [bridePrice, setBridePrice] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [certNo, setCertNo] = useState('')
+  const [downloading, setDownloading] = useState(false)
   const [toast, setToast] = useState('')
   const [toastVis, setToastVis] = useState(false)
 
@@ -477,6 +481,37 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
       Alert.alert('Error', 'Submission failed.')
     }
     setSubmitting(false)
+  }
+
+  // ── Download/print the marriage certificate (mirrors the birth/death flow) ──
+  const handleDownload = async () => {
+    if (!certNo) return
+    setDownloading(true)
+    try {
+      const marriage: LocalMarriage = {
+        id: certNo,
+        certNo,
+        husbandName: husbandData
+          ? `${husbandData.firstName} ${husbandData.surname}`
+          : husbandNid,
+        husbandNid,
+        wifeName: wifeData ? `${wifeData.firstName} ${wifeData.surname}` : wifeNid,
+        wifeNid,
+        marriageDate,
+        marriagePlace: 'Village Registration Office',
+        marriageType,
+        witness1Name: witness1.trim(),
+        witness2Name: witness2.trim(),
+        officerName: 'Village Registration Officer',
+        registeredAt: new Date().toISOString(),
+      }
+      const path = await generateMarriagePdf(marriage)
+      await sharePdf(path)
+    } catch {
+      Alert.alert('Download Failed', 'Could not generate the certificate. Please try again.')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const copy = async (text: string, label: string) => {
@@ -906,9 +941,36 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
               >
                 <Shield size={13} color="#0891b2" />
                 <Text style={{ fontSize: 10, color: T.textSub, flex: 1 }}>
-                  Certificate will be generated and available in the Certificates screen after sync.
+                  This is a copy only. To be valid for official Government use, the certificate
+                  must be signed and stamped by the Registration Insolvency and Trusteeship
+                  Agency (RITA).
                 </Text>
               </View>
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: '#e11d4818',
+                  borderWidth: 1,
+                  borderColor: '#e11d4850',
+                  borderRadius: 12,
+                  paddingVertical: 13,
+                  width: '100%',
+                }}
+                onPress={handleDownload}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <ActivityIndicator size="small" color="#e11d48" />
+                ) : (
+                  <Download size={16} color="#e11d48" />
+                )}
+                <Text style={{ color: '#e11d48', fontWeight: '800', fontSize: 14 }}>
+                  {downloading ? 'Generating…' : 'Download Certificate'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={{
                   backgroundColor: '#e11d48',

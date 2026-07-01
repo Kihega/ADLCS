@@ -24,7 +24,7 @@ import {
   Menu, X, LogOut, Shield, Users, RefreshCw, CheckCircle2,
   AlertTriangle, Database, Server, Globe, UserCheck, UserX,
   Trash2, UserPlus, ChevronLeft, ChevronRight, Settings,
-  ShieldAlert, ArrowLeftRight, Stethoscope,
+  ShieldAlert, Stethoscope,
   Map as MapIcon, Search, Cpu, LayoutDashboard, Landmark, Heart,
   FileText,
 } from 'lucide-react'
@@ -723,18 +723,8 @@ function SystemPerformanceSection() {
         <StatCard Icon={Globe} label="Node Runtime" value={perf?.nodeVersion || '—'} accent="text-purple-400" />
       </div>
 
-      <Card>
-        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Table Record Counts</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {Object.entries(perf?.tableCounts || {}).map(([k, v]) => (
-            <div key={k} className="bg-[#060f1e] border border-[#1a3060] rounded-lg p-3 text-center">
-              <p className="text-gray-500 text-[10px] uppercase tracking-wider">{k}</p>
-              <p className="text-white font-bold text-lg">{v.toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
-
+      {/* BUGFIX-10: unused "Table Record Counts" card grid removed — System
+          Performance now shows only the first row of live health cards. */}
       <button onClick={load} className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-[#00d4ff] border border-[#1a3060] px-3 py-1.5 rounded-lg">
         <RefreshCw size={12} /> Re-run health check
       </button>
@@ -742,59 +732,9 @@ function SystemPerformanceSection() {
   )
 }
 
-// ── Section: Migrations ──────────────────────────────────────────────────────
-
-function MigrationsSection() {
-  const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [status, setStatus] = useState('all')
-  const [loading, setLoading] = useState(true)
-  const limit = 10
-
-  const load = useCallback(() => {
-    setLoading(true)
-    api.apiGetMigrations({ page, limit, ...(status !== 'all' ? { status } : {}) })
-      .then(r => { setRows(r.data || []); setTotal(r.total || 0) })
-      .catch(err => console.error('[migrations]', err))
-      .finally(() => setLoading(false))
-  }, [page, status])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load() }, [load])
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <ArrowLeftRight size={14} className="text-[#00d4ff]" />
-        <StatusSelect value={status} options={['all', 'pending', 'confirmed', 'cancelled', 'expired']} onChange={v => { setPage(1); setStatus(v) }} />
-      </div>
-
-      <Card className="p-0 overflow-x-auto">
-        <table className="w-full">
-          <thead><tr className="border-b border-[#1a3060]">
-            <Th>Citizen</Th><Th>From</Th><Th>To</Th><Th>Reason</Th><Th>Status</Th><Th>Requested</Th>
-          </tr></thead>
-          <tbody>
-            {loading && <LoadingState colSpan={6} />}
-            {!loading && rows.length === 0 && <EmptyState colSpan={6} />}
-            {!loading && rows.map(m => (
-              <tr key={m.id} className="border-b border-[#1a3060]/50 hover:bg-white/[0.02]">
-                <Td className="text-white font-medium">{m.citizen ? `${m.citizen.firstName} ${m.citizen.surname}` : '—'}</Td>
-                <Td>{m.fromVillage?.name || '—'}</Td>
-                <Td>{m.toVillage?.name || '—'}</Td>
-                <Td className="truncate max-w-[160px]">{m.reason}</Td>
-                <Td><StatusPill status={m.status === 'confirmed' ? 'active' : (m.status === 'pending' ? 'pending' : 'suspended')} /></Td>
-                <Td>{new Date(m.requestDate).toLocaleDateString('en-TZ')}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <PagerFooter page={page} total={total} limit={limit} onPage={setPage} />
-      </Card>
-    </div>
-  )
-}
+// BUGFIX-10: "Migration Trends" menu button + section removed (Super Admin
+// and District Admin dashboards). /api/admin/migrations and
+// apiGetMigrations() are left untouched in case they're needed again.
 
 // ── Section: Marriages ───────────────────────────────────────────────────────
 
@@ -1025,6 +965,9 @@ function NIDASection({ role }) {
   )
 }
 
+// BUGFIX-10: Migration Trends removed; System Log Reports / Security
+// Alerts are now Super-Admin-only (District Admin dashboard no longer
+// shows these two menu buttons).
 const NAV = [
   { key: 'dashboard',           label: 'Dashboard',            Icon: LayoutDashboard, roles: ['super_admin', 'district_admin'] },
   { key: 'demographics',        label: 'Demographics',         Icon: MapIcon,         roles: ['super_admin', 'district_admin'] },
@@ -1032,10 +975,9 @@ const NAV = [
   { key: 'village_officers',    label: 'Village Officers',     Icon: Users,           roles: ['super_admin', 'district_admin'] },
   { key: 'health_officers',     label: 'Health Officers',      Icon: Stethoscope,     roles: ['super_admin', 'district_admin'] },
   { key: 'manage_users',        label: 'Manage Users',         Icon: Shield,          roles: ['super_admin'] },
-  { key: 'migrations',          label: 'Migration Trends',     Icon: ArrowLeftRight,  roles: ['super_admin', 'district_admin'] },
   { key: 'marriages',           label: 'Marriage Records',     Icon: Heart,           roles: ['super_admin', 'district_admin'] },
-  { key: 'audit_logs',          label: 'System Log Reports',   Icon: FileText,        roles: ['super_admin', 'district_admin'] },
-  { key: 'security_alerts',     label: 'Security Alerts',      Icon: ShieldAlert,     roles: ['super_admin', 'district_admin'] },
+  { key: 'audit_logs',          label: 'System Log Reports',   Icon: FileText,        roles: ['super_admin'] },
+  { key: 'security_alerts',     label: 'Security Alerts',      Icon: ShieldAlert,     roles: ['super_admin'] },
   { key: 'system_performance',  label: 'System Performance',   Icon: Cpu,             roles: ['super_admin'] },
   { key: 'rita',               label: 'RITA',                 Icon: FileText,        roles: ['super_admin', 'district_admin'] },
   { key: 'nida',               label: 'NIDA',                 Icon: Shield,          roles: ['super_admin', 'district_admin'] },
@@ -1044,7 +986,7 @@ const NAV = [
 const SECTION_TITLE = {
   dashboard: 'Dashboard', demographics: 'Demographics View', district_admins: 'District Admins',
   village_officers: 'Village Officers', health_officers: 'Health Officers', manage_users: 'Manage Users',
-  migrations: 'Migration Trends', marriages: 'Marriage Records', audit_logs: 'System Log Reports',
+  marriages: 'Marriage Records', audit_logs: 'System Log Reports',
   security_alerts: 'Security Alerts', system_performance: 'System Performance',
 }
 
@@ -1076,7 +1018,6 @@ export default function AdminDashboard({ role }) {
       case 'village_officers':    return <OfficersSection kind="village" role={role} onRegister={() => setShowNewReg(true)} />
       case 'health_officers':     return <OfficersSection kind="health" role={role} onRegister={() => setShowNewReg(true)} />
       case 'manage_users':        return <ManageUsersSection currentUserId={user?.id} />
-      case 'migrations':          return <MigrationsSection />
       case 'marriages':           return <MarriagesSection />
       case 'audit_logs':          return <AuditLogsSection />
       case 'security_alerts':     return <AuditLogsSection securityOnly />

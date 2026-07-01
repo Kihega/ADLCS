@@ -69,17 +69,24 @@ async function getAdminDistrictId(req) {
 /** Build a Prisma `where` clause for Citizen queries, scoped by geo filters / role. */
 async function buildCitizenGeoWhere(req) {
   const { regionId, districtId, wardId, villageId } = req.query
-  let where = {}
-  if (villageId)       where = { currentVillageId: Number(villageId) }
-  else if (wardId)     where = { currentVillage: { wardId: Number(wardId) } }
-  else if (districtId) where = { currentVillage: { ward: { districtId: Number(districtId) } } }
-  else if (regionId)   where = { currentVillage: { ward: { district: { regionId: Number(regionId) } } } }
 
+  // BUGFIX-9: a district_admin's ward/village filter selection used to be
+  // silently discarded — this function always fell back to the full
+  // district scope regardless of what was selected. District scope is now
+  // the floor (never escapable) but is narrowed further when the admin
+  // picks a ward or village within it.
   if (req.user.role === 'district_admin') {
     const adminDistrictId = await getAdminDistrictId(req)
-    where = { currentVillage: { ward: { districtId: adminDistrictId } } }
+    if (villageId) return { currentVillageId: Number(villageId) }
+    if (wardId)    return { currentVillage: { wardId: Number(wardId) } }
+    return { currentVillage: { ward: { districtId: adminDistrictId } } }
   }
-  return where
+
+  if (villageId)  return { currentVillageId: Number(villageId) }
+  if (wardId)     return { currentVillage: { wardId: Number(wardId) } }
+  if (districtId) return { currentVillage: { ward: { districtId: Number(districtId) } } }
+  if (regionId)   return { currentVillage: { ward: { district: { regionId: Number(regionId) } } } }
+  return {}
 }
 
 /** Pagination helper — clamps page/limit to sane bounds. */
@@ -264,8 +271,14 @@ router.get('/geo/districts', async (req, res) => {
 })
 
 router.get('/geo/wards', async (req, res) => {
-  const districtId = Number(req.query.districtId) || undefined
+  let districtId = Number(req.query.districtId) || undefined
   try {
+    // BUGFIX-9: a district_admin who omits districtId (the scoped
+    // Demographics/RITA/NIDA filter) gets wards for their own district
+    // only, instead of every ward in the country.
+    if (!districtId && req.user.role === 'district_admin') {
+      districtId = await getAdminDistrictId(req)
+    }
     // PATCH-2: deduplicate ward names within district
     const rawW = await prisma.ward.findMany({
       where:   districtId ? { districtId } : {},

@@ -232,9 +232,7 @@ if (_adminType) {
             <img src="/assets/court_of_arm.png" alt="CoA" className="w-28 h-28 object-contain drop-shadow-xl" />
           </div>
           <div className="w-20 h-0.5 bg-yellow-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-extrabold tracking-wide drop-shadow mb-1">TzCRVS ADMINS PORTAL</h1>
-          <p className="text-sm text-white/70 uppercase tracking-widest mb-0.5">Automated Digital Live Census</p>
-          <p className="text-xs text-white/50 font-mono mb-8">Research Model (V 1.X.X)</p>
+          <h1 className="text-2xl font-extrabold tracking-wide drop-shadow mb-8">TZCRVS</h1>
           <div className="w-20 h-20 rounded-2xl border-2 border-white/30 bg-transparent flex items-center justify-center mb-6">
             <img src="/assets/longo_nbs.png" alt="NBS" className="w-14 h-14 object-contain drop-shadow-xl" />
           </div>
