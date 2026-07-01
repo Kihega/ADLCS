@@ -32,6 +32,8 @@ import {
 import { useAuthStore } from '../store/authStore'
 import { apiLogout } from '../api/auth.api'
 import * as api from '../api/admin.api'
+// HOTFIX-LINT-1: destructure from namespace so named refs resolve
+const { apiGetSuperAdmins, apiDeleteSuperAdmin } = api
 
 import NBSHeader from '../components/NBSHeader'
 import GeoFilterBar from '../components/GeoFilterBar'
@@ -1143,13 +1145,20 @@ export default function AdminDashboard({ role }) {
 
         {/* ── Main content ──────────────────────────────────────────────── */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4">{/* HOTFIX-LINT-4 */}
             <div>
               <h1 className="text-white font-bold text-lg">{SECTION_TITLE[activeNav]}</h1>
               <p className="text-gray-500 text-xs">
                 {user?.fullName || user?.email} · {roleLabel}
               </p>
             </div>
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="p-2 rounded-lg border border-[#1a3060] text-gray-400 hover:text-[#00d4ff] hover:border-[#00d4ff]/40 transition-colors"
+            >
+              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
           </div>
           {renderSection()}
         </main>
@@ -1159,10 +1168,14 @@ export default function AdminDashboard({ role }) {
       {showNewReg && (
         <NewRegistrationModal
           role={role}
-          defaultTarget={activeNav === 'health_officers' ? 'hospital_officer' : activeNav === 'village_officers' ? 'village_officer' : undefined}
-          onClose={() => setShowNewReg(false)}
+          defaultTarget={
+            pendingRegTarget ||
+            (activeNav === 'health_officers'  ? 'hospital_officer'  :
+             activeNav === 'village_officers' ? 'village_officer'   : undefined)
+          }
+          onClose={() => { setShowNewReg(false); setPendingRegTarget(undefined) }}
         />
-      )}
+      )}{/* HOTFIX-LINT-3 */}
     </div>
   )
 }
