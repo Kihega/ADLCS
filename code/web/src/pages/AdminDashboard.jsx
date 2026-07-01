@@ -1075,7 +1075,7 @@ export default function AdminDashboard({ role }) {
       case 'village_officers':    return <OfficersSection kind="village" role={role} onRegister={() => setShowNewReg(true)} />
       case 'health_officers':     return <OfficersSection kind="health" role={role} onRegister={() => setShowNewReg(true)} />
       case 'manage_users':        return <ManageUsersSection currentUserId={user?.id}
-                                    onRegister={(target) => { setShowNewReg(true); setPendingRegTarget(target) }} />  {/* PATCH-EMAIL-2025 */}
+                                    onRegister={(target) => { setShowNewReg(true); setPendingRegTarget(target) }} />
       case 'marriages':           return <MarriagesSection />
       case 'audit_logs':          return <AuditLogsSection />
       case 'security_alerts':     return <AuditLogsSection securityOnly />

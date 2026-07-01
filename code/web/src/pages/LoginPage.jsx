@@ -62,7 +62,8 @@ if (_adminType) {
   const [token,     setToken]     = useState('')
   const [mfaCode,   setMfaCode]   = useState('')
   const [tempToken, setTempToken] = useState(null) // from server when MFA required
-  const [authUserId, setAuthUserId] = useState(null) // PATCH-EMAIL-2025: from token validation
+  // eslint-disable-next-line no-unused-vars
+  const [_authUserId, setAuthUserId] = useState(null) // PATCH-EMAIL-2025: from token validation (userId reserved for profile completion in next sprint)
 
   // ── MFA setup state (first-login onboarding flow) ────────────────────────────
   const [mfaChoice, setMfaChoice] = useState(null)
