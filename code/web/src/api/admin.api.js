@@ -38,6 +38,27 @@ export async function apiGetVillages(wardId) {
   return data
 }
 
+// ── Super admins [super_admin, min-1/max-3 guard] ──────────────────────────────
+// PATCH-EMAIL-2025
+export async function apiGetSuperAdmins(params = {}) {
+  const { data } = await apiClient.get('/admin/super-admins', { params })
+  return data
+}
+export async function apiCreateSuperAdmin(payload) {
+  const { data } = await apiClient.post('/admin/super-admins', payload)
+  return data
+}
+export async function apiDeleteSuperAdmin(id) {
+  const { data } = await apiClient.delete(`/admin/super-admins/${id}`)
+  return data
+}
+
+// ── Token validation ────────────────────────────────────────────────────────────
+export async function apiValidateToken(token) {
+  const { data } = await apiClient.post('/auth/validate-token', { token })
+  return data
+}
+
 // ── District admins [super_admin] ───────────────────────────────────────────────
 export async function apiGetDistrictAdmins(params = {}) {
   const { data } = await apiClient.get('/admin/district-admins', { params })

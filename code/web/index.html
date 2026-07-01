@@ -8,7 +8,14 @@
     <!-- Disallow indexing — internal government system -->
     <meta name="robots" content="noindex, nofollow" />
     <title>NBS-CRVS — NBS Tanzania</title>
-  </head>
+    <!-- PATCH-EMAIL-2025: light mode overrides — class toggled on <html> by useTheme() -->
+  <style>
+    .tzcrvs-light { filter: invert(1) hue-rotate(180deg); }
+    .tzcrvs-light img,
+    .tzcrvs-light video,
+    .tzcrvs-light [data-no-invert] { filter: invert(1) hue-rotate(180deg); }
+  </style>
+</head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>

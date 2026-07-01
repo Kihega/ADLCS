@@ -23,6 +23,7 @@ import {
 import { getRegions, getDistricts } from '../data/tanzania'
 import { useAuthStore }             from '../store/authStore'
 import { apiLogin, apiMfaVerify }   from '../api/auth.api'
+import { apiValidateToken }         from '../api/admin.api'  // PATCH-EMAIL-2025
 
 // ── Role → route mapping ───────────────────────────────────────────────────────
 const ROLE_ROUTE = {
@@ -61,6 +62,7 @@ if (_adminType) {
   const [token,     setToken]     = useState('')
   const [mfaCode,   setMfaCode]   = useState('')
   const [tempToken, setTempToken] = useState(null) // from server when MFA required
+  const [authUserId, setAuthUserId] = useState(null) // PATCH-EMAIL-2025: from token validation
 
   // ── MFA setup state (first-login onboarding flow) ────────────────────────────
   const [mfaChoice, setMfaChoice] = useState(null)
@@ -143,16 +145,20 @@ if (_adminType) {
     }
   }
 
-  /** First-login token flow — UI only (backend integration in Sprint 2) */
-  function handleToken() {
-    if (token.length < 6) { setError('Enter the authorization token'); return }
+  /** First-login token flow — wired to POST /api/auth/validate-token (PATCH-EMAIL-2025) */
+  async function handleToken() {
+    if (token.trim().length < 6) { setError('Enter the authorization token'); return }
     setError(''); setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      const detected = token.startsWith('SADM') ? 'super_admin' : 'district_admin'
-      setRoleType(detected)
+    try {
+      const result = await apiValidateToken(token.trim())
+      setRoleType(result.role)
+      setAuthUserId(result.userId)
       setMode('mfa_setup')
-    }, 1200)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid or expired authorization token.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   function handleMfaSetup() {
@@ -326,8 +332,10 @@ if (_adminType) {
                 <div className="p-3 rounded-lg border border-[#00d4ff]/20 bg-[#00d4ff]/5">
                   <p className="text-[#00d4ff] text-xs">
                     Enter the one-time token sent to your official email. Token prefix:{' '}
-                    <span className="font-mono">SADM-</span> (Super Admin) or{' '}
-                    <span className="font-mono">DADM-</span> (District Admin).
+                    <span className="font-mono">SADM-</span> (Super Admin),{' '}
+                    <span className="font-mono">DADM-</span> (District Admin),{' '}
+                    <span className="font-mono">VOFF-</span> (Village Officer), or{' '}
+                    <span className="font-mono">HOFF-</span> (Health Officer). {/* PATCH-EMAIL-2025 */}
                   </p>
                 </div>
                 <div>

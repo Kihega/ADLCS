@@ -15,7 +15,7 @@
  *                     Manage Users, or System Performance.
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'  // PATCH-EMAIL-2025: React needed by useTheme
 import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -26,7 +26,7 @@ import {
   Trash2, UserPlus, ChevronLeft, ChevronRight, Settings,
   ShieldAlert, Stethoscope,
   Map as MapIcon, Search, Cpu, LayoutDashboard, Landmark, Heart,
-  FileText,
+  FileText, Sun, Moon,  // PATCH-EMAIL-2025: light/dark mode toggle icons
 } from 'lucide-react'
 
 import { useAuthStore } from '../store/authStore'
@@ -152,12 +152,14 @@ function StatusSelect({ value, options, onChange }) {
   )
 }
 
-function IconButton({ onClick, title, danger, children }) {
+// PATCH-EMAIL-2025: added disabled prop for min-admin guard
+function IconButton({ onClick, title, danger, disabled, children }) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       title={title}
-      className={`p-1.5 rounded-lg border transition-colors ${
+      disabled={disabled}
+      className={`p-1.5 rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
         danger
           ? 'border-red-500/30 text-red-400 hover:bg-red-500/10'
           : 'border-[#1a3060] text-gray-400 hover:text-[#00d4ff] hover:border-[#00d4ff]/40'
@@ -540,16 +542,24 @@ const USER_ROLES = [
   { key: 'public_user',      label: 'Public Users', statuses: ['active', 'suspended'] },
 ]
 
-function ManageUsersSection({ currentUserId }) {
+// PATCH-EMAIL-2025: accepts onRegister so super_admin tab can open the modal
+function ManageUsersSection({ currentUserId, onRegister }) {
   const [tab, setTab] = useState('district_admin')
+  const [superAdminMeta, setSuperAdminMeta] = useState({ total: 0, canAdd: true, canDelete: false })
   const [data, setData] = useState({})
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
     setLoading(true)
-    api.apiGetUsers({ q })
-      .then(r => setData(r.data || {}))
+    Promise.all([
+      api.apiGetUsers({ q }),
+      apiGetSuperAdmins(),  // PATCH-EMAIL-2025: load count/guard flags
+    ])
+      .then(([usersRes, saRes]) => {
+        setData(usersRes.data || {})
+        setSuperAdminMeta({ total: saRes.total ?? 0, canAdd: saRes.canAdd ?? true, canDelete: saRes.canDelete ?? false })
+      })
       .catch(err => console.error('[users]', err))
       .finally(() => setLoading(false))
   }, [q])
@@ -566,8 +576,15 @@ function ManageUsersSection({ currentUserId }) {
   }
   async function remove(id, name) {
     if (!window.confirm(`Delete user "${name}"? This cannot be undone.`)) return
-    try { await api.apiDeleteUser(tab, id); load() }
-    catch (err) { alert(err.response?.data?.message || 'Delete failed') }
+    try {
+      // PATCH-EMAIL-2025: super_admin deletion uses the guarded endpoint
+      if (tab === 'super_admin') {
+        await apiDeleteSuperAdmin(id)
+      } else {
+        await api.apiDeleteUser(tab, id)
+      }
+      load()
+    } catch (err) { alert(err.response?.data?.message || 'Delete failed') }
   }
 
   return (
@@ -586,6 +603,19 @@ function ManageUsersSection({ currentUserId }) {
             </button>
           ))}
         </div>
+        {/* PATCH-EMAIL-2025: Add National Admin button — super_admin tab only */}
+        {tab === 'super_admin' && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-500">{superAdminMeta.total}/{3} admins</span>
+            <button
+              onClick={() => onRegister && onRegister('super_admin')}
+              disabled={!superAdminMeta.canAdd}
+              className="flex items-center gap-1.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#00d4ff]/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <UserPlus size={13} /> Add National Admin
+            </button>
+          </div>
+        )}
         <SearchBox value={q} onChange={setQ} placeholder="Search name / email…" />
       </div>
 
@@ -615,8 +645,16 @@ function ManageUsersSection({ currentUserId }) {
                         {s}
                       </button>
                     ))}
-                    <IconButton title="Delete" danger
+                    {/* PATCH-EMAIL-2025: disable delete if last super_admin or self */}
+                    <IconButton
+                      title={
+                        tab === 'super_admin' && !superAdminMeta.canDelete
+                          ? 'Cannot delete — system must retain at least 1 Super Admin'
+                          : 'Delete'
+                      }
+                      danger
                       onClick={() => remove(r.id, r.fullName || r.displayName)}
+                      disabled={tab === 'super_admin' && (!superAdminMeta.canDelete || r.id === currentUserId)}
                     >
                       <Trash2 size={13} />
                     </IconButton>
@@ -968,6 +1006,24 @@ function NIDASection({ role }) {
 // BUGFIX-10: Migration Trends removed; System Log Reports / Security
 // Alerts are now Super-Admin-only (District Admin dashboard no longer
 // shows these two menu buttons).
+// ── useTheme — persists 'dark'/'light' in localStorage, scoped to this device/session ──
+// PATCH-EMAIL-2025
+function useTheme() {
+  const THEME_KEY = 'tzcrvs_theme'
+  const [theme, setThemeRaw] = React.useState(
+    () => localStorage.getItem(THEME_KEY) || 'dark'
+  )
+  function setTheme(t) {
+    setThemeRaw(t)
+    localStorage.setItem(THEME_KEY, t)
+    document.documentElement.classList.toggle('tzcrvs-light', t === 'light')
+  }
+  React.useEffect(() => {
+    document.documentElement.classList.toggle('tzcrvs-light', theme === 'light')
+  }, [theme])
+  return [theme, setTheme]
+}
+
 const NAV = [
   { key: 'dashboard',           label: 'Dashboard',            Icon: LayoutDashboard, roles: ['super_admin', 'district_admin'] },
   { key: 'demographics',        label: 'Demographics',         Icon: MapIcon,         roles: ['super_admin', 'district_admin'] },
@@ -998,9 +1054,10 @@ export default function AdminDashboard({ role }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeNav,   setActiveNav]   = useState('dashboard')
-  const [showChangePwd, setShowChangePwd] = useState(false)
-  const [showNewReg,    setShowNewReg]    = useState(false)
-  const [loggingOut,    setLoggingOut]    = useState(false)
+  const [showChangePwd, setShowChangePwd]       = useState(false)
+  const [showNewReg,    setShowNewReg]           = useState(false)
+  const [pendingRegTarget, setPendingRegTarget] = useState(undefined)  // PATCH-EMAIL-2025
+  const [loggingOut,    setLoggingOut]           = useState(false)
 
   const nav = NAV.filter(n => n.roles.includes(role))
 
@@ -1017,7 +1074,8 @@ export default function AdminDashboard({ role }) {
       case 'district_admins':     return <DistrictAdminsSection onRegister={() => setShowNewReg(true)} />
       case 'village_officers':    return <OfficersSection kind="village" role={role} onRegister={() => setShowNewReg(true)} />
       case 'health_officers':     return <OfficersSection kind="health" role={role} onRegister={() => setShowNewReg(true)} />
-      case 'manage_users':        return <ManageUsersSection currentUserId={user?.id} />
+      case 'manage_users':        return <ManageUsersSection currentUserId={user?.id}
+                                    onRegister={(target) => { setShowNewReg(true); setPendingRegTarget(target) }} />  {/* PATCH-EMAIL-2025 */}
       case 'marriages':           return <MarriagesSection />
       case 'audit_logs':          return <AuditLogsSection />
       case 'security_alerts':     return <AuditLogsSection securityOnly />
@@ -1029,6 +1087,7 @@ export default function AdminDashboard({ role }) {
   }
 
   const roleLabel = role === 'super_admin' ? 'Super Administrator' : 'District Administrator'
+  const [theme, setTheme] = useTheme()  // PATCH-EMAIL-2025
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#060f1e]">

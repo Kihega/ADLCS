@@ -50,6 +50,8 @@ const { prisma } = require('../lib/prisma')
 const { getRedis, isRedisReady } = require('../lib/redis')
 const { requireAuth, requireRole } = require('../middleware/auth')
 
+const { sendAuthTokenEmail } = require('../lib/email')
+
 const router = Router()
 router.use(requireAuth)
 router.use(requireRole('super_admin', 'district_admin'))
@@ -369,6 +371,14 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
     })
     await logAction(req, { action: 'create_district_admin', targetTable: 'district_admins', targetId: created.id, newData: created })
+    // PATCH-EMAIL-2025: send one-time token to newly registered district admin
+    sendAuthTokenEmail({
+      to:        email,
+      fullName,
+      token,
+      role:      'district_admin',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    }).catch(err => console.error('[email/district-admin]', err.message))
     return res.json({ success: true, data: { ...created, authToken: token } })
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, NIDA number, or employee ID already exists' })
@@ -625,6 +635,107 @@ router.delete('/health-officers/:id', async (req, res) => {
     return res.json({ success: true })
   } catch (err) {
     console.error('[admin/delete-hospital-officer]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+
+// ── SUPER ADMINS — [super_admin only, min-1 / max-3 guard] ───────────────────
+// PATCH-EMAIL-2025
+
+const SUPER_ADMIN_MIN = 1
+const SUPER_ADMIN_MAX = 3
+
+router.get('/super-admins', requireRole('super_admin'), async (req, res) => {
+  const { q } = req.query
+  const take   = Math.min(parseInt(req.query.limit) || 25, 100)
+  const search = q
+    ? { OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] }
+    : {}
+  try {
+    const [rows, total] = await Promise.all([
+      prisma.superAdmin.findMany({
+        where:   search,
+        take,
+        orderBy: { createdAt: 'desc' },
+        select:  { id: true, employeeId: true, fullName: true, email: true, mobile: true,
+                   department: true, status: true, mfaEnabled: true, createdAt: true, lastLogin: true },
+      }),
+      prisma.superAdmin.count(),
+    ])
+    return res.json({ success: true, data: rows, total, canAdd: total < SUPER_ADMIN_MAX, canDelete: total > SUPER_ADMIN_MIN })
+  } catch (err) {
+    console.error('[admin/super-admins]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
+  const total = await prisma.superAdmin.count()
+  if (total >= SUPER_ADMIN_MAX) {
+    return res.status(409).json({
+      success: false,
+      message: `System already has the maximum of ${SUPER_ADMIN_MAX} Super Administrators.`,
+    })
+  }
+  const { fullName, email, nidaNumber, employeeId, mobile, department } = req.body
+  if (!fullName || !email || !nidaNumber || !employeeId) {
+    return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  }
+  try {
+    const token     = generateAuthToken('SADM')
+    const tokenHash = await bcrypt.hash(token, 10)
+    const created   = await prisma.superAdmin.create({
+      data: {
+        fullName, email, nidaNumber, employeeId,
+        mobile:     mobile     || undefined,
+        department: department || undefined,
+        status:            'pending',
+        loginTokenHash:    tokenHash,
+        loginTokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        createdById:       req.user.id,
+      },
+      select: { id: true, fullName: true, email: true, employeeId: true, status: true },
+    })
+    await logAction(req, {
+      action: 'create_super_admin', targetTable: 'super_admins', targetId: created.id,
+      newData: created, severity: 'warning',
+    })
+    // PATCH-EMAIL-2025: send one-time token to newly registered super admin
+    sendAuthTokenEmail({
+      to:        email,
+      fullName,
+      token,
+      role:      'super_admin',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    }).catch(err => console.error('[email/super-admin]', err.message))
+    return res.json({ success: true, data: { ...created, authToken: token } })
+  } catch (err) {
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, NIDA number, or employee ID already exists' })
+    console.error('[admin/create-super-admin]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+router.delete('/super-admins/:id', requireRole('super_admin'), async (req, res) => {
+  const { id } = req.params
+  if (id === req.user.id) {
+    return res.status(400).json({ success: false, message: 'You cannot delete your own account.' })
+  }
+  const total = await prisma.superAdmin.count()
+  if (total <= SUPER_ADMIN_MIN) {
+    return res.status(409).json({
+      success: false,
+      message: `Cannot delete — the system must retain at least ${SUPER_ADMIN_MIN} Super Administrator.`,
+    })
+  }
+  try {
+    await prisma.superAdmin.delete({ where: { id } })
+    await logAction(req, { action: 'delete_super_admin', targetTable: 'super_admins', targetId: id, severity: 'warning' })
+    return res.json({ success: true })
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ success: false, message: 'Not found' })
+    console.error('[admin/delete-super-admin]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })

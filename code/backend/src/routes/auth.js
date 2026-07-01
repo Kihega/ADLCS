@@ -179,4 +179,57 @@ router.post('/change-password', requireAuth, async (req, res) => {
   }
 })
 
+
+// ── POST /api/auth/validate-token ─────────────────────────────────────────────
+// PATCH-EMAIL-2025
+// Called by the LoginPage token-authorization flow.
+// Body: { token: string }
+// Returns: { valid: true, role, userId } on success, 401 on failure.
+router.post('/validate-token', authLimiter, async (req, res) => {
+  const { token } = req.body
+  if (!token || typeof token !== 'string' || token.trim().length < 6) {
+    return res.status(400).json({ success: false, message: 'token is required' })
+  }
+  const t = token.trim().toUpperCase()
+
+  // Determine which table to search based on prefix
+  const ROLE_TABLES = [
+    { prefix: 'SADM', model: 'superAdmin',    role: 'super_admin' },
+    { prefix: 'DADM', model: 'districtAdmin', role: 'district_admin' },
+    { prefix: 'VOFF', model: 'villageOfficer', role: 'village_officer' },
+    { prefix: 'HOFF', model: 'hospitalOfficer', role: 'hospital_officer' },
+  ]
+
+  const match = ROLE_TABLES.find(r => t.startsWith(r.prefix))
+  if (!match) {
+    return res.status(401).json({ success: false, message: 'Unknown token prefix. Expected SADM-, DADM-, VOFF-, or HOFF-.' })
+  }
+
+  try {
+    const bcrypt = require('bcryptjs')
+    // Fetch all candidates with a non-expired token (avoid hashing every row)
+    const candidates = await prisma[match.model].findMany({
+      where: {
+        loginTokenExpires: { gte: new Date() },
+        loginTokenHash:    { not: null },
+      },
+      select: { id: true, loginTokenHash: true, status: true },
+    })
+
+    let found = null
+    for (const c of candidates) {
+      if (await bcrypt.compare(t, c.loginTokenHash)) { found = c; break }
+    }
+
+    if (!found) {
+      return res.status(401).json({ success: false, message: 'Invalid or expired authorization token.' })
+    }
+
+    return res.json({ success: true, role: match.role, userId: found.id })
+  } catch (err) {
+    console.error('[auth/validate-token]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
 module.exports = router
