@@ -5,6 +5,11 @@
  * Templates match CERTIFICATE_AND_ID_FORMATS.txt spec:
  *   - Birth Certificate: cream/golden, numbered table, Cap 108 R.E. 2002
  *   - Death Certificate: white, coat of arms watermark, numbered table
+ *   - Marriage Certificate: same numbered-table format, RITA disclaimer
+ *
+ * Every generated certificate carries a disclaimer that it is a COPY ONLY
+ * and must be signed/stamped by the relevant authority (RITA for birth,
+ * death and marriage; NIDA for NIN ID cards) to be valid for official use.
  *
  * PDF workflow:
  *   1. Build HTML string from data
@@ -16,7 +21,7 @@
 import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system/legacy'
-import type { LocalBirth, LocalDeath } from './localDb'
+import type { LocalBirth, LocalDeath, LocalMarriage } from './localDb'
 
 // ─── Format helpers ────────────────────────────────────────────────────────────
 function fmtDate(d: string): string {
@@ -155,6 +160,10 @@ export function buildBirthCertHtml(b: LocalBirth): string {
 
     <div class="footer">
       <div class="not-proof">"This Certificate is not proof of Citizenship"</div>
+      <div class="copy-disclaimer" style="font-size:7.5pt;color:#6b5d33;text-align:center;margin-top:2mm;">
+        This is a copy only. To be valid for official Government use, it must be signed and stamped
+        by the Registration Insolvency and Trusteeship Agency (RITA).
+      </div>
       <div class="date-line">Dated this &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; day of &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${new Date().getFullYear()}</div>
       <div class="footer-row">
         <div class="qr-block">
@@ -246,6 +255,10 @@ export function buildDeathCertHtml(d: LocalDeath): string {
       <tr><td class="fn">(14)</td><td class="fk">National ID Number (NIN)</td><td class="fv" style="font-size:11pt;font-weight:900;letter-spacing:2px;">${d.nationalId || '—'}</td></tr>
     </table>
     <div class="footer">
+      <div class="copy-disclaimer" style="font-size:7.5pt;color:#555;text-align:center;margin-bottom:2mm;">
+        This is a copy only. To be valid for official Government use, it must be signed and stamped
+        by the Registration Insolvency and Trusteeship Agency (RITA).
+      </div>
       <div class="date-line">Dated this &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; day of &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${new Date().getFullYear()}</div>
       <div class="footer-row">
         <div>
@@ -286,6 +299,109 @@ export async function generateDeathPdf(death: LocalDeath): Promise<string> {
   const html = buildDeathCertHtml(death)
   const { uri } = await Print.printToFileAsync({ html, base64: false })
   const dest = CERT_DIR + `death_${death.certNo.replace(/ /g, '_').replace(/-/g, '_')}.pdf`
+  await FileSystem.copyAsync({ from: uri, to: dest })
+  return dest
+}
+
+// ─── Marriage Certificate HTML ─────────────────────────────────────────────────
+// Reuses the same numbered-table layout as the death certificate, customized
+// for marriage fields, with the same copy-only / RITA-signature disclaimer.
+export function buildMarriageCertHtml(m: LocalMarriage): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fff; font-family: 'Times New Roman', Times, serif; }
+  .page { width: 210mm; min-height: 297mm; padding: 18mm 20mm; position: relative; overflow: hidden; }
+  .border-outer { position: absolute; top: 8mm; left: 8mm; right: 8mm; bottom: 8mm; border: 4px double #555; pointer-events: none; }
+  .border-inner { position: absolute; top: 11.5mm; left: 11.5mm; right: 11.5mm; bottom: 11.5mm; border: 1px solid #888; pointer-events: none; }
+  .watermark {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%) rotate(-35deg);
+    font-size: 80pt; color: rgba(180,100,150,0.04);
+    font-weight: 900; white-space: nowrap; pointer-events: none; z-index: 0;
+  }
+  .content { position: relative; z-index: 1; }
+  .header { text-align: center; padding-bottom: 6mm; border-bottom: 2px solid #333; }
+  .coat-circle { width: 70px; height: 70px; border-radius: 50%; background: #9d174d; display: inline-flex; align-items: center; justify-content: center; font-size: 36px; margin-bottom: 6px; border: 3px solid #888; }
+  .country { font-size: 13pt; font-weight: 900; color: #9d174d; letter-spacing: 3px; margin-top: 4px; }
+  .cert-type { font-size: 22pt; font-weight: 900; color: #9d174d; letter-spacing: 5px; margin: 6px 0; }
+  .auth-text { font-size: 8.5pt; color: #333; font-style: italic; line-height: 1.5; max-width: 120mm; margin: 0 auto; }
+  table { width: 100%; border-collapse: collapse; margin-top: 7mm; font-size: 10pt; }
+  td { border: 1px solid #888; padding: 5px 8px; vertical-align: top; }
+  .fn { width: 9mm; text-align: center; font-weight: 700; background: #eee; font-size: 9pt; }
+  .fk { width: 42%; background: #f5f5f5; font-weight: 700; color: #222; }
+  .fv { color: #111; font-style: italic; font-size: 10.5pt; font-weight: 600; }
+  .footer { margin-top: 8mm; }
+  .footer-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10mm; }
+  .cert-serial { font-size: 16pt; font-weight: 900; letter-spacing: 4px; color: #9d174d; }
+  .sig-block { text-align: center; min-width: 60mm; }
+  .sig-line { border-bottom: 1px solid #333; margin-bottom: 4px; min-width: 60mm; }
+  .sig-title { font-size: 8.5pt; }
+  .qr-box { border: 1px solid #ccc; padding: 4px; font-family: monospace; font-size: 6pt; word-break: break-all; max-width: 30mm; }
+  .date-line { font-size: 9.5pt; margin-top: 4mm; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="border-outer"></div>
+  <div class="border-inner"></div>
+  <div class="watermark">💍</div>
+  <div class="content">
+    <div class="header">
+      <div class="coat-circle">🏛</div>
+      <div class="country">THE UNITED REPUBLIC OF TANZANIA</div>
+      <div class="cert-type">CERTIFICATE OF MARRIAGE</div>
+      <div class="auth-text">
+        Certified under the Law of Marriage Act (Cap 29 R.E. 2019)
+        to be a true copy of an entry in the Registrar General's custody.
+      </div>
+    </div>
+    <table>
+      <tr><td class="fn">(1)</td><td class="fk">Registry Number</td><td class="fv">${m.certNo}</td></tr>
+      <tr><td class="fn">(2)</td><td class="fk">Husband's Name</td><td class="fv">${m.husbandName.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(3)</td><td class="fk">Husband's NIN</td><td class="fv">${m.husbandNid || '—'}</td></tr>
+      <tr><td class="fn">(4)</td><td class="fk">Wife's Name</td><td class="fv">${m.wifeName.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(5)</td><td class="fk">Wife's NIN</td><td class="fv">${m.wifeNid || '—'}</td></tr>
+      <tr><td class="fn">(6)</td><td class="fk">Date of Marriage</td><td class="fv">${fmtDate(m.marriageDate)}</td></tr>
+      <tr><td class="fn">(7)</td><td class="fk">Place of Marriage</td><td class="fv">${m.marriagePlace.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(8)</td><td class="fk">Type of Marriage</td><td class="fv">${m.marriageType.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(9)</td><td class="fk">Witness 1</td><td class="fv">${m.witness1Name.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(10)</td><td class="fk">Witness 2</td><td class="fv">${m.witness2Name.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(11)</td><td class="fk">Registering Officer</td><td class="fv">${m.officerName.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(12)</td><td class="fk">Date of Registration</td><td class="fv">${fmtDate(m.registeredAt)}</td></tr>
+    </table>
+    <div class="footer">
+      <div class="copy-disclaimer" style="font-size:7.5pt;color:#555;text-align:center;margin-bottom:2mm;">
+        This is a copy only. To be valid for official Government use, it must be signed and stamped
+        by the Registration Insolvency and Trusteeship Agency (RITA).
+      </div>
+      <div class="date-line">Dated this &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; day of &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${new Date().getFullYear()}</div>
+      <div class="footer-row">
+        <div>
+          <div class="qr-box">VERIFY: /api/verify/marriage/${m.certNo.replace(/ /g, '-')}</div>
+          <div style="font-size:8pt;color:#777;margin-top:3px;">Scan to verify</div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-line">&nbsp;</div>
+          <div class="sig-title">REGISTRAR GENERAL<br>NATIONAL BUREAU OF STATISTICS</div>
+        </div>
+        <div class="cert-serial">${m.certNo}</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>`
+}
+
+export async function generateMarriagePdf(marriage: LocalMarriage): Promise<string> {
+  await ensureCertDir()
+  const html = buildMarriageCertHtml(marriage)
+  const { uri } = await Print.printToFileAsync({ html, base64: false })
+  const dest = CERT_DIR + `marriage_${marriage.certNo.replace(/ /g, '_').replace(/-/g, '_')}.pdf`
   await FileSystem.copyAsync({ from: uri, to: dest })
   return dest
 }

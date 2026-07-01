@@ -13,16 +13,21 @@ import { useState, useEffect } from 'react'
 import { X, RefreshCw, CheckCircle, AlertCircle, Copy } from 'lucide-react'
 import {
   apiCreateDistrictAdmin, apiCreateVillageOfficer, apiCreateHealthOfficer,
+  apiCreateSuperAdmin, apiGetSuperAdmins,
   apiGetRegions, apiGetDistricts, apiGetWards, apiGetVillages,
-} from '../api/admin.api'
+} from '../api/admin.api'  // PATCH-EMAIL-2025
 
 export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
   const isSuperAdmin = role === 'super_admin'
+  // PATCH-EMAIL-2025: defaultTarget can now be 'super_admin' when opened from Manage Users
   const [target, setTarget] = useState(defaultTarget || (isSuperAdmin ? 'district_admin' : 'village_officer'))
+  // Super admin count guard — loaded when defaultTarget === 'super_admin'
+  const [superAdminMeta, setSuperAdminMeta] = useState(null)
 
   const [form, setForm] = useState({
     fullName: '', email: '', nidaNumber: '', employeeId: '', mobile: '',
-    regionId: '', districtId: '', wardId: '', villageId: '',
+    department: '',
+    regionId: '', districtId: '', wardId: '', villageId: '',  // PATCH-EMAIL-2025
   })
   const [regions,   setRegions]   = useState([])
   const [districts, setDistricts] = useState([])
@@ -39,6 +44,13 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
   useEffect(() => {
     if (isSuperAdmin) apiGetRegions().then(r => setRegions(r.data || [])).catch(() => {})
   }, [isSuperAdmin])
+
+  // PATCH-EMAIL-2025: fetch super admin count to enforce max-3 guard in the UI
+  useEffect(() => {
+    if (target === 'super_admin') {
+      apiGetSuperAdmins().then(r => setSuperAdminMeta(r)).catch(() => {})
+    }
+  }, [target])
 
   useEffect(() => {
     const fetch = form.regionId
@@ -68,7 +80,14 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
     setError(''); setLoading(true)
     try {
       let res
-      if (target === 'district_admin') {
+      if (target === 'super_admin') {
+        // PATCH-EMAIL-2025: create a new super admin (min-1/max-3 enforced server-side)
+        res = await apiCreateSuperAdmin({
+          fullName: form.fullName, email: form.email, nidaNumber: form.nidaNumber,
+          employeeId: form.employeeId, mobile: form.mobile,
+          department: form.department || undefined,
+        })
+      } else if (target === 'district_admin') {
         res = await apiCreateDistrictAdmin({
           fullName: form.fullName, email: form.email, nidaNumber: form.nidaNumber,
           employeeId: form.employeeId, mobile: form.mobile,
@@ -105,8 +124,12 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
   const sel = 'w-full bg-[#060f1e] border border-[#1e3a5f] rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-[#00d4ff]/50 transition-colors disabled:opacity-40'
   const lbl = 'text-[10px] text-gray-400 uppercase tracking-widest mb-1.5 block'
 
+  // PATCH-EMAIL-2025: super_admin can now also register another super_admin
   const tabs = isSuperAdmin
-    ? [{ key: 'district_admin', label: 'District Admin' }]
+    ? [
+        { key: 'super_admin',    label: 'National Admin' },
+        { key: 'district_admin', label: 'District Admin' },
+      ]
     : [
         { key: 'village_officer',  label: 'Village Officer' },
         { key: 'hospital_officer', label: 'Health Officer' },
@@ -226,6 +249,22 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
               </div>
             )}
 
+            {/* PATCH-EMAIL-2025: Department field (shown for super_admin and district_admin) */}
+            {(target === 'super_admin' || target === 'district_admin') && (
+              <div>
+                <label className={lbl}>Department{target === 'super_admin' ? '' : ' (optional)'}</label>
+                <input className={inp} value={form.department} onChange={e => set('department', e.target.value)}
+                  placeholder={target === 'super_admin' ? 'e.g. Statistics & Data Management' : 'e.g. Civil Registration'} />
+              </div>
+            )}
+
+            {/* PATCH-EMAIL-2025: max-3 guard notice for super_admin */}
+            {target === 'super_admin' && superAdminMeta && !superAdminMeta.canAdd && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-400">
+                The system already has the maximum of 3 Super Administrators and cannot accept more.
+              </div>
+            )}
+
             {error && (
               <p className="text-red-400 text-[10px] flex items-center gap-1">
                 <AlertCircle size={10} />{error}
@@ -234,9 +273,10 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
 
             <button
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || (target === 'super_admin' && superAdminMeta && !superAdminMeta.canAdd)}
               className="w-full py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-[#00ff9d] to-[#00bb6e] text-[#060f1e] flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
             >
+              {/* PATCH-EMAIL-2025 disabled guard */}
               {loading ? <RefreshCw size={15} className="animate-spin" /> : 'Register'}
             </button>
           </div>

@@ -16,6 +16,7 @@
 const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
+const { uploadBase64 } = require('../utils/cloudinaryUpload')
 
 const router = Router()
 router.use(requireAuth)
@@ -320,6 +321,71 @@ router.post('/migration', async (req, res) => {
 })
 
 // ── GET /api/village/records ──────────────────────────────────────────────────
+// ── GET /api/village/citizen-lookup ────────────────────────────────────
+// Village Officer searches an existing citizen by National ID (NIN). Results
+// are STRICTLY scoped to the officer's own village — a citizen registered in
+// a different village is treated as not-found so officers can never browse
+// another village's residents.
+router.get('/citizen-lookup', async (req, res) => {
+  const { id: officerId } = req.user
+  const { nationalId } = req.query
+  if (!nationalId || typeof nationalId !== 'string' || !nationalId.trim()) {
+    return res.status(400).json({ success: false, message: 'nationalId query param required' })
+  }
+  try {
+    const officer = await prisma.villageOfficer.findUnique({
+      where: { id: officerId },
+      select: { villageId: true, village: { select: { name: true } } },
+    })
+    if (!officer) return res.status(404).json({ success: false, message: 'Officer not found' })
+
+    const citizen = await prisma.citizen.findFirst({
+      where: {
+        nationalId: nationalId.trim(),
+        currentVillageId: officer.villageId ?? -1,
+      },
+      select: {
+        id: true,
+        nationalId: true,
+        firstName: true,
+        middleName: true,
+        surname: true,
+        gender: true,
+        dateOfBirth: true,
+        age: true,
+        vitalStatus: true,
+        maritalStatus: true,
+        photoUrl: true,
+        idCardIssued: true,
+        idCardExpires: true,
+        streetName: true,
+        houseRegNumber: true,
+        educationLevel: true,
+        registeredAt: true,
+      },
+    })
+
+    if (!citizen) {
+      return res.status(404).json({
+        success: false,
+        message: 'No citizen with this NIN was found registered in your village.',
+      })
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        ...citizen,
+        ninCertificateIssued: !!citizen.idCardIssued,
+        villageName: officer.village?.name ?? null,
+      },
+    })
+  } catch (err) {
+    console.error('[village/citizen-lookup]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
 router.get('/records', async (req, res) => {
   const { id:officerId } = req.user
   try {
@@ -348,6 +414,20 @@ router.get('/records', async (req, res) => {
         label:`${c.firstName} ${c.surname}`, sub:c.nationalId||'—',
         date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
     }
+
+    // Marriages
+    const marriages = await prisma.marriage.findMany({
+      where:{ registeredById:officerId },
+      orderBy:{ registeredAt:'desc' }, take:30,
+      select:{ id:true, marriageCertNo:true, husbandNid:true, wifeNid:true, registeredAt:true },
+    }).catch(()=>[])
+    for (const m of marriages) {
+      out.push({ id:`m-${m.id}`, type:'marriages', icon:'💍', color:'#e11d48',
+        label:`${m.husbandNid} & ${m.wifeNid}`, sub:`Cert: ${m.marriageCertNo}`,
+        date: new Date(m.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
+    }
+
+    out.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
     return res.json({ success:true, data:out })
   } catch (err) {
@@ -392,7 +472,7 @@ router.get('/profile', async (req, res) => {
 // Creates Citizen record, links Birth.childCitizenId, returns NIN.
 router.post('/nin-issue', async (req, res) => {
   const { id: officerId } = req.user
-  const { birthId, birthCertNo } = req.body
+  const { birthId, birthCertNo, photoBase64 } = req.body
   if (!birthId && !birthCertNo) {
     return res.status(400).json({ success:false, message:'birthId or birthCertNo required' })
   }
@@ -443,6 +523,19 @@ router.post('/nin-issue', async (req, res) => {
     const expiresDate = new Date()
     expiresDate.setFullYear(expiresDate.getFullYear() + 10)
 
+    // Upload the citizen photo captured on the mobile app to Cloudinary.
+    // Best-effort: if Cloudinary isn't configured or the upload fails, we
+    // still issue the NIN — a missing photo shouldn't block registration —
+    // but we log it loudly so it can be backfilled.
+    let photoUrl = null
+    if (photoBase64 && typeof photoBase64 === 'string' && photoBase64.startsWith('data:')) {
+      try {
+        photoUrl = await uploadBase64(photoBase64, 'tzcrvs/citizen_photos', nationalId, 'image')
+      } catch (uploadErr) {
+        console.error('[village/nin-issue] Cloudinary photo upload failed:', uploadErr.message)
+      }
+    }
+
     const citizen = await prisma.citizen.create({
       data: {
         nationalId,
@@ -455,6 +548,7 @@ router.post('/nin-issue', async (req, res) => {
         vitalStatus:      'alive',
         idCardIssued:     issuedDate,
         idCardExpires:    expiresDate,
+        photoUrl:         photoUrl ?? undefined,
         fatherCitizenId:  birth.fatherCitizenId ?? undefined,
         motherCitizenId:  birth.motherCitizenId ?? undefined,
         currentVillageId: officer?.villageId    ?? undefined,

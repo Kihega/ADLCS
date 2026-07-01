@@ -15,7 +15,7 @@
  *                     Manage Users, or System Performance.
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'  // PATCH-EMAIL-2025: React needed by useTheme
 import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -24,14 +24,16 @@ import {
   Menu, X, LogOut, Shield, Users, RefreshCw, CheckCircle2,
   AlertTriangle, Database, Server, Globe, UserCheck, UserX,
   Trash2, UserPlus, ChevronLeft, ChevronRight, Settings,
-  ShieldAlert, ArrowLeftRight, Stethoscope,
+  ShieldAlert, Stethoscope,
   Map as MapIcon, Search, Cpu, LayoutDashboard, Landmark, Heart,
-  FileText,
+  FileText, Sun, Moon,  // PATCH-EMAIL-2025: light/dark mode toggle icons
 } from 'lucide-react'
 
 import { useAuthStore } from '../store/authStore'
 import { apiLogout } from '../api/auth.api'
 import * as api from '../api/admin.api'
+// HOTFIX-LINT-1: destructure from namespace so named refs resolve
+const { apiGetSuperAdmins, apiDeleteSuperAdmin } = api
 
 import NBSHeader from '../components/NBSHeader'
 import GeoFilterBar from '../components/GeoFilterBar'
@@ -152,12 +154,14 @@ function StatusSelect({ value, options, onChange }) {
   )
 }
 
-function IconButton({ onClick, title, danger, children }) {
+// PATCH-EMAIL-2025: added disabled prop for min-admin guard
+function IconButton({ onClick, title, danger, disabled, children }) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       title={title}
-      className={`p-1.5 rounded-lg border transition-colors ${
+      disabled={disabled}
+      className={`p-1.5 rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
         danger
           ? 'border-red-500/30 text-red-400 hover:bg-red-500/10'
           : 'border-[#1a3060] text-gray-400 hover:text-[#00d4ff] hover:border-[#00d4ff]/40'
@@ -540,16 +544,24 @@ const USER_ROLES = [
   { key: 'public_user',      label: 'Public Users', statuses: ['active', 'suspended'] },
 ]
 
-function ManageUsersSection({ currentUserId }) {
+// PATCH-EMAIL-2025: accepts onRegister so super_admin tab can open the modal
+function ManageUsersSection({ currentUserId, onRegister }) {
   const [tab, setTab] = useState('district_admin')
+  const [superAdminMeta, setSuperAdminMeta] = useState({ total: 0, canAdd: true, canDelete: false })
   const [data, setData] = useState({})
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
     setLoading(true)
-    api.apiGetUsers({ q })
-      .then(r => setData(r.data || {}))
+    Promise.all([
+      api.apiGetUsers({ q }),
+      apiGetSuperAdmins(),  // PATCH-EMAIL-2025: load count/guard flags
+    ])
+      .then(([usersRes, saRes]) => {
+        setData(usersRes.data || {})
+        setSuperAdminMeta({ total: saRes.total ?? 0, canAdd: saRes.canAdd ?? true, canDelete: saRes.canDelete ?? false })
+      })
       .catch(err => console.error('[users]', err))
       .finally(() => setLoading(false))
   }, [q])
@@ -566,8 +578,15 @@ function ManageUsersSection({ currentUserId }) {
   }
   async function remove(id, name) {
     if (!window.confirm(`Delete user "${name}"? This cannot be undone.`)) return
-    try { await api.apiDeleteUser(tab, id); load() }
-    catch (err) { alert(err.response?.data?.message || 'Delete failed') }
+    try {
+      // PATCH-EMAIL-2025: super_admin deletion uses the guarded endpoint
+      if (tab === 'super_admin') {
+        await apiDeleteSuperAdmin(id)
+      } else {
+        await api.apiDeleteUser(tab, id)
+      }
+      load()
+    } catch (err) { alert(err.response?.data?.message || 'Delete failed') }
   }
 
   return (
@@ -586,6 +605,19 @@ function ManageUsersSection({ currentUserId }) {
             </button>
           ))}
         </div>
+        {/* PATCH-EMAIL-2025: Add National Admin button — super_admin tab only */}
+        {tab === 'super_admin' && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-500">{superAdminMeta.total}/{3} admins</span>
+            <button
+              onClick={() => onRegister && onRegister('super_admin')}
+              disabled={!superAdminMeta.canAdd}
+              className="flex items-center gap-1.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#00d4ff]/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <UserPlus size={13} /> Add National Admin
+            </button>
+          </div>
+        )}
         <SearchBox value={q} onChange={setQ} placeholder="Search name / email…" />
       </div>
 
@@ -615,8 +647,16 @@ function ManageUsersSection({ currentUserId }) {
                         {s}
                       </button>
                     ))}
-                    <IconButton title="Delete" danger
+                    {/* PATCH-EMAIL-2025: disable delete if last super_admin or self */}
+                    <IconButton
+                      title={
+                        tab === 'super_admin' && !superAdminMeta.canDelete
+                          ? 'Cannot delete — system must retain at least 1 Super Admin'
+                          : 'Delete'
+                      }
+                      danger
                       onClick={() => remove(r.id, r.fullName || r.displayName)}
+                      disabled={tab === 'super_admin' && (!superAdminMeta.canDelete || r.id === currentUserId)}
                     >
                       <Trash2 size={13} />
                     </IconButton>
@@ -723,18 +763,8 @@ function SystemPerformanceSection() {
         <StatCard Icon={Globe} label="Node Runtime" value={perf?.nodeVersion || '—'} accent="text-purple-400" />
       </div>
 
-      <Card>
-        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Table Record Counts</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {Object.entries(perf?.tableCounts || {}).map(([k, v]) => (
-            <div key={k} className="bg-[#060f1e] border border-[#1a3060] rounded-lg p-3 text-center">
-              <p className="text-gray-500 text-[10px] uppercase tracking-wider">{k}</p>
-              <p className="text-white font-bold text-lg">{v.toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
-
+      {/* BUGFIX-10: unused "Table Record Counts" card grid removed — System
+          Performance now shows only the first row of live health cards. */}
       <button onClick={load} className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-[#00d4ff] border border-[#1a3060] px-3 py-1.5 rounded-lg">
         <RefreshCw size={12} /> Re-run health check
       </button>
@@ -742,59 +772,9 @@ function SystemPerformanceSection() {
   )
 }
 
-// ── Section: Migrations ──────────────────────────────────────────────────────
-
-function MigrationsSection() {
-  const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [status, setStatus] = useState('all')
-  const [loading, setLoading] = useState(true)
-  const limit = 10
-
-  const load = useCallback(() => {
-    setLoading(true)
-    api.apiGetMigrations({ page, limit, ...(status !== 'all' ? { status } : {}) })
-      .then(r => { setRows(r.data || []); setTotal(r.total || 0) })
-      .catch(err => console.error('[migrations]', err))
-      .finally(() => setLoading(false))
-  }, [page, status])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load() }, [load])
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <ArrowLeftRight size={14} className="text-[#00d4ff]" />
-        <StatusSelect value={status} options={['all', 'pending', 'confirmed', 'cancelled', 'expired']} onChange={v => { setPage(1); setStatus(v) }} />
-      </div>
-
-      <Card className="p-0 overflow-x-auto">
-        <table className="w-full">
-          <thead><tr className="border-b border-[#1a3060]">
-            <Th>Citizen</Th><Th>From</Th><Th>To</Th><Th>Reason</Th><Th>Status</Th><Th>Requested</Th>
-          </tr></thead>
-          <tbody>
-            {loading && <LoadingState colSpan={6} />}
-            {!loading && rows.length === 0 && <EmptyState colSpan={6} />}
-            {!loading && rows.map(m => (
-              <tr key={m.id} className="border-b border-[#1a3060]/50 hover:bg-white/[0.02]">
-                <Td className="text-white font-medium">{m.citizen ? `${m.citizen.firstName} ${m.citizen.surname}` : '—'}</Td>
-                <Td>{m.fromVillage?.name || '—'}</Td>
-                <Td>{m.toVillage?.name || '—'}</Td>
-                <Td className="truncate max-w-[160px]">{m.reason}</Td>
-                <Td><StatusPill status={m.status === 'confirmed' ? 'active' : (m.status === 'pending' ? 'pending' : 'suspended')} /></Td>
-                <Td>{new Date(m.requestDate).toLocaleDateString('en-TZ')}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <PagerFooter page={page} total={total} limit={limit} onPage={setPage} />
-      </Card>
-    </div>
-  )
-}
+// BUGFIX-10: "Migration Trends" menu button + section removed (Super Admin
+// and District Admin dashboards). /api/admin/migrations and
+// apiGetMigrations() are left untouched in case they're needed again.
 
 // ── Section: Marriages ───────────────────────────────────────────────────────
 
@@ -1025,6 +1005,27 @@ function NIDASection({ role }) {
   )
 }
 
+// BUGFIX-10: Migration Trends removed; System Log Reports / Security
+// Alerts are now Super-Admin-only (District Admin dashboard no longer
+// shows these two menu buttons).
+// ── useTheme — persists 'dark'/'light' in localStorage, scoped to this device/session ──
+// PATCH-EMAIL-2025
+function useTheme() {
+  const THEME_KEY = 'tzcrvs_theme'
+  const [theme, setThemeRaw] = React.useState(
+    () => localStorage.getItem(THEME_KEY) || 'dark'
+  )
+  function setTheme(t) {
+    setThemeRaw(t)
+    localStorage.setItem(THEME_KEY, t)
+    document.documentElement.classList.toggle('tzcrvs-light', t === 'light')
+  }
+  React.useEffect(() => {
+    document.documentElement.classList.toggle('tzcrvs-light', theme === 'light')
+  }, [theme])
+  return [theme, setTheme]
+}
+
 const NAV = [
   { key: 'dashboard',           label: 'Dashboard',            Icon: LayoutDashboard, roles: ['super_admin', 'district_admin'] },
   { key: 'demographics',        label: 'Demographics',         Icon: MapIcon,         roles: ['super_admin', 'district_admin'] },
@@ -1032,10 +1033,9 @@ const NAV = [
   { key: 'village_officers',    label: 'Village Officers',     Icon: Users,           roles: ['super_admin', 'district_admin'] },
   { key: 'health_officers',     label: 'Health Officers',      Icon: Stethoscope,     roles: ['super_admin', 'district_admin'] },
   { key: 'manage_users',        label: 'Manage Users',         Icon: Shield,          roles: ['super_admin'] },
-  { key: 'migrations',          label: 'Migration Trends',     Icon: ArrowLeftRight,  roles: ['super_admin', 'district_admin'] },
   { key: 'marriages',           label: 'Marriage Records',     Icon: Heart,           roles: ['super_admin', 'district_admin'] },
-  { key: 'audit_logs',          label: 'System Log Reports',   Icon: FileText,        roles: ['super_admin', 'district_admin'] },
-  { key: 'security_alerts',     label: 'Security Alerts',      Icon: ShieldAlert,     roles: ['super_admin', 'district_admin'] },
+  { key: 'audit_logs',          label: 'System Log Reports',   Icon: FileText,        roles: ['super_admin'] },
+  { key: 'security_alerts',     label: 'Security Alerts',      Icon: ShieldAlert,     roles: ['super_admin'] },
   { key: 'system_performance',  label: 'System Performance',   Icon: Cpu,             roles: ['super_admin'] },
   { key: 'rita',               label: 'RITA',                 Icon: FileText,        roles: ['super_admin', 'district_admin'] },
   { key: 'nida',               label: 'NIDA',                 Icon: Shield,          roles: ['super_admin', 'district_admin'] },
@@ -1044,7 +1044,7 @@ const NAV = [
 const SECTION_TITLE = {
   dashboard: 'Dashboard', demographics: 'Demographics View', district_admins: 'District Admins',
   village_officers: 'Village Officers', health_officers: 'Health Officers', manage_users: 'Manage Users',
-  migrations: 'Migration Trends', marriages: 'Marriage Records', audit_logs: 'System Log Reports',
+  marriages: 'Marriage Records', audit_logs: 'System Log Reports',
   security_alerts: 'Security Alerts', system_performance: 'System Performance',
 }
 
@@ -1056,9 +1056,10 @@ export default function AdminDashboard({ role }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeNav,   setActiveNav]   = useState('dashboard')
-  const [showChangePwd, setShowChangePwd] = useState(false)
-  const [showNewReg,    setShowNewReg]    = useState(false)
-  const [loggingOut,    setLoggingOut]    = useState(false)
+  const [showChangePwd, setShowChangePwd]       = useState(false)
+  const [showNewReg,    setShowNewReg]           = useState(false)
+  const [pendingRegTarget, setPendingRegTarget] = useState(undefined)  // PATCH-EMAIL-2025
+  const [loggingOut,    setLoggingOut]           = useState(false)
 
   const nav = NAV.filter(n => n.roles.includes(role))
 
@@ -1075,8 +1076,8 @@ export default function AdminDashboard({ role }) {
       case 'district_admins':     return <DistrictAdminsSection onRegister={() => setShowNewReg(true)} />
       case 'village_officers':    return <OfficersSection kind="village" role={role} onRegister={() => setShowNewReg(true)} />
       case 'health_officers':     return <OfficersSection kind="health" role={role} onRegister={() => setShowNewReg(true)} />
-      case 'manage_users':        return <ManageUsersSection currentUserId={user?.id} />
-      case 'migrations':          return <MigrationsSection />
+      case 'manage_users':        return <ManageUsersSection currentUserId={user?.id}
+                                    onRegister={(target) => { setShowNewReg(true); setPendingRegTarget(target) }} />
       case 'marriages':           return <MarriagesSection />
       case 'audit_logs':          return <AuditLogsSection />
       case 'security_alerts':     return <AuditLogsSection securityOnly />
@@ -1088,6 +1089,7 @@ export default function AdminDashboard({ role }) {
   }
 
   const roleLabel = role === 'super_admin' ? 'Super Administrator' : 'District Administrator'
+  const [theme, setTheme] = useTheme()  // PATCH-EMAIL-2025
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#060f1e]">
@@ -1143,13 +1145,20 @@ export default function AdminDashboard({ role }) {
 
         {/* ── Main content ──────────────────────────────────────────────── */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4">{/* HOTFIX-LINT-4 */}
             <div>
               <h1 className="text-white font-bold text-lg">{SECTION_TITLE[activeNav]}</h1>
               <p className="text-gray-500 text-xs">
                 {user?.fullName || user?.email} · {roleLabel}
               </p>
             </div>
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="p-2 rounded-lg border border-[#1a3060] text-gray-400 hover:text-[#00d4ff] hover:border-[#00d4ff]/40 transition-colors"
+            >
+              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
           </div>
           {renderSection()}
         </main>
@@ -1159,10 +1168,14 @@ export default function AdminDashboard({ role }) {
       {showNewReg && (
         <NewRegistrationModal
           role={role}
-          defaultTarget={activeNav === 'health_officers' ? 'hospital_officer' : activeNav === 'village_officers' ? 'village_officer' : undefined}
-          onClose={() => setShowNewReg(false)}
+          defaultTarget={
+            pendingRegTarget ||
+            (activeNav === 'health_officers'  ? 'hospital_officer'  :
+             activeNav === 'village_officers' ? 'village_officer'   : undefined)
+          }
+          onClose={() => { setShowNewReg(false); setPendingRegTarget(undefined) }}
         />
-      )}
+      )}{/* HOTFIX-LINT-3 */}
     </div>
   )
 }

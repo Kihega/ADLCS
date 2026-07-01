@@ -743,9 +743,10 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
   const navigate = (id: string) => {
     const m: Record<string, string> = {
       nin: 'NINRegistration',
-      citizen: 'RegisterCitizen',
+      citizen: 'CitizenProfile',
       death: 'VillageRecordDeath',
       marriage: 'RegisterMarriage',
+      records: 'VillageViewRecords',
     }
 
     if (m[id]) {

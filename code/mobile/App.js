@@ -31,6 +31,8 @@ import SyncDataScreen from './src/screens/hospital/SyncDataScreen'
 
 import VillageHomeScreen from './src/screens/village/VillageHomeScreen'
 import RegisterCitizenScreen from './src/screens/village/RegisterCitizenScreen'
+import CitizenProfileScreen from './src/screens/village/CitizenProfileScreen'
+import VillageViewRecordsScreen from './src/screens/village/VillageViewRecordsScreen'
 import RegisterMarriageScreen from './src/screens/village/RegisterMarriageScreen'
 import VillageRecordDeathScreen from './src/screens/village/VillageRecordDeathScreen'
 import NINRegistrationScreen from './src/screens/village/NINRegistrationScreen'
@@ -63,6 +65,8 @@ export default function App() {
             />
             <Stack.Screen name="VillageHome" component={VillageHomeScreen} />
             <Stack.Screen name="RegisterCitizen" component={RegisterCitizenScreen} />
+            <Stack.Screen name="CitizenProfile" component={CitizenProfileScreen} />
+            <Stack.Screen name="VillageViewRecords" component={VillageViewRecordsScreen} />
             <Stack.Screen name="RegisterMarriage" component={RegisterMarriageScreen} />
             <Stack.Screen name="VillageRecordDeath" component={VillageRecordDeathScreen} />
             <Stack.Screen name="NINRegistration" component={NINRegistrationScreen} />
