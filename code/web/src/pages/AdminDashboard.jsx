@@ -174,23 +174,28 @@ function IconButton({ onClick, title, danger, disabled, children }) {
 
 // ── Section: Dashboard (overview) ───────────────────────────────────────────
 
+// PATCH-POP-3: DashboardSection also loads system-performance for accurate
+// DB/Redis status cards (real latency probes instead of boolean isRedisReady)
 function DashboardSection({ role }) {
   const [overview, setOverview] = useState(null)
   const [population, setPopulation] = useState(null)
   const [recentLogs, setRecentLogs] = useState([])
+  const [perf, setPerf] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [ov, pop, logs] = await Promise.all([
+      const [ov, pop, logs, perfRes] = await Promise.all([
         api.apiGetOverview(),
         api.apiGetPopulation({}),
         api.apiGetAuditLogs({ limit: 6 }),
+        api.apiGetSystemPerformance().catch(() => null),  // graceful — not fatal if role has no access
       ])
       setOverview(ov.data)
       setPopulation(pop.data)
       setRecentLogs(logs.data || [])
+      setPerf(perfRes?.data || null)
     } catch (err) {
       console.error('[dashboard]', err)
     } finally {
@@ -218,16 +223,15 @@ function DashboardSection({ role }) {
           sub={`${overview?.villageOfficersPending ?? 0} pending`} accent="text-[#00d4ff]" />
         <StatCard Icon={Stethoscope} label="Health Officers" value={overview?.hospitalOfficersTotal ?? 0}
           sub={`${overview?.hospitalOfficersPending ?? 0} pending`} accent="text-orange-400" />
-        <StatCard Icon={ShieldAlert} label="Security Alerts (24h)" value={overview?.securityAlerts24h ?? 0}
-          sub="warning + critical" accent="text-red-400" />
-        <StatCard Icon={Database}
-          label="Database"
-          value={overview?.systemHealth?.databaseOk ? 'Online' : 'Offline'}
-          accent={overview?.systemHealth?.databaseOk ? 'text-[#00ff9d]' : 'text-red-400'} />
-        <StatCard Icon={Server}
-          label="Redis Cache"
-          value={overview?.systemHealth?.redisOk ? 'Online' : 'Offline'}
-          accent={overview?.systemHealth?.redisOk ? 'text-[#00ff9d]' : 'text-gray-500'} />
+        {/* PATCH-POP-3: replaced simple boolean health cards with real system-perf cards */}
+        <StatCard Icon={Database} label="PostgreSQL (Supabase)" value={perf?.databaseOk ? 'Online' : 'Offline'}
+          sub={perf?.dbLatencyMs != null ? `${perf.dbLatencyMs} ms` : ''}
+          accent={perf?.databaseOk ? 'text-[#00ff9d]' : 'text-red-400'} />
+        <StatCard Icon={Server} label="Redis (Upstash)" value={perf?.redisOk ? 'Online' : 'Offline'}
+          sub={perf?.redisLatencyMs != null ? `${perf.redisLatencyMs} ms` : ''}
+          accent={perf?.redisOk ? 'text-[#00ff9d]' : 'text-gray-500'} />
+        <StatCard Icon={Cpu} label="Backend Uptime" value={perf ? `${Math.floor((perf.uptimeSeconds||0)/3600)}h ${Math.floor(((perf.uptimeSeconds||0)%3600)/60)}m` : '—'} accent="text-[#00d4ff]" />
+        <StatCard Icon={Globe} label="Node Runtime" value={perf?.nodeVersion || '—'} accent="text-purple-400" />
       </div>
 
       <Card>
@@ -1008,21 +1012,29 @@ function NIDASection({ role }) {
 // BUGFIX-10: Migration Trends removed; System Log Reports / Security
 // Alerts are now Super-Admin-only (District Admin dashboard no longer
 // shows these two menu buttons).
-// ── useTheme — persists 'dark'/'light' in localStorage, scoped to this device/session ──
-// PATCH-EMAIL-2025
-function useTheme() {
-  const THEME_KEY = 'tzcrvs_theme'
+// ── useTheme — persisted per user-ID in localStorage, removed on logout ────
+// PATCH-POP-3: key is now scoped to userId so different users on the same
+// device each keep their own preference. The cleanup effect removes the CSS
+// class when AdminDashboard unmounts (logout), so the login page is always
+// shown in the default dark theme regardless of what the previous user chose.
+function useTheme(userId) {
+  const THEME_KEY = userId ? `tzcrvs_theme_${userId}` : 'tzcrvs_theme'
   const [theme, setThemeRaw] = React.useState(
-    () => localStorage.getItem(THEME_KEY) || 'dark'
+    () => (userId ? localStorage.getItem(THEME_KEY) : null) || 'dark'
   )
   function setTheme(t) {
     setThemeRaw(t)
-    localStorage.setItem(THEME_KEY, t)
+    if (userId) localStorage.setItem(THEME_KEY, t)
     document.documentElement.classList.toggle('tzcrvs-light', t === 'light')
   }
+  // Apply class on every theme change
   React.useEffect(() => {
     document.documentElement.classList.toggle('tzcrvs-light', theme === 'light')
   }, [theme])
+  // Cleanup on unmount (logout) — ensures login page is never in light mode
+  React.useEffect(() => {
+    return () => { document.documentElement.classList.remove('tzcrvs-light') }
+  }, [])
   return [theme, setTheme]
 }
 
@@ -1089,7 +1101,7 @@ export default function AdminDashboard({ role }) {
   }
 
   const roleLabel = role === 'super_admin' ? 'Super Administrator' : 'District Administrator'
-  const [theme, setTheme] = useTheme()  // PATCH-EMAIL-2025
+  const [theme, setTheme] = useTheme(user?.id)  // PATCH-POP-3: scoped to logged-in user
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#060f1e]">
