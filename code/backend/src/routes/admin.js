@@ -152,8 +152,16 @@ router.get('/overview', async (req, res) => {
     const auditWhere = await buildAuditWhere(req)
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
+    // PATCH-POP-3: build the geo-filter for unlinked births.
+    // Births belong to a HealthFacility which has a districtId — use that
+    // to scope district_admin counts. super_admin gets all births.
+    const birthGeoWhere = req.user.role === 'district_admin'
+      ? { childCitizenId: null, facility: { districtId: adminDistrictId } }
+      : { childCitizenId: null }
+
     const [
-      totalPopulation, maleCount, femaleCount,
+      citizenCount, maleCitizenCount, femaleCitizenCount,
+      unlinkedBirthCount, maleUnlinkedBirths, femaleUnlinkedBirths,
       districtAdminsTotal, districtAdminsPending,
       villageOfficersTotal, villageOfficersPending,
       hospitalOfficersTotal, hospitalOfficersPending,
@@ -163,6 +171,10 @@ router.get('/overview', async (req, res) => {
       prisma.citizen.count({ where: citizenWhere }),
       prisma.citizen.count({ where: { ...citizenWhere, gender: 'male' } }),
       prisma.citizen.count({ where: { ...citizenWhere, gender: 'female' } }),
+      // PATCH-POP-3: add children with birth record but no NIN yet
+      prisma.birth.count({ where: birthGeoWhere }),
+      prisma.birth.count({ where: { ...birthGeoWhere, gender: 'male' } }),
+      prisma.birth.count({ where: { ...birthGeoWhere, gender: 'female' } }),
       req.user.role === 'super_admin' ? prisma.districtAdmin.count() : Promise.resolve(null),
       req.user.role === 'super_admin' ? prisma.districtAdmin.count({ where: { status: 'pending' } }) : Promise.resolve(null),
       prisma.villageOfficer.count({ where: officerWhere }),
@@ -172,6 +184,10 @@ router.get('/overview', async (req, res) => {
       prisma.auditLog.count({ where: { ...auditWhere, severity: { in: ['warning', 'critical'] }, timestamp: { gte: since24h } } }),
       prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
     ])
+
+    const totalPopulation = citizenCount + unlinkedBirthCount
+    const maleCount       = maleCitizenCount + maleUnlinkedBirths
+    const femaleCount     = femaleCitizenCount + femaleUnlinkedBirths
 
     return res.json({
       success: true,
@@ -202,8 +218,22 @@ router.get('/overview', async (req, res) => {
 
 // ── GET /population ──────────────────────────────────────────────────────────
 router.get('/population', async (req, res) => {
+  // PATCH-POP-3: include children with birth records but no NIN yet.
+  // Priority:
+  //   a) citizen WITH birth record  → in citizens table, count once
+  //   b) citizen WITHOUT birth record (seeded) → in citizens table, count
+  //   c) birth where childCitizenId IS NULL → not yet registered → add from births
   try {
     const where = await buildCitizenGeoWhere(req)
+
+    // Build birth geo-filter (scoped by facility.districtId for district_admin)
+    let birthGeoWhere = { childCitizenId: null }
+    if (req.user.role === 'district_admin') {
+      const adminDistrictId = await getAdminDistrictId(req)
+      birthGeoWhere = { childCitizenId: null, facility: { districtId: adminDistrictId } }
+    }
+
+    // ── Citizens (age-band groupBy is fast — age is a stored Int) ───────────
     const rows = await prisma.citizen.groupBy({
       by:     ['gender', 'age'],
       where,
@@ -216,10 +246,31 @@ router.get('/population', async (req, res) => {
       const band = ageBand(r.age)
       bands[band][r.gender] += r._count._all
     }
+
+    // ── Unlinked births (compute age from dateOfBirth in JS) ────────────────
+    const unlinkedBirths = await prisma.birth.findMany({
+      where:  birthGeoWhere,
+      select: { gender: true, dateOfBirth: true },
+    })
+    const now = Date.now()
+    for (const b of unlinkedBirths) {
+      const ageYrs = Math.floor((now - new Date(b.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      const band   = ageBand(ageYrs)
+      if (bands[band]) bands[band][b.gender] = (bands[band][b.gender] || 0) + 1
+    }
+
     const pyramid = AGE_BANDS.map((age) => ({ age, male: bands[age].male, female: bands[age].female }))
 
-    const total  = await prisma.citizen.count({ where })
-    const male   = await prisma.citizen.count({ where: { ...where, gender: 'male' } })
+    // ── Totals ───────────────────────────────────────────────────────────────
+    const [citizenTotal, citizenMale, unlinkedTotal, unlinkedMale] = await Promise.all([
+      prisma.citizen.count({ where }),
+      prisma.citizen.count({ where: { ...where, gender: 'male' } }),
+      prisma.birth.count({ where: birthGeoWhere }),
+      prisma.birth.count({ where: { ...birthGeoWhere, gender: 'male' } }),
+    ])
+
+    const total  = citizenTotal + unlinkedTotal
+    const male   = citizenMale  + unlinkedMale
     const female = total - male
 
     return res.json({
