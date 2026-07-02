@@ -15,6 +15,7 @@ import {
   apiCreateDistrictAdmin, apiCreateVillageOfficer, apiCreateHealthOfficer,
   apiCreateSuperAdmin, apiGetSuperAdmins,
   apiGetRegions, apiGetDistricts, apiGetWards, apiGetVillages,
+  apiCreateVillage,
 } from '../api/admin.api'  // PATCH-EMAIL-2025
 
 export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
@@ -39,7 +40,38 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
   const [result,  setResult]  = useState(null)
   const [copied,  setCopied]  = useState(false)
 
+  // Manual village/street entry — shown when the officer's home area isn't
+  // in the dropdown yet for the selected ward.
+  const [showNewVillage, setShowNewVillage] = useState(false)
+  const [newVillageName, setNewVillageName] = useState('')
+  const [newVillageType, setNewVillageType] = useState('village')
+  const [creatingVillage, setCreatingVillage] = useState(false)
+
   const set = (field, val) => setForm(p => ({ ...p, [field]: val }))
+
+  // Get-or-create the village/street for the currently selected ward, then
+  // select it immediately so the rest of the form behaves exactly as if it
+  // had been picked from the dropdown.
+  const handleCreateVillage = async () => {
+    const name = newVillageName.trim()
+    if (!name || !form.wardId) return
+    setCreatingVillage(true)
+    try {
+      const res = await apiCreateVillage(form.wardId, name, newVillageType)
+      if (res.success && res.data) {
+        setVillages(prev =>
+          prev.some(v => v.id === res.data.id) ? prev : [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name))
+        )
+        set('villageId', res.data.id)
+        setShowNewVillage(false)
+        setNewVillageName('')
+      }
+    } catch {
+      // leave the form open so the admin can retry
+    } finally {
+      setCreatingVillage(false)
+    }
+  }
 
   useEffect(() => {
     if (isSuperAdmin) apiGetRegions().then(r => setRegions(r.data || [])).catch(() => {})
@@ -243,9 +275,67 @@ export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
                   <label className={lbl}>Village</label>
                   <select className={sel} value={form.villageId} onChange={e => set('villageId', e.target.value)} disabled={!form.wardId}>
                     <option value="">Select village</option>
-                    {villages.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    {villages.map(v => <option key={v.id} value={v.id}>{v.name} {v.type === 'street' ? '(Street)' : ''}</option>)}
                   </select>
                 </div>
+
+                {form.wardId && !showNewVillage && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewVillage(true)}
+                    className="col-span-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/40 bg-emerald-500/10 rounded-lg py-2 hover:bg-emerald-500/20"
+                  >
+                    <Plus size={12} /> Village/street not listed? Add new
+                  </button>
+                )}
+
+                {showNewVillage && (
+                  <div className="col-span-2 border border-white/10 rounded-lg p-3 space-y-2 bg-white/5">
+                    <p className="text-[10px] text-white/60 leading-snug">
+                      This will be saved and appear as a dropdown option for this ward going
+                      forward.
+                    </p>
+                    <div className="flex gap-2">
+                      {['village', 'street'].map(t => (
+                        <button
+                          type="button"
+                          key={t}
+                          onClick={() => setNewVillageType(t)}
+                          className={`flex-1 text-[11px] font-semibold rounded-lg py-1.5 border ${
+                            newVillageType === t
+                              ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                              : 'border-white/15 text-white/60'
+                          }`}
+                        >
+                          {t === 'village' ? 'Village (Rural)' : 'Street (Urban)'}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      className={sel}
+                      value={newVillageName}
+                      onChange={e => setNewVillageName(e.target.value)}
+                      placeholder="e.g. Kati"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={!newVillageName.trim() || creatingVillage}
+                        onClick={handleCreateVillage}
+                        className="flex-1 text-[11px] font-bold rounded-lg py-2 bg-emerald-500 text-white disabled:opacity-40"
+                      >
+                        {creatingVillage ? 'Saving…' : 'Use This Name'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewVillage(false); setNewVillageName('') }}
+                        className="text-[11px] font-semibold rounded-lg py-2 px-3 border border-white/15 text-white/60"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

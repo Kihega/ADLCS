@@ -710,6 +710,12 @@ export default function NINRegistrationScreen({ navigation }: Props) {
         if (!cardData) return prevHtml
         return buildCardHtml({ ...cardData, nationalId: nin })
       })
+      // NOTE: this was previously missing entirely — the screen would set
+      // issuedNIN/cardData and show a toast, but never advance `step`, so
+      // the Step 3 view (which is gated on `step === 3 && issuedNIN`) never
+      // rendered. From the officer's perspective the button just appeared
+      // to do nothing after a successful issuance.
+      setStep(3)
       showToast('NIN issued and saved successfully')
     } catch (e: any) {
       Alert.alert('Issuance Failed', e?.message ?? 'Network error — check connection and try again.')

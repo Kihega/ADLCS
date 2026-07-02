@@ -37,6 +37,14 @@ export async function apiGetVillages(wardId) {
   const { data } = await apiClient.get('/admin/geo/villages', { params: { wardId } })
   return data
 }
+// Get-or-create a village/street for a ward — used when the officer being
+// registered lives somewhere not yet in the dropdown. Hits the shared
+// /api/geo endpoint (any authenticated role, not just super/district admin)
+// which enforces one canonical row per (wardId, name) via a DB constraint.
+export async function apiCreateVillage(wardId, name, type = 'village') {
+  const { data } = await apiClient.post('/geo/villages', { wardId, name, type })
+  return data
+}
 
 // ── Super admins [super_admin, min-1/max-3 guard] ──────────────────────────────
 // PATCH-EMAIL-2025

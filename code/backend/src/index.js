@@ -26,6 +26,7 @@ const dashboardRouter = require('./routes/dashboard')
 const syncRouter     = require('./routes/syncRoutes')
 const villageRouter  = require('./routes/village')
 const adminRouter    = require('./routes/admin')
+const geoRouter      = require('./routes/geo')
 
 const app  = express()
 const PORT = process.env.PORT || 5000
@@ -46,6 +47,7 @@ app.use('/api/officer', syncRouter)
 app.use('/api/village', villageRouter)
 app.use('/api/officer', villageRouter)   // profile endpoint   // ← NEW: officer dashboard, records, sync
 app.use('/api/admin',   adminRouter)     // Super Admin / District Admin dashboards
+app.use('/api/geo',     geoRouter)       // region/district/ward/village lookups — any authenticated role
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {

@@ -29,6 +29,7 @@ router.post('/birth/sync', async (req, res) => {
     childFirstName, childMiddleName, childSurname,
     gender, dateOfBirth,
     fatherNid, motherNid,
+    originVillageId,
     registeredAt,
   } = req.body
 
@@ -78,6 +79,7 @@ router.post('/birth/sync', async (req, res) => {
         motherCitizenId:  motherCitizenId || undefined,
         officerId,
         facilityId:       officer?.facilityId || undefined,
+        originVillageId:  originVillageId ? Number(originVillageId) : undefined,
         registeredAt:     registeredAt ? new Date(registeredAt) : new Date(),
         ritaSynced:       false,
       },

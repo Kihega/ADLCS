@@ -268,7 +268,17 @@ model Village {
   migrationsFrom Migration[]            @relation("MigrationFrom")
   migrationsTo   Migration[]            @relation("MigrationTo")
   snapshots      PopulationSnapshot[]
+  // Birth records whose parents' home village/street (origin) is this
+  // village — recorded at birth even when the birth facility is elsewhere,
+  // since the family's usual residence may differ from where they gave
+  // birth (e.g. seasonal/labour migration).
+  birthsOfOrigin Birth[]                @relation("BirthOriginVillage")
 
+  // A village/street name must be unique WITHIN its ward, but the same
+  // name may recur across different wards (e.g. many wards have a
+  // "Mtaa wa Kati"). Enforced here instead of only in application code so
+  // the get-or-create endpoint in geo.js can safely rely on it.
+  @@unique([wardId, name])
   @@map("villages")
 }
 
@@ -509,6 +519,12 @@ model Birth {
   fatherCitizenId String?   @map("father_citizen_id")
   motherCitizenId String?   @map("mother_citizen_id")
   facilityId      Int?      @map("facility_id")
+  // The family's home village/street (region → district → ward → village),
+  // captured directly from the parents at the hospital regardless of which
+  // region the hospital itself is in — families away on labour/seasonal
+  // migration still register the birth against their actual home area, not
+  // wherever they happened to give birth.
+  originVillageId Int?      @map("origin_village_id")
   officerId       String    @map("officer_id")
   certPdfUrl      String?   @map("cert_pdf_url")
   qrPayload       String?   @map("qr_payload")
@@ -516,11 +532,12 @@ model Birth {
   ritaSyncAt      DateTime? @map("rita_sync_at")
   registeredAt    DateTime  @default(now()) @map("registered_at")
 
-  child    Citizen?        @relation("ChildBirth", fields: [childCitizenId], references: [id])
-  father   Citizen?        @relation("FatherBirth", fields: [fatherCitizenId], references: [id])
-  mother   Citizen?        @relation("MotherBirth", fields: [motherCitizenId], references: [id])
-  facility HealthFacility? @relation(fields: [facilityId], references: [id])
-  officer  HospitalOfficer @relation(fields: [officerId], references: [id])
+  child         Citizen?        @relation("ChildBirth", fields: [childCitizenId], references: [id])
+  father        Citizen?        @relation("FatherBirth", fields: [fatherCitizenId], references: [id])
+  mother        Citizen?        @relation("MotherBirth", fields: [motherCitizenId], references: [id])
+  facility      HealthFacility? @relation(fields: [facilityId], references: [id])
+  originVillage Village?        @relation("BirthOriginVillage", fields: [originVillageId], references: [id])
+  officer       HospitalOfficer @relation(fields: [officerId], references: [id])
 
   @@map("births")
 }

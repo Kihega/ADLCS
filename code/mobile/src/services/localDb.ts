@@ -38,6 +38,7 @@ export interface LocalBirth {
   certPdfPath: string
   rawJson: string
   nationalId?: string // NIN — undefined/empty until issued at age 18
+  originVillageId?: number // family's home village/street of origin (from GeoCascadePicker)
 }
 
 export interface LocalDeath {

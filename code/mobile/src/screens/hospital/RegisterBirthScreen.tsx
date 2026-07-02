@@ -61,6 +61,11 @@ import { generateBirthPdf, sharePdf } from '../../services/certificateService'
 import { triggerSync, saveAndSyncBirth } from '../../services/syncService'
 import { resolveBase } from '../../services/apiResolver'
 import { useTheme, TZ } from '../../context/ThemeContext'
+import GeoCascadePicker, {
+  emptyGeoSelection,
+  isGeoSelectionComplete,
+  type GeoSelection,
+} from '../../components/GeoCascadePicker'
 
 type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'> }
@@ -729,6 +734,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const [childGender, setChildGender] = useState<'MALE' | 'FEMALE' | ''>('')
   const [childDOB, setChildDOB] = useState('')
   const [showCal, setShowCal] = useState(false)
+  // Family's home village/street of origin — captured directly from the
+  // parents, independent of which region the hospital/facility is in
+  // (families away on labour/seasonal migration still register against
+  // their actual home area).
+  const [originGeo, setOriginGeo] = useState<GeoSelection>(emptyGeoSelection())
   const [submitting, setSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [savedBirth, setSavedBirth] = useState<LocalBirth | null>(null)
@@ -887,11 +897,23 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         facilityDistrict: cache?.facilityDistrict ?? '',
         facilityRegion: cache?.facilityRegion ?? '',
         officerName: cache?.officerName ?? '',
+        originVillageId: originGeo.villageId ?? undefined,
         rawJson: JSON.stringify({
           fatherNid,
           motherNid,
           gender: childGender,
           dateOfBirth: childDOB,
+          origin: {
+            regionId: originGeo.regionId,
+            regionName: originGeo.regionName,
+            districtId: originGeo.districtId,
+            districtName: originGeo.districtName,
+            wardId: originGeo.wardId,
+            wardName: originGeo.wardName,
+            villageId: originGeo.villageId,
+            villageName: originGeo.villageName,
+            villageType: originGeo.villageType,
+          },
         }),
       })
 
@@ -948,7 +970,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const step1Valid = isNINComplete(fatherNid) && !!fatherData
   const step2Valid = isNINComplete(motherNid) && !!motherData
   const step3Valid =
-    !!childFirst.trim() && !!childSurname.trim() && !!childGender && childDOB.length >= 8
+    !!childFirst.trim() &&
+    !!childSurname.trim() &&
+    !!childGender &&
+    childDOB.length >= 8 &&
+    isGeoSelectionComplete(originGeo)
   const canNext = [step1Valid, step2Valid, step3Valid, true][step - 1]
 
   const renderNIDStep = (role: 'father' | 'mother') => {
@@ -1337,6 +1363,28 @@ export default function RegisterBirthScreen({ navigation }: Props) {
                   <Calendar size={16} color={T.textDim} />
                 </TouchableOpacity>
               </View>
+
+              <View
+                style={{
+                  height: StyleSheet.hairlineWidth,
+                  backgroundColor: T.border,
+                  marginVertical: 4,
+                }}
+              />
+              <Text style={{ fontSize: 15, fontWeight: '800', color: T.text }}>
+                Family's Home Area (Origin)
+              </Text>
+              <Text style={{ fontSize: 11, color: T.textSub, lineHeight: 16 }}>
+                Ask the parents for their usual home village/street — not necessarily where this
+                facility is located. Families away for work or seasonal labour still register
+                against their actual home area.
+              </Text>
+              <GeoCascadePicker
+                value={originGeo}
+                onChange={setOriginGeo}
+                villageLabel="Village / Street of Origin"
+              />
+
               <View
                 style={{
                   flexDirection: 'row',
