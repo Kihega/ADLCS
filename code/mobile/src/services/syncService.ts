@@ -137,6 +137,7 @@ export async function saveAndSyncBirth(
       dateOfBirth: data.dateOfBirth,
       fatherNid: data.fatherNid,
       motherNid: data.motherNid,
+      originVillageId: data.originVillageId,
       registeredAt: now,
     })
     if (json.success || json.duplicate) {
