@@ -15,6 +15,7 @@ import {
   apiCreateDistrictAdmin, apiCreateVillageOfficer, apiCreateHealthOfficer,
   apiCreateSuperAdmin, apiGetSuperAdmins,
   apiGetRegions, apiGetDistricts, apiGetWards, apiGetVillages,
+  apiCreateVillage,
 } from '../api/admin.api'  // PATCH-EMAIL-2025
 
 export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
