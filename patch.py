@@ -1,57 +1,54 @@
 #!/usr/bin/env python3
 """
-apply_village_add_fix.py
+apply_eas_project_fix.py
 ===========================
 
-Small, self-contained fix for one issue:
-
-    "In NIN/birth registration I entered the first village and it
-    registered fine, but the next time I try to add a village that isn't
-    registered yet for a different ward, the add button doesn't work — I
-    can't add the village."
+Fixes:
+    "Experience with id '...' does not exist" when running
+    `npx eas build --platform android --profile preview`
 
 ROOT CAUSE
 ----------
-code/mobile/src/components/GeoCascadePicker.tsx — `handleCreateVillage()`
-started with:
+code/mobile/app.json had a hardcoded `owner` field and `extra.eas.projectId`
+pointing at an Expo project belonging to whoever originally scaffolded this
+codebase (a template author, tutorial, or previous developer's account).
+Once you log into EAS with your OWN Expo account, that project ID doesn't
+exist under your account, so every build request fails immediately with a
+GraphQL "Experience does not exist" error — this has nothing to do with
+your code, it's purely an account/ownership mismatch.
 
-    if (!value.wardId) return
-
-If `value.wardId` was ever momentarily falsy when "Use This Name" was
-tapped (e.g. a state update from selecting the Ward still in flight, or
-any other timing edge case), this silently did nothing at all — no error,
-no alert, no console log. From the officer's side that's indistinguishable
-from the button being disabled: you tap it, and nothing happens.
-
-The same function also silently swallowed any network/API error in a bare
-`catch {}` with no feedback — so a failed save (e.g. brief connectivity
-drop) looked exactly the same way: tap the button, nothing visibly
-happens.
+Also silences the (currently non-fatal, soon-to-be-required) EAS CLI
+warning about `cli.appVersionSource` not being set in eas.json.
 
 FIX
 ---
-- Every path through `handleCreateVillage()` now gives visible feedback
-  (an Alert) instead of silently doing nothing — the button always
-  *does* something when tapped, per your request.
-- Adds the requested duplicate check: before creating a new village, it
-  checks case-insensitively against the villages already loaded for the
-  selected ward. If a match is found, it shows a warning Alert
-  ("Village Already Exists") and selects the existing entry instead of
-  creating a confusing near-duplicate — it does NOT block the officer,
-  it just avoids two entries for the same place.
-- If the ward truly isn't selected yet, it now says so explicitly
-  ("Select a Ward First") instead of doing nothing.
+1. Removes the stale `owner` field from app.json's `expo` block, so EAS
+   doesn't try to attribute the new project to an account you don't
+   control. (Leave this unset unless you specifically manage multiple
+   Expo accounts/orgs and know which one you want.)
+2. Sets `cli.appVersionSource: "local"` in eas.json.
+
+AFTER RUNNING THIS SCRIPT, you still need to run:
+
+    cd code/mobile
+    npx eas init
+
+This creates a brand-new EAS project under YOUR logged-in account and
+writes the new projectId into app.json automatically — this script does
+not (and cannot) create that project for you, since it requires being
+authenticated with `npx eas login` first.
 
 Safe to re-run (idempotent).
 
 USAGE
 -----
-    python3 apply_village_add_fix.py [--root /path/to/project]
+    python3 apply_eas_project_fix.py [--root /path/to/project]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 
@@ -77,144 +74,47 @@ def find_project_root(explicit):
     )
 
 
-def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def fix_app_json(mobile_dir: Path) -> None:
+    path = mobile_dir / "app.json"
+    print(f"\n[1] Checking {path.name} for a stale owner/projectId")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    expo = data.get("expo", {})
 
+    removed_owner = False
+    if "owner" in expo:
+        print(f"  Removing stale owner field: \"{expo['owner']}\"")
+        del expo["owner"]
+        removed_owner = True
 
-def write(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8")
-
-
-def replace_once(path: Path, old: str, new: str, label: str) -> bool:
-    if not path.exists():
-        print(f"  [WARN] {label}: {path} not found — skipping.")
-        return False
-    text = read(path)
-    if new in text:
-        print(f"  [skip] {label} (already applied)")
-        return False
-    if old in text:
-        text = text.replace(old, new, 1)
-        write(path, text)
-        print(f"  [OK] {label}")
-        return True
-    print(f"  [WARN] {label}: expected text not found — file may have changed; skipping.")
-    return False
-
-
-OLD_IMPORTS = """import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Modal,
-  FlatList,
-  ActivityIndicator,
-} from 'react-native'"""
-
-NEW_IMPORTS = """import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Modal,
-  FlatList,
-  ActivityIndicator,
-  Alert,
-} from 'react-native'"""
-
-OLD_HANDLE_CREATE = """  const handleCreateVillage = async (name: string) => {
-    if (!value.wardId) return
-    setCreatingVillage(true)
-    try {
-      const json = await apiPost('/geo/villages', {
-        wardId: value.wardId,
-        name,
-        type: value.villageType,
-      })
-      if (json.success && json.data) {
-        onChange({ ...value, villageId: json.data.id, villageName: json.data.name })
-        setVillages((prev) =>
-          prev.some((v) => v.id === json.data.id) ? prev : [...prev, json.data].sort((a, b) => a.name.localeCompare(b.name))
+    stale_project_id = expo.get("extra", {}).get("eas", {}).get("projectId")
+    if stale_project_id:
+        print(f"  Found existing projectId: {stale_project_id}")
+        print(
+            "  NOTE: this script does not remove projectId automatically, since\n"
+            "  `npx eas init` (run after this script) will detect and replace an\n"
+            "  invalid one safely. If `eas init` still complains, delete\n"
+            "  expo.extra.eas.projectId from app.json by hand and re-run `eas init`."
         )
-        setOpenSheet(null)
-      }
-    } catch {
-      // Swallow — the sheet stays open so the officer can retry.
-    } finally {
-      setCreatingVillage(false)
-    }
-  }"""
 
-NEW_HANDLE_CREATE = """  const handleCreateVillage = async (name: string) => {
-    const cleanName = name.trim()
-    if (!cleanName) return
+    if removed_owner:
+        data["expo"] = expo
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        print("  [OK] removed owner field from app.json")
+    else:
+        print("  [skip] no owner field present")
 
-    // NOTE: this used to be `if (!value.wardId) return` — a silent no-op.
-    // If wardId was ever momentarily unset (e.g. a state update still in
-    // flight right after picking the ward), tapping "Use This Name" did
-    // absolutely nothing with zero feedback, which is indistinguishable
-    // from the button being disabled. Now we tell the officer exactly
-    // what's missing instead of failing silently, so the button always
-    // *does* something when tapped.
-    if (!value.wardId) {
-      Alert.alert(
-        'Select a Ward First',
-        'Please select a Region, District, and Ward before adding a new village/street.'
-      )
-      return
-    }
 
-    // Warn (but don't block) if this name already exists in the loaded
-    // list for this ward — case-insensitive, since "Kati" and "kati" are
-    // the same place. The backend's get-or-create is safe to call either
-    // way, but surfacing this up front avoids confusing the officer with
-    // two entries that look different but are actually the same village.
-    const existing = villages.find((v) => v.name.trim().toLowerCase() === cleanName.toLowerCase())
-    if (existing) {
-      Alert.alert(
-        'Village Already Exists',
-        `"${existing.name}" is already registered in this ward. Selecting the existing entry instead of creating a duplicate.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onChange({ ...value, villageId: existing.id, villageName: existing.name })
-              setOpenSheet(null)
-            },
-          },
-        ]
-      )
-      return
-    }
-
-    setCreatingVillage(true)
-    try {
-      const json = await apiPost('/geo/villages', {
-        wardId: value.wardId,
-        name: cleanName,
-        type: value.villageType,
-      })
-      if (json.success && json.data) {
-        onChange({ ...value, villageId: json.data.id, villageName: json.data.name })
-        setVillages((prev) =>
-          prev.some((v) => v.id === json.data.id) ? prev : [...prev, json.data].sort((a, b) => a.name.localeCompare(b.name))
-        )
-        setOpenSheet(null)
-      } else {
-        Alert.alert('Could Not Add Village', json.message ?? 'Please try again.')
-      }
-    } catch (err: any) {
-      // Previously this silently swallowed the error, leaving the officer
-      // staring at a button that appeared to do nothing after tapping it.
-      Alert.alert(
-        'Could Not Add Village',
-        err?.message ?? 'Something went wrong while saving this village. Please try again.'
-      )
-    } finally {
-      setCreatingVillage(false)
-    }
-  }"""
+def fix_eas_json(mobile_dir: Path) -> None:
+    path = mobile_dir / "eas.json"
+    print(f"\n[2] Checking {path.name} for cli.appVersionSource")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    cli = data.setdefault("cli", {})
+    if cli.get("appVersionSource") == "local":
+        print("  [skip] appVersionSource already set")
+        return
+    cli["appVersionSource"] = "local"
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print("  [OK] set cli.appVersionSource = \"local\" in eas.json")
 
 
 def main() -> None:
@@ -223,20 +123,19 @@ def main() -> None:
     args = ap.parse_args()
 
     root = find_project_root(args.root)
-    path = root / "code/mobile/src/components/GeoCascadePicker.tsx"
+    mobile_dir = root / "code" / "mobile"
     print(f"Project root: {root}")
-    print(f"Patching {path}")
 
-    replace_once(path, OLD_IMPORTS, NEW_IMPORTS, "import Alert from react-native")
-    replace_once(
-        path, OLD_HANDLE_CREATE, NEW_HANDLE_CREATE,
-        "fix silent no-op + add duplicate-name warning in handleCreateVillage()",
-    )
+    fix_app_json(mobile_dir)
+    fix_eas_json(mobile_dir)
 
     print(
-        "\nDone. Re-test: Village/Hospital officer -> pick a Region/District/Ward that has\n"
-        "no villages yet -> '+ Add new village' -> type a name -> 'Use This Name' should\n"
-        "now always save it (or warn you if that name already exists in that ward)."
+        "\nDone. Next steps:\n"
+        "  1. cd code/mobile\n"
+        "  2. npx eas login          (if not already logged in)\n"
+        "  3. npx eas init           (creates a fresh project under YOUR account,\n"
+        "                             writes the new projectId into app.json)\n"
+        "  4. npx eas build --platform android --profile preview\n"
     )
 
 
