@@ -18,9 +18,11 @@
       },
       "package": "tz.go.nbs.census.model",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE"
-      ]
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "jsEngine": "jsc"
     },
     "ios": {
       "supportsTablet": true,
@@ -32,7 +34,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "805ae45f-2a9e-477d-bb33-d341a6733fb6"
+        "projectId": "584e8a53-c448-4115-93e1-ee46e13d46af"
       }
     },
     "owner": "mangentechnologies-026",

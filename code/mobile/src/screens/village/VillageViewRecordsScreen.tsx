@@ -9,7 +9,7 @@
  * pulled-to-refresh, and naturally rolls over at 00:00 because the
  * underlying date-range queries are computed fresh on every request.
  */
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -72,9 +72,15 @@ export default function VillageViewRecordsScreen({ navigation }: Props) {
     }
   }, [])
 
+  // PATCH-FASTNAV-2026: only show the full-screen loading spinner on first mount.
+  // Later focus events (navigating back to this screen) refresh data
+  // silently in the background instead of blanking the screen, so moving
+  // between screens feels instant instead of like a reload.
+  const hasLoadedOnceRef = useRef(false)
   useFocusEffect(
     useCallback(() => {
-      loadRecords()
+      loadRecords(hasLoadedOnceRef.current)
+      hasLoadedOnceRef.current = true
     }, [loadRecords])
   )
 

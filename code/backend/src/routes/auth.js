@@ -225,6 +225,17 @@ router.post('/validate-token', authLimiter, async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid or expired authorization token.' })
     }
 
+    // PATCH-TOKEN-SINGLEUSE-2026: a token is single-use. Clear it the moment it's
+    // successfully validated so it can't be replayed by anyone who
+    // intercepts it later, even though it's not yet at its 7-day
+    // expiry. The account record itself is untouched; the officer/
+    // admin will need a fresh token issued if they ever need another
+    // one-time login link.
+    await prisma[match.model].update({
+      where: { id: found.id },
+      data: { loginTokenHash: null, loginTokenExpires: null },
+    })
+
     return res.json({ success: true, role: match.role, userId: found.id })
   } catch (err) {
     console.error('[auth/validate-token]', err)

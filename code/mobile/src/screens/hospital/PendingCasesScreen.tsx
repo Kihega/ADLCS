@@ -2,7 +2,7 @@
  * PendingCasesScreen.tsx — Unsynced Records from Local DB  v2.0
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -74,9 +74,15 @@ export default function PendingCasesScreen({ navigation }: Props) {
     setRefreshing(false)
   }, [])
 
+  // PATCH-FASTNAV-2026: only show the full-screen loading spinner on first mount.
+  // Later focus events (navigating back to this screen) refresh data
+  // silently in the background instead of blanking the screen, so moving
+  // between screens feels instant instead of like a reload.
+  const hasLoadedOnceRef = useRef(false)
   useFocusEffect(
     useCallback(() => {
-      load()
+      load(hasLoadedOnceRef.current)
+      hasLoadedOnceRef.current = true
     }, [load])
   )
 

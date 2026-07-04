@@ -7,7 +7,7 @@
  *   MERGE   → local records not yet on server are shown alongside remote ones
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -145,9 +145,15 @@ export default function ViewRecordsScreen({ navigation }: Props) {
     [filter, query]
   )
 
+  // PATCH-FASTNAV-2026: only show the full-screen loading spinner on first mount.
+  // Later focus events (navigating back to this screen) refresh data
+  // silently in the background instead of blanking the screen, so moving
+  // between screens feels instant instead of like a reload.
+  const hasLoadedOnceRef = useRef(false)
   useFocusEffect(
     useCallback(() => {
-      loadRecords()
+      loadRecords(hasLoadedOnceRef.current)
+      hasLoadedOnceRef.current = true
     }, [loadRecords])
   )
 
