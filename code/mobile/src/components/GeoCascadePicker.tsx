@@ -36,6 +36,7 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from 'react-native'
 import { ChevronDown, X, Search, MapPin, Plus } from 'lucide-react-native'
 import { useTheme, TZ } from '../context/ThemeContext'
@@ -383,12 +384,52 @@ export default function GeoCascadePicker({
   }, [])
 
   const handleCreateVillage = async (name: string) => {
-    if (!value.wardId) return
+    const cleanName = name.trim()
+    if (!cleanName) return
+
+    // NOTE: this used to be `if (!value.wardId) return` — a silent no-op.
+    // If wardId was ever momentarily unset (e.g. a state update still in
+    // flight right after picking the ward), tapping "Use This Name" did
+    // absolutely nothing with zero feedback, which is indistinguishable
+    // from the button being disabled. Now we tell the officer exactly
+    // what's missing instead of failing silently, so the button always
+    // *does* something when tapped.
+    if (!value.wardId) {
+      Alert.alert(
+        'Select a Ward First',
+        'Please select a Region, District, and Ward before adding a new village/street.'
+      )
+      return
+    }
+
+    // Warn (but don't block) if this name already exists in the loaded
+    // list for this ward — case-insensitive, since "Kati" and "kati" are
+    // the same place. The backend's get-or-create is safe to call either
+    // way, but surfacing this up front avoids confusing the officer with
+    // two entries that look different but are actually the same village.
+    const existing = villages.find((v) => v.name.trim().toLowerCase() === cleanName.toLowerCase())
+    if (existing) {
+      Alert.alert(
+        'Village Already Exists',
+        `"${existing.name}" is already registered in this ward. Selecting the existing entry instead of creating a duplicate.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              onChange({ ...value, villageId: existing.id, villageName: existing.name })
+              setOpenSheet(null)
+            },
+          },
+        ]
+      )
+      return
+    }
+
     setCreatingVillage(true)
     try {
       const json = await apiPost('/geo/villages', {
         wardId: value.wardId,
-        name,
+        name: cleanName,
         type: value.villageType,
       })
       if (json.success && json.data) {
@@ -397,9 +438,16 @@ export default function GeoCascadePicker({
           prev.some((v) => v.id === json.data.id) ? prev : [...prev, json.data].sort((a, b) => a.name.localeCompare(b.name))
         )
         setOpenSheet(null)
+      } else {
+        Alert.alert('Could Not Add Village', json.message ?? 'Please try again.')
       }
-    } catch {
-      // Swallow — the sheet stays open so the officer can retry.
+    } catch (err: any) {
+      // Previously this silently swallowed the error, leaving the officer
+      // staring at a button that appeared to do nothing after tapping it.
+      Alert.alert(
+        'Could Not Add Village',
+        err?.message ?? 'Something went wrong while saving this village. Please try again.'
+      )
     } finally {
       setCreatingVillage(false)
     }
