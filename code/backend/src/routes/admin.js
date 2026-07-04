@@ -52,6 +52,16 @@ const { requireAuth, requireRole } = require('../middleware/auth')
 
 const { sendAuthTokenEmail } = require('../lib/email')
 
+// PATCH-EMAIL-VALIDATE-2026
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** Returns an error string if `email` isn't a plausible address, else null. */
+function emailFormatError(email) {
+  if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
+    return 'A valid email address is required'
+  }
+  return null
+}
+
 const router = Router()
 router.use(requireAuth)
 router.use(requireRole('super_admin', 'district_admin'))
@@ -404,6 +414,10 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
   if (!fullName || !email || !nidaNumber || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
   }
+  {
+    const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
+    if (err) return res.status(400).json({ success: false, message: err })
+  }
   try {
     const token = generateAuthToken('DADM')
     const tokenHash = await bcrypt.hash(token, 10)
@@ -509,6 +523,10 @@ router.post('/village-officers', requireRole('district_admin'), async (req, res)
   const { fullName, email, nidaNumber, employeeId, mobile, villageId, wardId } = req.body
   if (!fullName || !email || !nidaNumber || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  }
+  {
+    const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
+    if (err) return res.status(400).json({ success: false, message: err })
   }
   try {
     const adminDistrictId = await getAdminDistrictId(req)
@@ -619,6 +637,10 @@ router.post('/health-officers', requireRole('district_admin'), async (req, res) 
   const { fullName, email, nidaNumber, employeeId, mobile, facilityId } = req.body
   if (!fullName || !email || !nidaNumber || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  }
+  {
+    const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
+    if (err) return res.status(400).json({ success: false, message: err })
   }
   try {
     const adminDistrictId = await getAdminDistrictId(req)
@@ -732,6 +754,10 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
   const { fullName, email, nidaNumber, employeeId, mobile, department } = req.body
   if (!fullName || !email || !nidaNumber || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  }
+  {
+    const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
+    if (err) return res.status(400).json({ success: false, message: err })
   }
   try {
     const token     = generateAuthToken('SADM')

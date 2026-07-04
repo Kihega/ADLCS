@@ -646,10 +646,15 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     [_navigation]
   )
 
-  // Refresh on focus (picks up new citizen/death registrations immediately)
+  // PATCH-FASTNAV-2026: only show the full-screen loading spinner on first mount.
+  // Later focus events (navigating back to this screen) refresh data
+  // silently in the background instead of blanking the screen, so moving
+  // between screens feels instant instead of like a reload.
+  const hasLoadedOnceRef = useRef(false)
   useFocusEffect(
     useCallback(() => {
-      loadData()
+      loadData(hasLoadedOnceRef.current)
+      hasLoadedOnceRef.current = true
     }, [loadData])
   )
 

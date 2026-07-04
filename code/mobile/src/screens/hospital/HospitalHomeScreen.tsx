@@ -927,10 +927,15 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
     // redundant tracking of an outer-scope value that never changes).
   }, [_navigation])
 
-  // ← Refresh whenever screen comes back into focus (e.g. after RegisterBirth)
+  // PATCH-FASTNAV-2026: only show the full-screen loading spinner on first mount.
+  // Later focus events (navigating back to this screen) refresh data
+  // silently in the background instead of blanking the screen, so moving
+  // between screens feels instant instead of like a reload.
+  const hasLoadedOnceRef = useRef(false)
   useFocusEffect(
     useCallback(() => {
-      loadData()
+      loadData(hasLoadedOnceRef.current)
+      hasLoadedOnceRef.current = true
     }, [loadData])
   )
 

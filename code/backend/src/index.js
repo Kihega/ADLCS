@@ -13,6 +13,7 @@
 
 require('dotenv').config()
 const express = require('express')
+const { startTokenCleanupJob } = require('./lib/tokenCleanup') // PATCH-TOKEN-CLEANUP-2026
 const morgan  = require('morgan')
 
 const { connectDB }    = require('./lib/prisma')
@@ -90,6 +91,7 @@ async function startServer() {
     // already taken by a previous process) crashes the whole process with
     // an unhandled exception instead of failing with a clear message.
     const server = app.listen(PORT, () => {
+      startTokenCleanupJob() // PATCH-TOKEN-CLEANUP-2026
       console.log('═══════════════════════════════════════════════')
       console.log('  TzCRVS — Tanzania Automated Digital Census API')
       console.log(`  🚀 Port     : ${PORT}`)
