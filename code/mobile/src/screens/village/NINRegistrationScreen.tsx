@@ -44,6 +44,7 @@ import {
   ChevronRight,
   User,
   Printer,
+  Upload,
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
@@ -448,6 +449,7 @@ export default function NINRegistrationScreen({ navigation }: Props) {
   const [photoUri, setPhotoUri] = useState<string | null>(null)
   const [photoBase64, setPhotoBase64] = useState<string | null>(null)
   const [capturingPhoto, setCapturingPhoto] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [fpLeft, setFpLeft] = useState<'idle' | 'scanning' | 'done'>('idle')
   const [fpRight, setFpRight] = useState<'idle' | 'scanning' | 'done'>('idle')
   const fp2Valid = fpLeft === 'done' && fpRight === 'done'
@@ -544,9 +546,15 @@ export default function NINRegistrationScreen({ navigation }: Props) {
       }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [3, 4],
-        quality: 0.7,
+        // NOTE: allowsEditing (the native system crop screen) was removed.
+        // That native cropper renders the RAW, full-resolution capture
+        // in-memory before any of our JS compression code ever runs — on
+        // a 12MP+ camera that alone can OOM lower/mid-range devices,
+        // completely independent of anything compressImage() does. Since
+        // compressImage() already resizes/compresses immediately after
+        // capture, skipping the native crop step removes this extra,
+        // heavier native rendering pass entirely.
+        quality: 0.8,
       })
       if (!result.canceled && result.assets && result.assets[0]) {
         const compressed = await compressImage(result.assets[0].uri)
@@ -568,9 +576,9 @@ export default function NINRegistrationScreen({ navigation }: Props) {
         }
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [3, 4],
-          quality: 0.7,
+          // See the matching note above launchCameraAsync — the native
+          // crop screen is the likely OOM point, not our own compression.
+          quality: 0.8,
         })
         if (!result.canceled && result.assets && result.assets[0]) {
           const compressed = await compressImage(result.assets[0].uri)
@@ -586,6 +594,62 @@ export default function NINRegistrationScreen({ navigation }: Props) {
       }
     } finally {
       setCapturingPhoto(false)
+    }
+  }
+
+  // ── Step 2a-backup: Upload an existing photo from the device ────────────
+  // A separate, deliberately simple backup path for when the camera+crop
+  // flow keeps failing on a given device. No native crop screen, no
+  // compression pipeline at all — the officer picks an existing photo and
+  // we just check its size directly. If it's already small enough
+  // (<= 3MB), it's used as-is; if not, we ask them to pick a smaller one
+  // instead of trying to process it, since the whole point of this path
+  // is to avoid every step that has been implicated in the camera crash.
+  const MAX_UPLOAD_BYTES = 3 * 1024 * 1024 // 3MB
+
+  const pickImageFromDevice = async () => {
+    if (uploadingPhoto) return
+    setUploadingPhoto(true)
+    try {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!lib.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please allow photo library access to upload a citizen photo.'
+        )
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 1,
+      })
+      if (result.canceled || !result.assets || !result.assets[0]) return
+
+      const asset = result.assets[0]
+      const info = await FileSystem.getInfoAsync(asset.uri, { size: true } as any)
+      const size = info.exists && typeof (info as any).size === 'number' ? (info as any).size : 0
+
+      if (size > MAX_UPLOAD_BYTES) {
+        Alert.alert(
+          'Photo Too Large',
+          `This photo is ${(size / (1024 * 1024)).toFixed(1)}MB. Please choose a photo that is 3MB or smaller — most phones let you pick a lower-resolution or previously-shared copy from the gallery.`
+        )
+        return
+      }
+
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+      setPhotoUri(asset.uri)
+      setPhotoBase64(`data:image/jpeg;base64,${base64}`)
+      showToast('Photo uploaded successfully')
+    } catch (err: any) {
+      Alert.alert(
+        'Upload Failed',
+        err?.message ?? 'Could not upload this photo. Please try again or use a different photo.'
+      )
+    } finally {
+      setUploadingPhoto(false)
     }
   }
 
@@ -1064,6 +1128,38 @@ export default function NINRegistrationScreen({ navigation }: Props) {
                       }}
                     >
                       {capturingPhoto ? 'Opening Camera…' : photoUri ? 'Retake Photo' : 'Capture Photo'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={pickImageFromDevice}
+                    disabled={uploadingPhoto}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      backgroundColor: 'transparent',
+                      borderRadius: 10,
+                      paddingVertical: 11,
+                      paddingHorizontal: 14,
+                      borderWidth: 1,
+                      borderColor: T.border,
+                      opacity: uploadingPhoto ? 0.7 : 1,
+                    }}
+                  >
+                    {uploadingPhoto ? (
+                      <ActivityIndicator size="small" color={T.textSub} />
+                    ) : (
+                      <Upload size={14} color={T.textSub} />
+                    )}
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '700',
+                        color: T.textSub,
+                      }}
+                    >
+                      {uploadingPhoto ? 'Uploading…' : 'Upload from Device (max 3MB)'}
                     </Text>
                   </TouchableOpacity>
                 </View>
