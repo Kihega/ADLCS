@@ -151,7 +151,7 @@ router.get('/dashboard', async (req, res) => {
       const monthStart = startOfMonth()
       const vid = officer.villageId ?? -1
 
-      const [totalCitizens, monthBirths, monthDeaths, monthMigrations, pendingCases] = await Promise.all([
+      const [totalCitizens, monthBirths, monthDeaths, monthMigrations, pendingCases, incomingMigrationsPending] = await Promise.all([
         prisma.citizen.count({ where: { currentVillageId: vid } }),
         prisma.birth.count({
           where: { registeredAt: { gte: monthStart }, child: { currentVillageId: vid } },
@@ -162,6 +162,9 @@ router.get('/dashboard', async (req, res) => {
         }).catch(() => 0) ?? Promise.resolve(0),
         prisma.citizen.count({ where: { currentVillageId: vid, vitalStatus: 'alive', idCardIssued: null } })
           .catch(() => 0),
+        // PATCH-MIGRATION-2026: incoming migration requests awaiting this
+        // officer's approval — drives the bell-icon badge on the home screen.
+        prisma.migration.count({ where: { targetOfficerId: id, status: 'pending' } }).catch(() => 0),
       ])
 
       return res.json({
@@ -176,6 +179,7 @@ router.get('/dashboard', async (req, res) => {
           monthDeaths,
           monthMigrations,
           pendingCases,
+          incomingMigrationsPending,
           ritaSynced:      true,
           villageGpsLat:   null,
           villageGpsLng:   null,

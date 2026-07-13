@@ -970,7 +970,14 @@ router.get('/security-alerts', async (req, res) => {
 })
 
 // ── SYSTEM PERFORMANCE — [super_admin only] ──────────────────────────────────────
-router.get('/system-performance', requireRole('super_admin'), async (req, res) => {
+// BUGFIX-DASHBOARD-2026: this was super_admin-only, but the Dashboard
+// Overview tab (first sidebar icon) calls it for BOTH roles to render its
+// PostgreSQL/Redis/Uptime/Node cards. For district_admin the request
+// 403'd, the frontend's .catch(()=>null) swallowed it, and those 4 cards
+// silently showed "Offline"/"—" even though everything was fine. This
+// endpoint returns no district-scoped or sensitive data, so it's safe to
+// open to district_admin as well.
+router.get('/system-performance', requireRole('super_admin', 'district_admin'), async (req, res) => {
   try {
     const dbStart = Date.now()
     let databaseOk = true

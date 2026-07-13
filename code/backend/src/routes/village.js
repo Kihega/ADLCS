@@ -1,16 +1,22 @@
 /**
  * village.js — Village Officer API Routes  v2.0
  *
- * GET  /api/village/dashboard
- * POST /api/village/citizen
- * POST /api/village/birth        (fallback — primary is hospital officer)
- * POST /api/village/death
- * POST /api/village/marriage
- * POST /api/village/building
- * POST /api/village/infrastructure
- * POST /api/village/migration
- * GET  /api/village/records      (aggregated records for VillageViewRecordsScreen)
- * GET  /api/officer/profile      (used by ID card modal — both roles)
+ * GET   /api/village/dashboard
+ * POST  /api/village/citizen
+ * POST  /api/village/birth        (fallback — primary is hospital officer)
+ * POST  /api/village/death
+ * POST  /api/village/marriage
+ * POST  /api/village/migration           (create a migration REQUEST)
+ * GET   /api/village/migration/incoming  (requests awaiting this officer's approval)
+ * GET   /api/village/migration/outgoing  (requests this officer sent)
+ * PATCH /api/village/migration/:id/respond  (approve | reject)
+ * GET   /api/village/records      (aggregated records for VillageViewRecordsScreen)
+ * GET   /api/officer/profile      (used by ID card modal — both roles)
+ *
+ * PATCH-CLEANUP-2026: /api/village/building and /api/village/infrastructure
+ * were removed — no mobile or web screen has called them since the
+ * Building/Infrastructure cards were pulled from the Village Officer app,
+ * and the matching Prisma models have been removed from schema.prisma.
  */
 
 const { Router } = require('express')
@@ -216,107 +222,229 @@ router.post('/marriage', async (req, res) => {
   }
 })
 
-// ── POST /api/village/building ────────────────────────────────────────────────
-router.post('/building', async (req, res) => {
-  const { id:officerId } = req.user
-  const { name, buildingType, floors, yearBuilt, material, condition,
-          occupants, ownerName, ownerNid, notes, referenceNo } = req.body
-  if (!name) return res.status(400).json({ success:false, message:'Building name required' })
-  try {
-    const officer = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
-    const bldgTypeMap = {
-      residential:'residential', business:'business', hotel:'hotel',
-      hospital:'hospital', school:'school', college:'college',
-      university:'university', industry:'industry', government:'government',
-      police:'police', military:'military', training:'training', other:'other',
-    }
-    const bldgId = (referenceNo ?? `BLDG-${Date.now()}`).slice(0, 20)
-    const record = await prisma.building.create({
-      data:{
-        id:            bldgId,
-        buildingType:  bldgTypeMap[(buildingType ?? '').toLowerCase()] ?? 'other',
-        streetLocation: name ?? 'Unknown',
-        villageId:     officer?.villageId ?? 1,
-        owners:        [{ name: ownerName ?? 'Unknown', nid: ownerNid ?? null, floors: floors ?? 1 }],
-        ownershipType: 'private',
-        registeredById: officerId,
-      },
-      select:{ id:true },
-    })
-    return res.json({ success:true, data:{ referenceNo:bldgId, serverId:record.id } })
-  } catch (err) {
-    if (err.code === 'P2002') return res.json({ success:true, duplicate:true })
-    console.error('[village/building]', err)
-    return res.status(500).json({ success:false, message:'Internal server error' })
-  }
-})
+// ── Migration helpers ───────────────────────────────────────────────────────────
+// Finds an officer to notify/approve a migration into `villageId`. Prefers an
+// active officer; falls back to any non-suspended one so a freshly-created
+// village isn't a dead end (surfaced to the requester either way).
+async function resolveTargetOfficer(villageId) {
+  const active = await prisma.villageOfficer.findFirst({
+    where: { villageId, status: 'active' },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (active) return active
+  return prisma.villageOfficer.findFirst({
+    where: { villageId, status: { not: 'suspended' } },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  })
+}
 
-// ── POST /api/village/infrastructure ─────────────────────────────────────────
-router.post('/infrastructure', async (req, res) => {
-  const { id:officerId } = req.user
-  const { name, infraType, status, condition, capacity,
-          yearBuilt, manager, notes, referenceNo } = req.body
-  if (!name) return res.status(400).json({ success:false, message:'Infrastructure name required' })
-  try {
-    const officer = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
-    // InfraType enum: road | railway | station | port | bus_stand
-    const infraMap = {
-      road:'road', railway:'railway', station:'station', port:'port', bus_stand:'bus_stand',
-      school:'road', hospital:'road', water:'road', electricity:'road', other:'road',
-    }
-    const record = await prisma.publicInfrastructure.create({
-      data:{
-        infraType:     infraMap[(infraType ?? '').toLowerCase()] ?? 'road',
-        name:          name.trim(),
-        villageId:     officer?.villageId ?? 1,
-        registeredById: officerId,
-      },
-      select:{ id:true },
-    })
-    return res.json({ success:true, data:{ referenceNo: referenceNo ?? `INFRA-${record.id}`, serverId:record.id } })
-  } catch (err) {
-    console.error('[village/infrastructure]', err)
-    return res.status(500).json({ success:false, message:'Internal server error' })
-  }
-})
-
-// ── POST /api/village/migration ───────────────────────────────────────────────
+// ── POST /api/village/migration — create a migration REQUEST ───────────────────
+// Flow: (1) mobile already looked the citizen up via /citizen-lookup, scoped
+// to the officer's own village; (2) officer picks the destination via the
+// strict region→district→ward→village/street dropdown (GeoCascadePicker with
+// manual entry disabled) plus an optional reason. This just creates a
+// `pending` Migration row addressed to the destination village's officer —
+// nothing about the citizen changes until that officer approves it (see
+// PATCH /migration/:id/respond below).
 router.post('/migration', async (req, res) => {
-  const { id:officerId } = req.user
-  const { citizenName, nationalId, direction, fromVillage, fromRegion,
-          toVillage, toRegion, reason, moveDate, notes, referenceNo } = req.body
-  if (!citizenName) return res.status(400).json({ success:false, message:'citizenName required' })
+  const { id: officerId } = req.user
+  const { citizenId, nationalId, toVillageId, reason } = req.body
+
+  if (!toVillageId) {
+    return res.status(400).json({ success: false, message: 'Destination village/street is required.' })
+  }
+
   try {
-    const officer  = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
-    const citizen  = nationalId ? await prisma.citizen.findFirst({ where:{ nationalId }, select:{ id:true } }) : null
+    const officer = await prisma.villageOfficer.findUnique({
+      where: { id: officerId },
+      select: { villageId: true },
+    })
+    if (!officer?.villageId) {
+      return res.status(422).json({ success: false, message: 'Your officer account is not assigned to a village yet.' })
+    }
+
+    // Citizen must exist AND already live in the requesting officer's own
+    // village — an officer may only initiate migration for residents they
+    // are actually responsible for.
+    const citizen = citizenId
+      ? await prisma.citizen.findFirst({ where: { id: citizenId, currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
+      : nationalId
+        ? await prisma.citizen.findFirst({ where: { nationalId: String(nationalId).trim(), currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
+        : null
 
     if (!citizen) {
-      return res.status(422).json({ success:false, message:'Citizen not found. Register the citizen first using their National ID, then record their migration.' })
+      return res.status(422).json({ success: false, message: 'Citizen not found in your village. Look them up first using their NIN, Birth ID, or full name.' })
     }
 
-    const fromVid  = officer?.villageId ?? 1
-    let   toVid    = fromVid
-    if (toVillage) {
-      const dest = await prisma.village.findFirst({ where:{ name:{ contains:toVillage, mode:'insensitive' } }, select:{ id:true } }).catch(()=>null)
-      if (dest) toVid = dest.id
+    const toVid = Number(toVillageId)
+    if (toVid === citizen.currentVillageId) {
+      return res.status(400).json({ success: false, message: 'This citizen already lives in the selected destination.' })
+    }
+    const destination = await prisma.village.findUnique({ where: { id: toVid }, select: { id: true } })
+    if (!destination) {
+      return res.status(404).json({ success: false, message: 'Destination village/street not found.' })
     }
 
-    const expiry   = new Date(); expiry.setDate(expiry.getDate() + 30)
-    const record   = await prisma.migration.create({
-      data:{
-        citizenId:       citizen.id,
-        fromVillageId:   fromVid,
-        toVillageId:     toVid,
-        reason:          reason ?? 'Voluntary relocation',
-        expiryDate:      expiry,
-        sourceOfficerId: officerId,
-      },
-      select:{ id:true },
+    const existingPending = await prisma.migration.findFirst({
+      where: { citizenId: citizen.id, status: 'pending' },
+      select: { id: true },
     })
-    return res.json({ success:true, data:{ referenceNo: referenceNo ?? `MIG-${record.id}`, serverId:record.id } })
+    if (existingPending) {
+      return res.status(409).json({ success: false, message: 'This citizen already has a pending migration request.' })
+    }
+
+    const targetOfficer = await resolveTargetOfficer(toVid)
+
+    const expiry = new Date()
+    expiry.setDate(expiry.getDate() + 30)
+
+    const record = await prisma.migration.create({
+      data: {
+        citizenId: citizen.id,
+        fromVillageId: officer.villageId,
+        toVillageId: toVid,
+        reason: (reason ?? '').toString().trim() || 'Not specified',
+        expiryDate: expiry,
+        sourceOfficerId: officerId,
+        targetOfficerId: targetOfficer?.id,
+      },
+      select: { id: true, status: true, requestDate: true },
+    })
+
+    return res.json({
+      success: true,
+      data: {
+        referenceNo: `MIG-${record.id.slice(0, 8).toUpperCase()}`,
+        serverId: record.id,
+        status: record.status,
+        targetOfficerAssigned: !!targetOfficer,
+      },
+      message: targetOfficer
+        ? 'Migration request sent. The citizen must report in person to the destination village officer, who will confirm before it is finalised.'
+        : 'Migration request saved, but no officer is currently assigned to the destination village — it will be actioned once one is.',
+    })
   } catch (err) {
     console.error('[village/migration]', err)
-    return res.status(500).json({ success:false, message:'Internal server error' })
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+// ── GET /api/village/migration/incoming — requests awaiting THIS officer ───────
+router.get('/migration/incoming', async (req, res) => {
+  const { id: officerId } = req.user
+  try {
+    const rows = await prisma.migration.findMany({
+      where: { targetOfficerId: officerId, status: 'pending' },
+      orderBy: { requestDate: 'desc' },
+      select: {
+        id: true, reason: true, requestDate: true, expiryDate: true,
+        citizen: { select: { id: true, firstName: true, middleName: true, surname: true, nationalId: true, gender: true, dateOfBirth: true } },
+        fromVillage: { select: { id: true, name: true, ward: { select: { name: true, district: { select: { name: true } } } } } },
+      },
+    })
+    return res.json({
+      success: true,
+      data: rows.map(r => ({
+        id: r.id,
+        reason: r.reason,
+        requestDate: r.requestDate,
+        expiryDate: r.expiryDate,
+        citizenName: [r.citizen?.firstName, r.citizen?.middleName, r.citizen?.surname].filter(Boolean).join(' '),
+        nationalId: r.citizen?.nationalId ?? null,
+        gender: r.citizen?.gender ?? null,
+        fromVillageName: r.fromVillage?.name ?? '—',
+        fromWardName: r.fromVillage?.ward?.name ?? '—',
+        fromDistrictName: r.fromVillage?.ward?.district?.name ?? '—',
+      })),
+    })
+  } catch (err) {
+    console.error('[village/migration/incoming]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+// ── GET /api/village/migration/outgoing — requests THIS officer sent ───────────
+router.get('/migration/outgoing', async (req, res) => {
+  const { id: officerId } = req.user
+  try {
+    const rows = await prisma.migration.findMany({
+      where: { sourceOfficerId: officerId },
+      orderBy: { requestDate: 'desc' },
+      take: 50,
+      select: {
+        id: true, status: true, reason: true, requestDate: true, confirmedDate: true,
+        citizen: { select: { firstName: true, surname: true, nationalId: true } },
+        toVillage: { select: { name: true } },
+      },
+    })
+    return res.json({
+      success: true,
+      data: rows.map(r => ({
+        id: r.id,
+        status: r.status,
+        reason: r.reason,
+        requestDate: r.requestDate,
+        confirmedDate: r.confirmedDate,
+        citizenName: [r.citizen?.firstName, r.citizen?.surname].filter(Boolean).join(' '),
+        nationalId: r.citizen?.nationalId ?? null,
+        toVillageName: r.toVillage?.name ?? '—',
+      })),
+    })
+  } catch (err) {
+    console.error('[village/migration/outgoing]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+// ── PATCH /api/village/migration/:id/respond — approve or reject ───────────────
+// Approving finalises the migration: the citizen's currentVillageId moves to
+// the destination village. Per the paper process, the target officer should
+// only tap Approve after the citizen has physically reported to them for
+// verification — the app can't enforce that in-person step, so it's spelled
+// out in the confirmation copy on the mobile screen instead.
+router.patch('/migration/:id/respond', async (req, res) => {
+  const { id: officerId } = req.user
+  const { id: migrationId } = req.params
+  const { action } = req.body // 'approve' | 'reject'
+
+  if (!['approve', 'reject'].includes(action)) {
+    return res.status(400).json({ success: false, message: "action must be 'approve' or 'reject'" })
+  }
+
+  try {
+    const migration = await prisma.migration.findUnique({
+      where: { id: migrationId },
+      select: { id: true, status: true, citizenId: true, toVillageId: true, targetOfficerId: true },
+    })
+    if (!migration) return res.status(404).json({ success: false, message: 'Migration request not found.' })
+    if (migration.targetOfficerId !== officerId) {
+      return res.status(403).json({ success: false, message: 'This request is not addressed to you.' })
+    }
+    if (migration.status !== 'pending') {
+      return res.status(409).json({ success: false, message: `This request was already ${migration.status}.` })
+    }
+
+    if (action === 'approve') {
+      await prisma.$transaction([
+        prisma.migration.update({
+          where: { id: migrationId },
+          data: { status: 'confirmed', confirmedDate: new Date() },
+        }),
+        prisma.citizen.update({
+          where: { id: migration.citizenId },
+          data: { currentVillageId: migration.toVillageId },
+        }),
+      ])
+      return res.json({ success: true, message: 'Migration approved. The citizen record has been updated.' })
+    }
+
+    await prisma.migration.update({ where: { id: migrationId }, data: { status: 'cancelled' } })
+    return res.json({ success: true, message: 'Migration request rejected.' })
+  } catch (err) {
+    console.error('[village/migration/respond]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
 
@@ -326,11 +454,38 @@ router.post('/migration', async (req, res) => {
 // are STRICTLY scoped to the officer's own village — a citizen registered in
 // a different village is treated as not-found so officers can never browse
 // another village's residents.
+const CITIZEN_LOOKUP_SELECT = {
+  id: true,
+  nationalId: true,
+  firstName: true,
+  middleName: true,
+  surname: true,
+  gender: true,
+  dateOfBirth: true,
+  age: true,
+  vitalStatus: true,
+  maritalStatus: true,
+  photoUrl: true,
+  idCardIssued: true,
+  idCardExpires: true,
+  streetName: true,
+  houseRegNumber: true,
+  educationLevel: true,
+  registeredAt: true,
+  currentVillageId: true,
+}
+
 router.get('/citizen-lookup', async (req, res) => {
   const { id: officerId } = req.user
-  const { nationalId } = req.query
-  if (!nationalId || typeof nationalId !== 'string' || !nationalId.trim()) {
-    return res.status(400).json({ success: false, message: 'nationalId query param required' })
+  const nationalId = typeof req.query.nationalId === 'string' ? req.query.nationalId.trim() : ''
+  // PATCH-MIGRATION-2026: `q` is the generic lookup used by the migration
+  // flow — matches NIN, Birth Registration ID (BID) / birth cert no, or a
+  // partial full name. The original `nationalId` param keeps its strict
+  // exact-match-only contract for existing callers (CitizenProfileScreen).
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  const term = nationalId || q
+  if (!term) {
+    return res.status(400).json({ success: false, message: 'nationalId or q query param required' })
   }
   try {
     const officer = await prisma.villageOfficer.findUnique({
@@ -339,36 +494,32 @@ router.get('/citizen-lookup', async (req, res) => {
     })
     if (!officer) return res.status(404).json({ success: false, message: 'Officer not found' })
 
-    const citizen = await prisma.citizen.findFirst({
-      where: {
-        nationalId: nationalId.trim(),
-        currentVillageId: officer.villageId ?? -1,
-      },
-      select: {
-        id: true,
-        nationalId: true,
-        firstName: true,
-        middleName: true,
-        surname: true,
-        gender: true,
-        dateOfBirth: true,
-        age: true,
-        vitalStatus: true,
-        maritalStatus: true,
-        photoUrl: true,
-        idCardIssued: true,
-        idCardExpires: true,
-        streetName: true,
-        houseRegNumber: true,
-        educationLevel: true,
-        registeredAt: true,
-      },
+    const vid = officer.villageId ?? -1
+
+    let citizen = await prisma.citizen.findFirst({
+      where: { nationalId: term, currentVillageId: vid },
+      select: CITIZEN_LOOKUP_SELECT,
     })
+
+    if (!citizen && q) {
+      citizen = await prisma.citizen.findFirst({
+        where: {
+          currentVillageId: vid,
+          OR: [
+            { birthRecord: { birthId: term } },
+            { birthRecord: { birthCertNo: term } },
+            { firstName: { contains: term, mode: 'insensitive' } },
+            { surname: { contains: term, mode: 'insensitive' } },
+          ],
+        },
+        select: CITIZEN_LOOKUP_SELECT,
+      })
+    }
 
     if (!citizen) {
       return res.status(404).json({
         success: false,
-        message: 'No citizen with this NIN was found registered in your village.',
+        message: 'No citizen matching this NIN, Birth ID, or name was found registered in your village.',
       })
     }
 
@@ -376,6 +527,7 @@ router.get('/citizen-lookup', async (req, res) => {
       success: true,
       data: {
         ...citizen,
+        fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
         ninCertificateIssued: !!citizen.idCardIssued,
         villageName: officer.village?.name ?? null,
       },
