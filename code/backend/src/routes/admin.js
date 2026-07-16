@@ -40,6 +40,7 @@
  *   GET   /api/admin/security-alerts          — scoped (severity != info)
  *   GET   /api/admin/system-performance       — [super_admin] live DB/Redis health
  *   GET   /api/admin/migrations               — scoped
+ *   GET   /api/admin/migrations/trends        — scoped (Migration Trends sidebar)
  *   GET   /api/admin/marriages                — scoped
  */
 
@@ -99,6 +100,40 @@ async function buildCitizenGeoWhere(req) {
   if (districtId) return { currentVillage: { ward: { districtId: Number(districtId) } } }
   if (regionId)   return { currentVillage: { ward: { district: { regionId: Number(regionId) } } } }
   return {}
+}
+
+// PATCH-MIGTRENDS-2026: geo-scoping for Migration rows, which touch TWO
+// villages (fromVillage / toVillage) — matches a migration if EITHER end
+// falls within the requested scope. Same district-admin floor + top-down
+// cascade contract as buildCitizenGeoWhere() above, and the same
+// OR-of-fromVillage/toVillage shape the existing GET /migrations list
+// endpoint already uses (just generalised to ward/village too).
+async function migrationGeoWhere(req) {
+  const { regionId, districtId, wardId, villageId } = req.query
+
+  const endWhere = (idField, relation, districtFloor) => {
+    if (villageId) return { [idField]: Number(villageId) }
+    if (wardId)    return { [relation]: { wardId: Number(wardId) } }
+    if (districtFloor != null) return { [relation]: { ward: { districtId: districtFloor } } }
+    if (districtId) return { [relation]: { ward: { districtId: Number(districtId) } } }
+    if (regionId)   return { [relation]: { ward: { district: { regionId: Number(regionId) } } } }
+    return null
+  }
+
+  if (req.user.role === 'district_admin') {
+    const adminDistrictId = await getAdminDistrictId(req)
+    return {
+      OR: [
+        endWhere('fromVillageId', 'fromVillage', adminDistrictId),
+        endWhere('toVillageId',   'toVillage',   adminDistrictId),
+      ],
+    }
+  }
+
+  const from = endWhere('fromVillageId', 'fromVillage', null)
+  const to   = endWhere('toVillageId',   'toVillage',   null)
+  if (!from && !to) return {}
+  return { OR: [from ?? {}, to ?? {}] }
 }
 
 /** Pagination helper — clamps page/limit to sane bounds. */
@@ -1055,6 +1090,52 @@ router.get('/migrations', async (req, res) => {
   }
 })
 
+// ── PATCH-MIGTRENDS-2026: GET /migrations/trends — Migration Trends sidebar ───
+// National admins filter starting at Region -> District -> Ward -> Village/
+// Street; district admins are floored to their own district and filter by
+// Ward -> Village/Street only (same GeoFilterBar contract as RITA/NIDA).
+router.get('/migrations/trends', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query
+    const dateFilter = {}
+    if (startDate) dateFilter.gte = new Date(startDate)
+    if (endDate)   dateFilter.lte = new Date(endDate)
+
+    const geoWhere = await migrationGeoWhere(req)
+    const where = {
+      ...geoWhere,
+      ...(Object.keys(dateFilter).length ? { requestDate: dateFilter } : {}),
+    }
+
+    const [rows, statusCounts] = await Promise.all([
+      prisma.migration.groupBy({
+        by: ['requestDate'],
+        _count: { id: true },
+        where,
+        orderBy: { requestDate: 'asc' },
+      }),
+      prisma.migration.groupBy({ by: ['status'], where, _count: { _all: true } }),
+    ])
+
+    const toMonth = (row) => {
+      const d = new Date(row.requestDate)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+    const monthMap = {}
+    rows.forEach(r => { const m = toMonth(r); monthMap[m] = (monthMap[m] || 0) + r._count.id })
+    const trend = Object.entries(monthMap).sort().map(([month, count]) => ({ month, count }))
+
+    const totals = { pending: 0, confirmed: 0, cancelled: 0, expired: 0 }
+    statusCounts.forEach(s => { totals[s.status] = s._count._all })
+    totals.all = rows.reduce((s, r) => s + r._count.id, 0)
+
+    return res.json({ success: true, data: { trend, totals } })
+  } catch (err) {
+    console.error('[admin/migrations/trends]', err)
+    return res.status(500).json({ success: false, message: 'Failed to fetch migration trends' })
+  }
+})
+
 // ── MARRIAGES ───────────────────────────────────────────────────────────────────
 router.get('/marriages', async (req, res) => {
   const { status } = req.query
@@ -1111,39 +1192,64 @@ router.get('/rita', async (req, res) => {
     if (startDate) dateFilter.gte = new Date(startDate)
     if (endDate)   dateFilter.lte = new Date(endDate)
 
-    const geoFilter = {}
-    if (regionId)   geoFilter.regionId   = regionId
-    if (districtId) geoFilter.districtId = districtId
+    // BUGFIX-RITA-2026: district_admin is now floored to their own district
+    // regardless of query params — previously this route only honoured an
+    // explicit regionId/districtId, which the scoped GeoFilterBar (the one
+    // district_admin actually uses) never sends, so a district_admin always
+    // saw unfiltered NATIONAL data here.
+    const adminDistrictId = req.user.role === 'district_admin' ? await getAdminDistrictId(req) : null
+    const districtScope = adminDistrictId ?? (districtId ? Number(districtId) : undefined)
+    const regionScope   = adminDistrictId != null ? undefined : (regionId ? Number(regionId) : undefined)
+
+    // BUGFIX-RITA-2026: `createdAt` does not exist on Birth/Death/Marriage
+    // — the real field is `registeredAt`. Every call was throwing a Prisma
+    // validation error, which is why this card always came back empty.
+    const birthWhere = {
+      ...(Object.keys(dateFilter).length ? { registeredAt: dateFilter } : {}),
+      ...(districtScope != null ? { officer: { districtId: districtScope } } :
+          regionScope   != null ? { officer: { district: { regionId: regionScope } } } : {}),
+    }
+    const deathWhere = {
+      ...(Object.keys(dateFilter).length ? { registeredAt: dateFilter } : {}),
+      ...(districtScope != null ? { OR: [
+            { villageOfficer:  { districtId: districtScope } },
+            { hospitalOfficer: { districtId: districtScope } },
+          ] } :
+          regionScope != null ? { OR: [
+            { villageOfficer:  { district: { regionId: regionScope } } },
+            { hospitalOfficer: { district: { regionId: regionScope } } },
+          ] } : {}),
+    }
+    const marriageWhere = {
+      ...(Object.keys(dateFilter).length ? { registeredAt: dateFilter } : {}),
+      ...(districtScope != null ? { registeredBy: { districtId: districtScope } } :
+          regionScope   != null ? { registeredBy: { district: { regionId: regionScope } } } : {}),
+    }
 
     const [birthRows, deathRows, marriageRows] = await Promise.all([
       prisma.birth.groupBy({
-        by: ['createdAt'],
+        by: ['registeredAt'],
         _count: { id: true },
-        where: {
-          ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
-          ...(regionId || districtId ? {
-            registeredBy: { district: { ...(regionId ? { regionId } : {}), ...(districtId ? { id: districtId } : {}) } }
-          } : {}),
-        },
-        orderBy: { createdAt: 'asc' },
+        where: birthWhere,
+        orderBy: { registeredAt: 'asc' },
       }),
       prisma.death.groupBy({
-        by: ['createdAt'],
+        by: ['registeredAt'],
         _count: { id: true },
-        where: Object.keys(dateFilter).length ? { createdAt: dateFilter } : {},
-        orderBy: { createdAt: 'asc' },
+        where: deathWhere,
+        orderBy: { registeredAt: 'asc' },
       }),
       prisma.marriage.groupBy({
-        by: ['createdAt'],
+        by: ['registeredAt'],
         _count: { id: true },
-        where: Object.keys(dateFilter).length ? { createdAt: dateFilter } : {},
-        orderBy: { createdAt: 'asc' },
+        where: marriageWhere,
+        orderBy: { registeredAt: 'asc' },
       }),
     ])
 
     // Aggregate by month label
     const toMonth = (row) => {
-      const d = new Date(row.createdAt)
+      const d = new Date(row.registeredAt)
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     }
     const agg = (rows) => {
@@ -1174,24 +1280,35 @@ router.get('/rita', async (req, res) => {
 // ── PATCH-4: GET /nida — NIN issuance trends for NIDA sidebar ─────────────────
 router.get('/nida', async (req, res) => {
   try {
-    const { regionId, districtId, startDate, endDate } = req.query
+    const { startDate, endDate } = req.query
     const dateFilter = {}
     if (startDate) dateFilter.gte = new Date(startDate)
     if (endDate)   dateFilter.lte = new Date(endDate)
 
+    // BUGFIX-NIDA-2026: `nin` and `createdAt` do not exist on Citizen — the
+    // real fields are `nationalId` and `idCardIssued` (the actual NIN
+    // *issuance* event/date; `registeredAt` is when the citizen record was
+    // created, which can predate NIN issuance). Every call was throwing a
+    // Prisma validation error, which is why this card always came back
+    // empty even with real issuances in the database. Geo scoping now
+    // reuses buildCitizenGeoWhere() — the same helper every other
+    // citizen-scoped query in this file already uses — so district_admin
+    // is floored to their own district and can narrow by ward/village.
+    const geoWhere = await buildCitizenGeoWhere(req)
+    const where = {
+      ...geoWhere,
+      idCardIssued: Object.keys(dateFilter).length ? { ...dateFilter, not: null } : { not: null },
+    }
+
     const ninRows = await prisma.citizen.groupBy({
-      by: ['createdAt'],
+      by: ['idCardIssued'],
       _count: { id: true },
-      where: {
-        nin: { not: null },
-        ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
-        ...(regionId ? { regionId } : {}),
-      },
-      orderBy: { createdAt: 'asc' },
+      where,
+      orderBy: { idCardIssued: 'asc' },
     })
 
     const toMonth = (row) => {
-      const d = new Date(row.createdAt)
+      const d = new Date(row.idCardIssued)
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     }
     const monthMap = {}

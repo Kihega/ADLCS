@@ -60,6 +60,7 @@ import {
   Download,
   WifiLow,
   IdCard,
+  Repeat,
 } from 'lucide-react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -82,6 +83,8 @@ type VStack = {
   VillageRecordDeath: undefined
   NINRegistration: undefined
   SyncData: undefined
+  TrackMigration: undefined
+  MigrationRequests: undefined
 }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageHome'> }
 
@@ -635,7 +638,10 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           totalBirths: 0,
           totalDeaths: 0,
         })
-        setUnread(remote.pendingCases ?? 0)
+        // PATCH-MIGRATION-2026: badge now also reflects incoming migration
+        // requests awaiting this officer's approval, not just the ID-card
+        // backlog.
+        setUnread((remote.pendingCases ?? 0) + (remote.incomingMigrationsPending ?? 0))
       AsyncStorage.getItem('tzcrvs_bell_dismissed_date')
         .then((d) => _setBellDismissed(d === _todayKey()))
         .catch(() => {})
@@ -743,6 +749,13 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       sub: 'Marriage',
       bg: '#e11d48',
     },
+    {
+      id: 'migration',
+      icon: <Repeat size={18} color="#fff" />,
+      label: 'Migrate',
+      sub: 'Citizen',
+      bg: '#7c3aed',
+    },
   ]
 
   const navigate = (id: string) => {
@@ -751,6 +764,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       citizen: 'CitizenProfile',
       death: 'VillageRecordDeath',
       marriage: 'RegisterMarriage',
+      migration: 'TrackMigration',
       records: 'VillageViewRecords',
     }
 
@@ -923,7 +937,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           <TouchableOpacity style={s.iconBtn} onPress={toggleTheme}>
             {isDark ? <Sun size={14} color={TZ.yellow} /> : <Moon size={14} color={TZ.yellow} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn} onPress={() => { _navigation.navigate('SyncData'); _dismissBell() }}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => { _navigation.navigate('MigrationRequests'); _dismissBell() }}>
             <Bell size={15} color="rgba(255,255,255,0.80)" />
             {unread > 0 && !_bellDismissed && (
               <View style={s.badge}>

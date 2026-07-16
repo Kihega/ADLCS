@@ -337,10 +337,15 @@ export default function GeoCascadePicker({
   value,
   onChange,
   villageLabel = 'Village / Street',
+  allowManualVillage = true,
 }: {
   value: GeoSelection
   onChange: (geo: GeoSelection) => void
   villageLabel?: string
+  // PATCH-MIGRATION-2026: the migration destination picker must be a
+  // strict dropdown of villages/streets that already exist in the DB — no
+  // "+ Add new" affordance, unlike every other use of this component.
+  allowManualVillage?: boolean
 }) {
   const [openSheet, setOpenSheet] = useState<'region' | 'district' | 'ward' | 'village' | null>(
     null
@@ -582,7 +587,7 @@ export default function GeoCascadePicker({
           onChange({ ...value, villageId: opt.id, villageName: opt.name })
           setOpenSheet(null)
         }}
-        allowManualEntry
+        allowManualEntry={allowManualVillage}
         manualLabel={`+ Add new ${value.villageType}`}
         manualBusy={creatingVillage}
         onManualSubmit={handleCreateVillage}
