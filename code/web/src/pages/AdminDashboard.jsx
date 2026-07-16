@@ -27,6 +27,7 @@ import {
   ShieldAlert, Stethoscope,
   Map as MapIcon, Search, Cpu, LayoutDashboard, Landmark, Heart,
   FileText, Sun, Moon,  // PATCH-EMAIL-2025: light/dark mode toggle icons
+  Repeat,  // PATCH-MIGTRENDS-2026: Migration Trends sidebar icon
 } from 'lucide-react'
 
 import { useAuthStore } from '../store/authStore'
@@ -1009,9 +1010,67 @@ function NIDASection({ role }) {
   )
 }
 
-// BUGFIX-10: Migration Trends removed; System Log Reports / Security
-// Alerts are now Super-Admin-only (District Admin dashboard no longer
-// shows these two menu buttons).
+// PATCH-MIGTRENDS-2026: Migration Trends re-added for both roles. Uses the
+// same GeoFilterBar contract as RITA/NIDA: super_admin gets the full
+// Region -> District -> Ward -> Village/Street cascade; district_admin
+// gets the scoped Ward -> Village/Street picker, floored server-side to
+// their own district regardless of what the client sends.
+function MigrationsSection({ role }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState({})
+
+  const load = useCallback((f = filters) => {
+    setLoading(true)
+    api.apiGetMigrationTrends(f)
+      .then(r => setData(r.data))
+      .catch(e => console.error('[MigrationTrends]', e))
+      .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(filters) }, [filters, load])
+
+  const totals = data?.totals || { pending: 0, confirmed: 0, cancelled: 0, expired: 0, all: 0 }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-white font-bold text-lg">Migration Trends</h2>
+      <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
+
+      {loading ? (
+        <Card><p className="text-gray-500 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading migration data…</p></Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard Icon={Repeat}         label="Pending"   value={totals.pending.toLocaleString()}   accent="text-amber-400" />
+            <StatCard Icon={CheckCircle2}   label="Confirmed" value={totals.confirmed.toLocaleString()} accent="text-emerald-400" />
+            <StatCard Icon={AlertTriangle}  label="Cancelled" value={totals.cancelled.toLocaleString()} accent="text-red-400" />
+            <StatCard Icon={UserX}          label="Expired"   value={totals.expired.toLocaleString()}   accent="text-gray-400" />
+          </div>
+          <Card>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Migration Requests — Monthly Trend</p>
+            {data?.trend?.length ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={data.trend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
+                  <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
+                  <Bar dataKey="count" fill="#7c3aed" name="Migration Requests" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-gray-600 text-xs py-8 text-center">No migration requests found for this scope yet.</p>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── useTheme — persisted per user-ID in localStorage, removed on logout ────
 // PATCH-POP-3: key is now scoped to userId so different users on the same
 // device each keep their own preference. The cleanup effect removes the CSS
@@ -1046,6 +1105,7 @@ const NAV = [
   { key: 'health_officers',     label: 'Health Officers',      Icon: Stethoscope,     roles: ['super_admin', 'district_admin'] },
   { key: 'manage_users',        label: 'Manage Users',         Icon: Shield,          roles: ['super_admin'] },
   { key: 'marriages',           label: 'Marriage Records',     Icon: Heart,           roles: ['super_admin', 'district_admin'] },
+  { key: 'migrations',          label: 'Migration Trends',     Icon: Repeat,          roles: ['super_admin', 'district_admin'] },
   { key: 'audit_logs',          label: 'System Log Reports',   Icon: FileText,        roles: ['super_admin'] },
   { key: 'security_alerts',     label: 'Security Alerts',      Icon: ShieldAlert,     roles: ['super_admin'] },
   { key: 'system_performance',  label: 'System Performance',   Icon: Cpu,             roles: ['super_admin'] },
@@ -1058,6 +1118,7 @@ const SECTION_TITLE = {
   village_officers: 'Village Officers', health_officers: 'Health Officers', manage_users: 'Manage Users',
   marriages: 'Marriage Records', audit_logs: 'System Log Reports',
   security_alerts: 'Security Alerts', system_performance: 'System Performance',
+  migrations: 'Migration Trends',
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -1096,6 +1157,7 @@ export default function AdminDashboard({ role }) {
       case 'system_performance':  return <SystemPerformanceSection />
       case 'rita':               return <RITASection role={role} />
       case 'nida':               return <NIDASection role={role} />
+      case 'migrations':         return <MigrationsSection role={role} />
       default:                    return null
     }
   }

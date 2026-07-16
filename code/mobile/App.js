@@ -37,6 +37,8 @@ import VillageViewRecordsScreen from './src/screens/village/VillageViewRecordsSc
 import RegisterMarriageScreen from './src/screens/village/RegisterMarriageScreen'
 import VillageRecordDeathScreen from './src/screens/village/VillageRecordDeathScreen'
 import NINRegistrationScreen from './src/screens/village/NINRegistrationScreen'
+import TrackMigrationScreen from './src/screens/village/TrackMigrationScreen'
+import MigrationRequestsScreen from './src/screens/village/MigrationRequestsScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -72,6 +74,8 @@ export default function App() {
               <Stack.Screen name="RegisterMarriage" component={RegisterMarriageScreen} />
               <Stack.Screen name="VillageRecordDeath" component={VillageRecordDeathScreen} />
               <Stack.Screen name="NINRegistration" component={NINRegistrationScreen} />
+              <Stack.Screen name="TrackMigration" component={TrackMigrationScreen} />
+              <Stack.Screen name="MigrationRequests" component={MigrationRequestsScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </ThemeProvider>

@@ -190,3 +190,9 @@ export async function apiGetNIDA(params = {}) {
   const { data } = await apiClient.get('/admin/nida', { params })
   return data
 }
+
+// PATCH-MIGTRENDS-2026: Migration trends
+export async function apiGetMigrationTrends(params = {}) {
+  const { data } = await apiClient.get('/admin/migrations/trends', { params })
+  return data
+}

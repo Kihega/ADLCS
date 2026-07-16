@@ -73,6 +73,36 @@ export async function apiPost(endpoint: string, body: object): Promise<any> {
   }
 }
 
+// PATCH-MIGRATION-2026: PATCH verb helper — mirrors apiPost, used by the
+// migration approve/reject action (PATCH /village/migration/:id/respond).
+export async function apiPatch(endpoint: string, body: object): Promise<any> {
+  const token = await getToken()
+  if (!token) throw new Error('No auth token')
+  const base = await resolveBase()
+  const { signal, clear } = makeSignal(15_000)
+  try {
+    const res = await fetch(`${base}${endpoint}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+      signal,
+    })
+    clear()
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`
+      try {
+        const j = await res.json()
+        if (j?.message) detail = j.message
+      } catch {}
+      throw new Error(detail)
+    }
+    return res.json()
+  } catch (e) {
+    clear()
+    throw e
+  }
+}
+
 export async function apiGet(endpoint: string): Promise<any> {
   const token = await getToken()
   if (!token) throw new Error('No auth token')
