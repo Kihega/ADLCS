@@ -136,6 +136,30 @@ async function migrationGeoWhere(req) {
   return { OR: [from ?? {}, to ?? {}] }
 }
 
+// PATCH-WEEKLYTRENDS-2026: RITA/NIDA/Migration cards now chart WEEK 1..5
+// within a single selected month/year (instead of one bar per calendar month
+// across the whole dataset). `monthRange` resolves the year/month query params
+// (defaulting to the current month) into a [start, end) date window;
+// `groupByWeek` buckets already-fetched groupBy rows by day-of-month / 7.
+function monthRange(query) {
+  const now = new Date()
+  const year  = query.year  ? Number(query.year)  : now.getFullYear()
+  const month = query.month ? Number(query.month) : now.getMonth() + 1 // 1-12
+  const start = new Date(year, month - 1, 1)
+  const end   = new Date(year, month, 1)
+  return { start, end, year, month }
+}
+
+function groupByWeek(rows, dateField) {
+  const buckets = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+  rows.forEach(r => {
+    const d = new Date(r[dateField])
+    const wk = Math.min(5, Math.ceil(d.getDate() / 7))
+    buckets[wk] += r._count.id
+  })
+  return [1, 2, 3, 4, 5].map(w => ({ week: `Week ${w}`, count: buckets[w] }))
+}
+
 /** Pagination helper — clamps page/limit to sane bounds. */
 function pagination(req, defaultLimit = 20, maxLimit = 100) {
   const page  = Math.max(parseInt(req.query.page) || 1, 1)
@@ -1096,16 +1120,11 @@ router.get('/migrations', async (req, res) => {
 // Ward -> Village/Street only (same GeoFilterBar contract as RITA/NIDA).
 router.get('/migrations/trends', async (req, res) => {
   try {
-    const { startDate, endDate } = req.query
-    const dateFilter = {}
-    if (startDate) dateFilter.gte = new Date(startDate)
-    if (endDate)   dateFilter.lte = new Date(endDate)
-
+    // PATCH-WEEKLYTRENDS-2026: floored to ONE month/year (picked above the
+    // cards on the dashboard) and charted as Week 1..5 within it.
+    const { start, end, year, month } = monthRange(req.query)
     const geoWhere = await migrationGeoWhere(req)
-    const where = {
-      ...geoWhere,
-      ...(Object.keys(dateFilter).length ? { requestDate: dateFilter } : {}),
-    }
+    const where = { ...geoWhere, requestDate: { gte: start, lt: end } }
 
     const [rows, statusCounts] = await Promise.all([
       prisma.migration.groupBy({
@@ -1117,19 +1136,13 @@ router.get('/migrations/trends', async (req, res) => {
       prisma.migration.groupBy({ by: ['status'], where, _count: { _all: true } }),
     ])
 
-    const toMonth = (row) => {
-      const d = new Date(row.requestDate)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    }
-    const monthMap = {}
-    rows.forEach(r => { const m = toMonth(r); monthMap[m] = (monthMap[m] || 0) + r._count.id })
-    const trend = Object.entries(monthMap).sort().map(([month, count]) => ({ month, count }))
+    const trend = groupByWeek(rows, 'requestDate')
 
     const totals = { pending: 0, confirmed: 0, cancelled: 0, expired: 0 }
     statusCounts.forEach(s => { totals[s.status] = s._count._all })
     totals.all = rows.reduce((s, r) => s + r._count.id, 0)
 
-    return res.json({ success: true, data: { trend, totals } })
+    return res.json({ success: true, data: { trend, totals, year, month } })
   } catch (err) {
     console.error('[admin/migrations/trends]', err)
     return res.status(500).json({ success: false, message: 'Failed to fetch migration trends' })
@@ -1187,10 +1200,11 @@ router.delete('/births', requireRole('super_admin'), async (req, res) => {
 // ── PATCH-4: GET /rita — birth/death/marriage trends for RITA sidebar ─────────
 router.get('/rita', async (req, res) => {
   try {
-    const { regionId, districtId, startDate, endDate } = req.query
-    const dateFilter = {}
-    if (startDate) dateFilter.gte = new Date(startDate)
-    if (endDate)   dateFilter.lte = new Date(endDate)
+    const { regionId, districtId } = req.query
+    // PATCH-WEEKLYTRENDS-2026: floored to a single selected month/year; charts
+    // below bucket into Week 1..5 within that window.
+    const { start, end, year, month } = monthRange(req.query)
+    const dateFilter = { gte: start, lt: end }
 
     // BUGFIX-RITA-2026: district_admin is now floored to their own district
     // regardless of query params — previously this route only honoured an
@@ -1247,28 +1261,20 @@ router.get('/rita', async (req, res) => {
       }),
     ])
 
-    // Aggregate by month label
-    const toMonth = (row) => {
-      const d = new Date(row.registeredAt)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    }
-    const agg = (rows) => {
-      const map = {}
-      rows.forEach(r => { const m = toMonth(r); map[m] = (map[m] || 0) + r._count.id })
-      return Object.entries(map).sort().map(([month, count]) => ({ month, count }))
-    }
-
+    // PATCH-WEEKLYTRENDS-2026: bucket into Week 1..5 of the selected month
+    // instead of one point per calendar month.
     return res.json({
       success: true,
       data: {
-        births:    agg(birthRows),
-        deaths:    agg(deathRows),
-        marriages: agg(marriageRows),
+        births:    groupByWeek(birthRows,    'registeredAt'),
+        deaths:    groupByWeek(deathRows,    'registeredAt'),
+        marriages: groupByWeek(marriageRows, 'registeredAt'),
         totals: {
           births:    birthRows.reduce((s, r) => s + r._count.id, 0),
           deaths:    deathRows.reduce((s, r) => s + r._count.id, 0),
           marriages: marriageRows.reduce((s, r) => s + r._count.id, 0),
         },
+        year, month,
       },
     })
   } catch (err) {
@@ -1280,10 +1286,9 @@ router.get('/rita', async (req, res) => {
 // ── PATCH-4: GET /nida — NIN issuance trends for NIDA sidebar ─────────────────
 router.get('/nida', async (req, res) => {
   try {
-    const { startDate, endDate } = req.query
-    const dateFilter = {}
-    if (startDate) dateFilter.gte = new Date(startDate)
-    if (endDate)   dateFilter.lte = new Date(endDate)
+    // PATCH-WEEKLYTRENDS-2026: floored to a single selected month/year.
+    const { start, end, year, month } = monthRange(req.query)
+    const dateFilter = { gte: start, lt: end }
 
     // BUGFIX-NIDA-2026: `nin` and `createdAt` do not exist on Citizen — the
     // real fields are `nationalId` and `idCardIssued` (the actual NIN
@@ -1307,19 +1312,14 @@ router.get('/nida', async (req, res) => {
       orderBy: { idCardIssued: 'asc' },
     })
 
-    const toMonth = (row) => {
-      const d = new Date(row.idCardIssued)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    }
-    const monthMap = {}
-    ninRows.forEach(r => { const m = toMonth(r); monthMap[m] = (monthMap[m] || 0) + r._count.id })
-    const trend = Object.entries(monthMap).sort().map(([month, count]) => ({ month, count }))
+    const trend = groupByWeek(ninRows, 'idCardIssued')
 
     return res.json({
       success: true,
       data: {
         ninIssuances: trend,
         total: ninRows.reduce((s, r) => s + r._count.id, 0),
+        year, month,
       },
     })
   } catch (err) {

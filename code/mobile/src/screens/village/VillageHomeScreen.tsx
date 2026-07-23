@@ -83,7 +83,9 @@ type VStack = {
   VillageRecordDeath: undefined
   NINRegistration: undefined
   SyncData: undefined
+  MigrationHome: undefined
   TrackMigration: undefined
+  ConfirmIncomingMigration: undefined
   MigrationRequests: undefined
 }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageHome'> }
@@ -764,7 +766,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       citizen: 'CitizenProfile',
       death: 'VillageRecordDeath',
       marriage: 'RegisterMarriage',
-      migration: 'TrackMigration',
+      migration: 'MigrationHome',
       records: 'VillageViewRecords',
     }
 
