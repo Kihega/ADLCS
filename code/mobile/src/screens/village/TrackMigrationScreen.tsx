@@ -120,7 +120,12 @@ export default function TrackMigrationScreen({ navigation }: Props) {
                 reason: reason.trim(),
               })
               if (json.success) {
-                Alert.alert('Request Sent', json.message || 'Migration request sent successfully.', [
+                const token = json.data?.migrationToken
+                const expiry = json.data?.expiryDate ? new Date(json.data.expiryDate).toLocaleDateString('en-TZ') : null
+                const tokenNote = token
+                  ? `\n\nMigration Token: ${token}\nValid until: ${expiry ?? '7 days from today'}\n\nGive this token to the citizen — they must present it with their NIN to the destination village officer within one week, or it expires and a new request must be issued.`
+                  : ''
+                Alert.alert('Request Sent', (json.message || 'Migration request sent successfully.') + tokenNote, [
                   { text: 'OK', onPress: () => navigation.goBack() },
                 ])
               } else {
@@ -155,8 +160,9 @@ export default function TrackMigrationScreen({ navigation }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <ArrowLeft size={20} color={T.text} />
         </TouchableOpacity>
+        {/* PATCH-MIGFLOW-2026 */}
         <Repeat size={18} color={G} />
-        <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>Migrate Citizen</Text>
+        <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>Outgoing Migration</Text>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

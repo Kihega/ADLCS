@@ -33,10 +33,14 @@ type Props = { navigation: NativeStackNavigationProp<VStack, 'MigrationRequests'
 
 const G = '#1eb53a'
 
+// PATCH-MIGFLOW-2026: expiryDate/migrationToken surfaced from the backend
+// so this legacy list view stays consistent with the new NIN+token flow.
 interface IncomingMigration {
   id: string
   reason: string
   requestDate: string
+  expiryDate?: string
+  migrationToken?: string
   citizenName: string
   nationalId: string | null
   gender: string | null
@@ -125,6 +129,13 @@ export default function MigrationRequestsScreen({ navigation }: Props) {
         <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>Migration Requests</Text>
       </View>
 
+      <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+        <Text style={{ fontSize: 11, color: T.textDim }}>
+          Tip: if the citizen already has their NIN and migration token in hand, use "Incoming Citizen"
+          from the Migration menu to confirm instantly instead of waiting for it to appear below.
+        </Text>
+      </View>
+
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={G} />
@@ -174,6 +185,13 @@ export default function MigrationRequestsScreen({ navigation }: Props) {
                   From {row.fromVillageName}, {row.fromWardName}, {row.fromDistrictName}
                 </Text>
               </View>
+
+              {row.migrationToken ? (
+                <Text style={{ fontSize: 10, color: T.textDim }}>
+                  Token: {row.migrationToken}
+                  {row.expiryDate ? ` · Valid until ${new Date(row.expiryDate).toLocaleDateString('en-TZ')}` : ''}
+                </Text>
+              ) : null}
 
               {row.reason ? (
                 <Text style={{ fontSize: 11, color: T.textDim, fontStyle: 'italic' }}>

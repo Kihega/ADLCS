@@ -54,12 +54,15 @@ router.get('/dashboard', async (req, res) => {
     const dayStart   = new Date(); dayStart.setHours(0,0,0,0)
     const dayEnd     = new Date(); dayEnd.setHours(23,59,59,999)
 
-    const [totalCitizens, monthDeaths, todayDeaths, todayCitizens, pendingCases] = await Promise.all([
+    // PATCH-MIGFLOW-2026: incomingMigrationsPending powers the bell badge
+    // on VillageHomeScreen — migration requests awaiting this officer.
+    const [totalCitizens, monthDeaths, todayDeaths, todayCitizens, pendingCases, incomingMigrationsPending] = await Promise.all([
       prisma.citizen.count({ where:{ currentVillageId:vid } }),
       prisma.death.count({ where:{ villageOfficerId:id, registeredAt:{ gte:monthStart } } }).catch(()=>0),
       prisma.death.count({ where:{ villageOfficerId:id, registeredAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
       prisma.citizen.count({ where:{ registeredById:id, registeredAt:{ gte:dayStart, lte:dayEnd } } }).catch(()=>0),
       prisma.citizen.count({ where:{ currentVillageId:vid, vitalStatus:'alive', idCardIssued:null } }).catch(()=>0),
+      prisma.migration.count({ where:{ targetOfficerId:id, status:'pending' } }).catch(()=>0),
     ])
 
     return res.json({
@@ -75,6 +78,7 @@ router.get('/dashboard', async (req, res) => {
         monthBirths:    0,
         monthDeaths,
         pendingCases,
+        incomingMigrationsPending,
       },
     })
   } catch (err) {
@@ -222,6 +226,29 @@ router.post('/marriage', async (req, res) => {
   }
 })
 
+// ── migration token + lazy-expiry helpers (PATCH-MIGFLOW-2026) ─────────────────
+// Short human-readable code the source officer reads out / writes down for the
+// citizen. Format: TZM-XXXXXX, ambiguous characters (0/O/1/I) excluded so it's
+// easy to relay verbally or on paper.
+function genMigrationToken() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)]
+  return `TZM-${code}`
+}
+
+// A migration request is only valid for ONE WEEK from issuance. If that window
+// has passed and it is still 'pending', it is lazily flipped to 'expired' the
+// next time it's touched (list, respond, or confirm) — the citizen must ask the
+// source village officer to issue a fresh one.
+async function expireIfDue(migration) {
+  if (migration.status === 'pending' && new Date(migration.expiryDate) < new Date()) {
+    await prisma.migration.update({ where: { id: migration.id }, data: { status: 'expired' } })
+    return true
+  }
+  return false
+}
+
 // ── Migration helpers ───────────────────────────────────────────────────────────
 // Finds an officer to notify/approve a migration into `villageId`. Prefers an
 // active officer; falls back to any non-suspended one so a freshly-created
@@ -297,8 +324,21 @@ router.post('/migration', async (req, res) => {
 
     const targetOfficer = await resolveTargetOfficer(toVid)
 
+    // PATCH-MIGFLOW-2026: the confirmation window is ONE WEEK, not 30 days —
+    // after this the request auto-expires and must be re-issued from scratch.
     const expiry = new Date()
-    expiry.setDate(expiry.getDate() + 30)
+    expiry.setDate(expiry.getDate() + 7)
+
+    // The migration token is what the citizen actually carries — together with
+    // their own NIN it's what the destination officer asks for to confirm the
+    // move (see POST /migration/confirm below). Retry on the rare unique clash.
+    let migrationToken
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = genMigrationToken()
+      const clash = await prisma.migration.findUnique({ where: { migrationToken: candidate }, select: { id: true } }).catch(() => null)
+      if (!clash) { migrationToken = candidate; break }
+    }
+    if (!migrationToken) migrationToken = `TZM-${Date.now().toString(36).toUpperCase().slice(-6)}`
 
     const record = await prisma.migration.create({
       data: {
@@ -307,23 +347,26 @@ router.post('/migration', async (req, res) => {
         toVillageId: toVid,
         reason: (reason ?? '').toString().trim() || 'Not specified',
         expiryDate: expiry,
+        migrationToken,
         sourceOfficerId: officerId,
         targetOfficerId: targetOfficer?.id,
       },
-      select: { id: true, status: true, requestDate: true },
+      select: { id: true, status: true, requestDate: true, expiryDate: true, migrationToken: true },
     })
 
     return res.json({
       success: true,
       data: {
         referenceNo: `MIG-${record.id.slice(0, 8).toUpperCase()}`,
+        migrationToken: record.migrationToken,
+        expiryDate: record.expiryDate,
         serverId: record.id,
         status: record.status,
         targetOfficerAssigned: !!targetOfficer,
       },
       message: targetOfficer
-        ? 'Migration request sent. The citizen must report in person to the destination village officer, who will confirm before it is finalised.'
-        : 'Migration request saved, but no officer is currently assigned to the destination village — it will be actioned once one is.',
+        ? `Migration request sent. Give the citizen this migration token: ${record.migrationToken}. It is valid for ONE WEEK — within that time the citizen must report to the destination village officer with their NIN and this token to confirm the move. After a week it expires and must be issued again.`
+        : `Migration request saved (no officer is currently assigned to the destination village yet), but the citizen already has their token: ${record.migrationToken}, valid for one week.`,
     })
   } catch (err) {
     console.error('[village/migration]', err)
@@ -339,18 +382,28 @@ router.get('/migration/incoming', async (req, res) => {
       where: { targetOfficerId: officerId, status: 'pending' },
       orderBy: { requestDate: 'desc' },
       select: {
-        id: true, reason: true, requestDate: true, expiryDate: true,
+        id: true, status: true, reason: true, requestDate: true, expiryDate: true, migrationToken: true,
         citizen: { select: { id: true, firstName: true, middleName: true, surname: true, nationalId: true, gender: true, dateOfBirth: true } },
         fromVillage: { select: { id: true, name: true, ward: { select: { name: true, district: { select: { name: true } } } } } },
       },
     })
+
+    // PATCH-MIGFLOW-2026: lazily flip anything past its one-week window to
+    // 'expired' before showing it as an actionable inbox item.
+    const stillPending = []
+    for (const r of rows) {
+      if (await expireIfDue(r)) continue
+      stillPending.push(r)
+    }
+
     return res.json({
       success: true,
-      data: rows.map(r => ({
+      data: stillPending.map(r => ({
         id: r.id,
         reason: r.reason,
         requestDate: r.requestDate,
         expiryDate: r.expiryDate,
+        migrationToken: r.migrationToken,
         citizenName: [r.citizen?.firstName, r.citizen?.middleName, r.citizen?.surname].filter(Boolean).join(' '),
         nationalId: r.citizen?.nationalId ?? null,
         gender: r.citizen?.gender ?? null,
@@ -374,11 +427,18 @@ router.get('/migration/outgoing', async (req, res) => {
       orderBy: { requestDate: 'desc' },
       take: 50,
       select: {
-        id: true, status: true, reason: true, requestDate: true, confirmedDate: true,
+        id: true, status: true, reason: true, requestDate: true, confirmedDate: true, expiryDate: true, migrationToken: true,
         citizen: { select: { firstName: true, surname: true, nationalId: true } },
         toVillage: { select: { name: true } },
       },
     })
+
+    // PATCH-MIGFLOW-2026: sweep any pending-but-past-due rows to 'expired' so
+    // the officer's own outbox reflects reality straight away.
+    for (const r of rows) {
+      if (await expireIfDue(r)) r.status = 'expired'
+    }
+
     return res.json({
       success: true,
       data: rows.map(r => ({
@@ -387,6 +447,8 @@ router.get('/migration/outgoing', async (req, res) => {
         reason: r.reason,
         requestDate: r.requestDate,
         confirmedDate: r.confirmedDate,
+        expiryDate: r.expiryDate,
+        migrationToken: r.migrationToken,
         citizenName: [r.citizen?.firstName, r.citizen?.surname].filter(Boolean).join(' '),
         nationalId: r.citizen?.nationalId ?? null,
         toVillageName: r.toVillage?.name ?? '—',
@@ -416,11 +478,16 @@ router.patch('/migration/:id/respond', async (req, res) => {
   try {
     const migration = await prisma.migration.findUnique({
       where: { id: migrationId },
-      select: { id: true, status: true, citizenId: true, toVillageId: true, targetOfficerId: true },
+      select: { id: true, status: true, citizenId: true, toVillageId: true, targetOfficerId: true, expiryDate: true },
     })
     if (!migration) return res.status(404).json({ success: false, message: 'Migration request not found.' })
     if (migration.targetOfficerId !== officerId) {
       return res.status(403).json({ success: false, message: 'This request is not addressed to you.' })
+    }
+    // PATCH-MIGFLOW-2026: one-week validity window — flip to 'expired' the
+    // moment anyone tries to act on a stale pending request.
+    if (await expireIfDue(migration)) {
+      return res.status(410).json({ success: false, message: 'This migration request has expired (its one-week validity window has passed). The citizen must ask the source village officer to issue a new migration request.' })
     }
     if (migration.status !== 'pending') {
       return res.status(409).json({ success: false, message: `This request was already ${migration.status}.` })
@@ -444,6 +511,80 @@ router.patch('/migration/:id/respond', async (req, res) => {
     return res.json({ success: true, message: 'Migration request rejected.' })
   } catch (err) {
     console.error('[village/migration/respond]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+// ── POST /api/village/migration/confirm — INCOMING citizen self-service ────────
+// PATCH-MIGFLOW-2026: the primary confirmation path. The citizen who has
+// physically arrived at their NEW village presents their NIN and the migration
+// token the source officer gave them; the destination officer types both in
+// here — no need to browse a pending-requests inbox at all. Only valid for
+// officers whose OWN village matches the request's destination village, and
+// only within the one-week window.
+router.post('/migration/confirm', async (req, res) => {
+  const { id: officerId } = req.user
+  const { nationalId, migrationToken } = req.body
+
+  const nin = typeof nationalId === 'string' ? nationalId.trim() : ''
+  const token = typeof migrationToken === 'string' ? migrationToken.trim().toUpperCase() : ''
+  if (!nin || !token) {
+    return res.status(400).json({ success: false, message: 'Citizen NIN and migration token are both required.' })
+  }
+
+  try {
+    const officer = await prisma.villageOfficer.findUnique({
+      where: { id: officerId },
+      select: { villageId: true },
+    })
+    if (!officer?.villageId) {
+      return res.status(422).json({ success: false, message: 'Your officer account is not assigned to a village yet.' })
+    }
+
+    const migration = await prisma.migration.findFirst({
+      where: { migrationToken: token, citizen: { nationalId: nin } },
+      select: {
+        id: true, status: true, citizenId: true, toVillageId: true, expiryDate: true,
+        citizen: { select: { firstName: true, middleName: true, surname: true } },
+      },
+    })
+
+    if (!migration) {
+      return res.status(404).json({ success: false, message: 'No matching migration request found for that NIN and token. Please check both are correct.' })
+    }
+
+    if (migration.toVillageId !== officer.villageId) {
+      return res.status(403).json({ success: false, message: 'This migration request is not addressed to your village.' })
+    }
+
+    if (await expireIfDue(migration)) {
+      return res.status(410).json({ success: false, message: 'This migration token has expired (its one-week validity window has passed). Ask the citizen to request a fresh migration from the source village officer.' })
+    }
+
+    if (migration.status !== 'pending') {
+      return res.status(409).json({ success: false, message: `This migration request was already ${migration.status}.` })
+    }
+
+    await prisma.$transaction([
+      prisma.migration.update({
+        where: { id: migration.id },
+        data: { status: 'confirmed', confirmedDate: new Date(), targetOfficerId: officerId },
+      }),
+      prisma.citizen.update({
+        where: { id: migration.citizenId },
+        data: { currentVillageId: migration.toVillageId },
+      }),
+    ])
+
+    const citizenName = [migration.citizen?.firstName, migration.citizen?.middleName, migration.citizen?.surname]
+      .filter(Boolean).join(' ')
+
+    return res.json({
+      success: true,
+      message: `Migration confirmed. ${citizenName || 'The citizen'} is now registered in your village.`,
+    })
+  } catch (err) {
+    console.error('[village/migration/confirm]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })

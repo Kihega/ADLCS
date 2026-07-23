@@ -38,10 +38,18 @@ const { apiGetSuperAdmins, apiDeleteSuperAdmin } = api
 
 import NBSHeader from '../components/NBSHeader'
 import GeoFilterBar from '../components/GeoFilterBar'
+import YearMonthFilter from '../components/YearMonthFilter'
 import ChangePasswordModal from '../modals/ChangePasswordModal'
 import NewRegistrationModal from '../modals/NewRegistrationModal'
 
 // ── Shared UI primitives ─────────────────────────────────────────────────────
+
+// PATCH-WEEKLYTRENDS-2026: shared month-name lookup for the RITA/NIDA/
+// Migration Trends card headers (e.g. "Weekly Trend (July 2026)").
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 function Card({ children, className = '' }) {
   return <div className={`bg-[#0a1628] border border-[#1a3060] rounded-xl p-4 ${className}`}>{children}</div>
@@ -848,6 +856,10 @@ function RITASection({ role }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({})
+  const [period, setPeriod] = useState(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  })
   const [deleting, setDeleting] = useState(false)
 
   // LINTFIX-2-v2: reverted to the exact same load()-useCallback pattern
@@ -869,7 +881,7 @@ function RITASection({ role }) {
   }, [])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(filters) }, [filters, load])
+  useEffect(() => { load({ ...filters, ...period }) }, [filters, period, load])
 
   const handleDelete = async () => {
     if (!window.confirm('Delete ALL birth records? This cannot be undone. Test parent citizens will be preserved.')) return
@@ -877,7 +889,7 @@ function RITASection({ role }) {
     try {
       const r = await api.apiDeleteBirths()
       alert(r.message || 'Births deleted')
-      load(filters)
+      load({ ...filters, ...period })
     } catch(e) { alert('Failed: ' + e.message) }
     finally { setDeleting(false) }
   }
@@ -897,6 +909,7 @@ function RITASection({ role }) {
           </button>
         )}
       </div>
+      <YearMonthFilter onChange={p => setPeriod(p)} />
       <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
 
       {loading ? (
@@ -912,11 +925,11 @@ function RITASection({ role }) {
 
           {/* Births trend */}
           <Card>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Birth Registrations — Monthly Trend</p>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Birth Registrations — Weekly Trend ({MONTH_NAMES[period.month - 1]} {period.year})</p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={data?.births || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
-                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 10 }} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
                 <Bar dataKey="count" fill="#3b82f6" name="Births" radius={[3,3,0,0]} />
@@ -926,11 +939,11 @@ function RITASection({ role }) {
 
           {/* Deaths trend */}
           <Card>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Death Registrations — Monthly Trend</p>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Death Registrations — Weekly Trend ({MONTH_NAMES[period.month - 1]} {period.year})</p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={data?.deaths || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
-                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 10 }} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
                 <Bar dataKey="count" fill="#ef4444" name="Deaths" radius={[3,3,0,0]} />
@@ -940,11 +953,11 @@ function RITASection({ role }) {
 
           {/* Marriages trend */}
           <Card>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Marriage Registrations — Monthly Trend</p>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Marriage Registrations — Weekly Trend ({MONTH_NAMES[period.month - 1]} {period.year})</p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={data?.marriages || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
-                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 10 }} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
                 <Bar dataKey="count" fill="#ec4899" name="Marriages" radius={[3,3,0,0]} />
@@ -962,6 +975,10 @@ function NIDASection({ role }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({})
+  const [period, setPeriod] = useState(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  })
 
   // LINTFIX-2-v2: same load()-useCallback pattern as every other section
   // in this file (see RITASection above for the full explanation of why
@@ -976,11 +993,12 @@ function NIDASection({ role }) {
   }, [])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(filters) }, [filters, load])
+  useEffect(() => { load({ ...filters, ...period }) }, [filters, period, load])
 
   return (
     <div className="space-y-4">
       <h2 className="text-white font-bold text-lg">NIDA — NIN Issuance Trends</h2>
+      <YearMonthFilter onChange={p => setPeriod(p)} />
       <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
 
       {loading ? (
@@ -989,12 +1007,12 @@ function NIDASection({ role }) {
         <>
           <StatCard Icon={UserCheck} label="Total NIDs Issued" value={(data?.total ?? 0).toLocaleString()} accent="text-[#00d4ff]" />
           <Card>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">NIN Issuances — Monthly Trend</p>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">NIN Issuances — Weekly Trend ({MONTH_NAMES[period.month - 1]} {period.year})</p>
             {data?.ninIssuances?.length ? (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={data.ninIssuances}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
-                  <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 10 }} />
                   <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
                   <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
                   <Bar dataKey="count" fill="#00d4ff" name="NIDs Issued" radius={[3,3,0,0]} />
@@ -1019,6 +1037,10 @@ function MigrationsSection({ role }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({})
+  const [period, setPeriod] = useState(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  })
 
   const load = useCallback((f = filters) => {
     setLoading(true)
@@ -1030,13 +1052,14 @@ function MigrationsSection({ role }) {
   }, [])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(filters) }, [filters, load])
+  useEffect(() => { load({ ...filters, ...period }) }, [filters, period, load])
 
   const totals = data?.totals || { pending: 0, confirmed: 0, cancelled: 0, expired: 0, all: 0 }
 
   return (
     <div className="space-y-4">
       <h2 className="text-white font-bold text-lg">Migration Trends</h2>
+      <YearMonthFilter onChange={p => setPeriod(p)} />
       <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
 
       {loading ? (
@@ -1050,12 +1073,12 @@ function MigrationsSection({ role }) {
             <StatCard Icon={UserX}          label="Expired"   value={totals.expired.toLocaleString()}   accent="text-gray-400" />
           </div>
           <Card>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Migration Requests — Monthly Trend</p>
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Migration Requests — Weekly Trend ({MONTH_NAMES[period.month - 1]} {period.year})</p>
             {data?.trend?.length ? (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={data.trend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
-                  <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 10 }} />
                   <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
                   <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
                   <Bar dataKey="count" fill="#7c3aed" name="Migration Requests" radius={[3,3,0,0]} />

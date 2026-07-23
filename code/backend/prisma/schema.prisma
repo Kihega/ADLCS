@@ -384,6 +384,7 @@ model Migration {
   status          MigrationStatus @default(pending)
   requestDate     DateTime        @default(now()) @map("request_date")
   expiryDate      DateTime        @map("expiry_date")
+  migrationToken  String?         @unique @map("migration_token")
   confirmedDate   DateTime?       @map("confirmed_date")
   sourceOfficerId String          @map("source_officer_id")
   targetOfficerId String?         @map("target_officer_id")
