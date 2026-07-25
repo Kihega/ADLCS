@@ -55,7 +55,7 @@ const MOCK_SUPER_ADMIN = {
   passwordHash:    KNOWN_HASH,
   fullName:        'Test Super Admin',
   employeeId:      'EMP001',
-  nidaNumber:      '19900101-00001-00001-01',
+  birthId:         'BID-TESTADMIN01', // PATCH-NOTOKEN-2026
   status:          'active',
   mfaEnabled:      false,
   mfaSecret:       null,

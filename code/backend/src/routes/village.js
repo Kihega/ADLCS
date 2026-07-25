@@ -87,22 +87,34 @@ router.get('/dashboard', async (req, res) => {
   }
 })
 
-// ── national-id generator (23-char NIDA format YYYYMMDD-LLLLL-SSSSS-CC) ────────
-function genNationalId(dob) {
-  const d = dob ? parseDDMMYYYY(dob) : new Date()
-  const y  = d.getFullYear()
-  const mo = String(d.getMonth()+1).padStart(2,'0')
-  const dy = String(d.getDate()).padStart(2,'0')
-  const seq = String(Math.floor(Math.random()*89999)+10001).padStart(5,'0')
-  const cc  = String(Math.floor(Math.random()*89)+10)
-  return `${y}${mo}${dy}-07031-${seq}-${cc}`
+// PATCH-PRIVACY-2026: neither ID format encodes date of birth (or any other
+// personal detail) any more — regulatory/privacy requirement. Uniqueness comes
+// from a high-entropy random block plus the DB's UNIQUE constraint (callers
+// retry on the rare P2002 collision). `dob` params are kept-but-unused on the
+// exported helpers so existing call sites don't need to change.
+const ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I — avoids confusion
+function randomIdBlock(len) {
+  let out = ''
+  for (let i = 0; i < len; i++) out += ID_ALPHABET[Math.floor(Math.random() * ID_ALPHABET.length)]
+  return out
+}
+// National ID (NIN) — format: NIDA-XXXXXXXXXXXX-CC
+function genNationalId(_dob) {
+  const cc = String(Math.floor(Math.random() * 90) + 10)
+  return `NIDA-${randomIdBlock(12)}-${cc}`
+}
+// Birth ID (BID) — format: BID-XXXXXXXXXX. Used for the "register citizen"
+// fallback path (adults with no birth record on file) so every citizen ends
+// up with a Birth ID one way or another.
+function genBirthId() {
+  return `BID-${randomIdBlock(10)}`
 }
 
 // ── POST /api/village/citizen ─────────────────────────────────────────────────
 router.post('/citizen', async (req, res) => {
   const { id:officerId } = req.user
   const { firstName, middleName, surname, gender, dateOfBirth, bloodGroup,
-          phone, occupation, nationalId } = req.body
+          phone, occupation, nationalId, birthId } = req.body
   if (!firstName || !surname || !gender)
     return res.status(400).json({ success:false, message:'firstName, surname, gender required' })
   try {
@@ -114,14 +126,18 @@ router.post('/citizen', async (req, res) => {
         surname:     surname.trim(),
         gender:      gender.toLowerCase(),
         dateOfBirth: dateOfBirth ? parseDDMMYYYY(dateOfBirth) : null,
-        nationalId:  nationalId ?? genNationalId(dateOfBirth),
+        nationalId:  nationalId ?? genNationalId(),
+        // PATCH-BID-LOOKUP-2026: this is the "no prior birth record" fallback
+        // path — give the citizen a Birth ID here too so they can still be
+        // found by BID everywhere else in the system.
+        birthId:     birthId ?? genBirthId(),
         currentVillageId: officer?.villageId ?? undefined,
         registeredById:   officerId,
         vitalStatus:      'alive',
       },
-      select:{ id:true, nationalId:true },
+      select:{ id:true, nationalId:true, birthId:true },
     })
-    return res.json({ success:true, data:{ citizenId:citizen.id, nationalId:citizen.nationalId } })
+    return res.json({ success:true, data:{ citizenId:citizen.id, nationalId:citizen.nationalId, birthId:citizen.birthId } })
   } catch (err) {
     if (err.code === 'P2002') return res.json({ success:true, duplicate:true })
     console.error('[village/citizen]', err)
@@ -183,9 +199,12 @@ router.post('/marriage', async (req, res) => {
       if (existing) return res.json({ success:true, duplicate:true })
     }
 
-    // Look up both citizens by NID — both must be registered
-    const husband = husbandNid ? await prisma.citizen.findFirst({ where:{ nationalId:husbandNid }, select:{ id:true, dateOfBirth:true } }) : null
-    const wife    = wifeNid    ? await prisma.citizen.findFirst({ where:{ nationalId:wifeNid    }, select:{ id:true, dateOfBirth:true } }) : null
+    // PATCH-BID-LOOKUP-2026: husbandNid/wifeNid now carry each citizen's Birth
+    // ID (BID) rather than their NIN — see genNationalId() above for why BID
+    // is now the canonical lookup key. The certificate still records each
+    // spouse's real NIN below (fetched here, not the BID used to find them).
+    const husband = husbandNid ? await prisma.citizen.findFirst({ where:{ birthId:husbandNid }, select:{ id:true, dateOfBirth:true, nationalId:true } }) : null
+    const wife    = wifeNid    ? await prisma.citizen.findFirst({ where:{ birthId:wifeNid    }, select:{ id:true, dateOfBirth:true, nationalId:true } }) : null
 
     if (!husband || !wife) {
       return res.status(422).json({ success:false, message:'Both spouses must be registered citizens. Please use Register Citizen for each spouse first.' })
@@ -204,8 +223,8 @@ router.post('/marriage', async (req, res) => {
         marriageCertNo,
         husbandId:        husband.id,
         wifeId:           wife.id,
-        husbandNid:       husbandNid,
-        wifeNid:          wifeNid,
+        husbandNid:       husband.nationalId ?? husbandNid,
+        wifeNid:          wife.nationalId ?? wifeNid,
         husbandAge:       ageFrom(husband.dateOfBirth),
         wifeAge:          ageFrom(wife.dateOfBirth),
         husbandStatusPrev:'single',
@@ -277,7 +296,7 @@ async function resolveTargetOfficer(villageId) {
 // PATCH /migration/:id/respond below).
 router.post('/migration', async (req, res) => {
   const { id: officerId } = req.user
-  const { citizenId, nationalId, toVillageId, reason } = req.body
+  const { citizenId, nationalId, birthId, toVillageId, reason } = req.body
 
   if (!toVillageId) {
     return res.status(400).json({ success: false, message: 'Destination village/street is required.' })
@@ -295,11 +314,15 @@ router.post('/migration', async (req, res) => {
     // Citizen must exist AND already live in the requesting officer's own
     // village — an officer may only initiate migration for residents they
     // are actually responsible for.
+    // PATCH-BID-LOOKUP-2026: birthId is preferred; nationalId kept only as a
+    // legacy fallback for any older client still sending it.
     const citizen = citizenId
       ? await prisma.citizen.findFirst({ where: { id: citizenId, currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
-      : nationalId
-        ? await prisma.citizen.findFirst({ where: { nationalId: String(nationalId).trim(), currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
-        : null
+      : birthId
+        ? await prisma.citizen.findFirst({ where: { birthId: String(birthId).trim(), currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
+        : nationalId
+          ? await prisma.citizen.findFirst({ where: { nationalId: String(nationalId).trim(), currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
+          : null
 
     if (!citizen) {
       return res.status(422).json({ success: false, message: 'Citizen not found in your village. Look them up first using their NIN, Birth ID, or full name.' })
@@ -516,20 +539,20 @@ router.patch('/migration/:id/respond', async (req, res) => {
 })
 
 // ── POST /api/village/migration/confirm — INCOMING citizen self-service ────────
-// PATCH-MIGFLOW-2026: the primary confirmation path. The citizen who has
-// physically arrived at their NEW village presents their NIN and the migration
-// token the source officer gave them; the destination officer types both in
-// here — no need to browse a pending-requests inbox at all. Only valid for
-// officers whose OWN village matches the request's destination village, and
-// only within the one-week window.
+// PATCH-MIGFLOW-2026 / PATCH-BID-LOOKUP-2026: the primary confirmation path.
+// The citizen who has physically arrived at their NEW village presents their
+// Birth ID (BID) and the migration token the source officer gave them; the
+// destination officer types both in here — no need to browse a pending-
+// requests inbox at all. Only valid for officers whose OWN village matches
+// the request's destination village, and only within the one-week window.
 router.post('/migration/confirm', async (req, res) => {
   const { id: officerId } = req.user
-  const { nationalId, migrationToken } = req.body
+  const { birthId, migrationToken } = req.body
 
-  const nin = typeof nationalId === 'string' ? nationalId.trim() : ''
+  const bid = typeof birthId === 'string' ? birthId.trim() : ''
   const token = typeof migrationToken === 'string' ? migrationToken.trim().toUpperCase() : ''
-  if (!nin || !token) {
-    return res.status(400).json({ success: false, message: 'Citizen NIN and migration token are both required.' })
+  if (!bid || !token) {
+    return res.status(400).json({ success: false, message: 'Citizen Birth ID and migration token are both required.' })
   }
 
   try {
@@ -542,7 +565,7 @@ router.post('/migration/confirm', async (req, res) => {
     }
 
     const migration = await prisma.migration.findFirst({
-      where: { migrationToken: token, citizen: { nationalId: nin } },
+      where: { migrationToken: token, citizen: { birthId: bid } },
       select: {
         id: true, status: true, citizenId: true, toVillageId: true, expiryDate: true,
         citizen: { select: { firstName: true, middleName: true, surname: true } },
@@ -550,7 +573,7 @@ router.post('/migration/confirm', async (req, res) => {
     })
 
     if (!migration) {
-      return res.status(404).json({ success: false, message: 'No matching migration request found for that NIN and token. Please check both are correct.' })
+      return res.status(404).json({ success: false, message: 'No matching migration request found for that Birth ID and token. Please check both are correct.' })
     }
 
     if (migration.toVillageId !== officer.villageId) {
@@ -597,6 +620,7 @@ router.post('/migration/confirm', async (req, res) => {
 // another village's residents.
 const CITIZEN_LOOKUP_SELECT = {
   id: true,
+  birthId: true,
   nationalId: true,
   firstName: true,
   middleName: true,
@@ -618,15 +642,16 @@ const CITIZEN_LOOKUP_SELECT = {
 
 router.get('/citizen-lookup', async (req, res) => {
   const { id: officerId } = req.user
-  const nationalId = typeof req.query.nationalId === 'string' ? req.query.nationalId.trim() : ''
-  // PATCH-MIGRATION-2026: `q` is the generic lookup used by the migration
-  // flow — matches NIN, Birth Registration ID (BID) / birth cert no, or a
-  // partial full name. The original `nationalId` param keeps its strict
-  // exact-match-only contract for existing callers (CitizenProfileScreen).
+  // PATCH-BID-LOOKUP-2026: birthId is now the primary strict-match key
+  // (CitizenProfileScreen). `nationalId` kept only as a legacy fallback for
+  // any older client still sending it. `q` is the generic lookup used by the
+  // migration flow — matches Birth ID, birth cert no, or a partial full name.
+  const birthId = typeof req.query.birthId === 'string' ? req.query.birthId.trim() : ''
+  const legacyNationalId = typeof req.query.nationalId === 'string' ? req.query.nationalId.trim() : ''
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-  const term = nationalId || q
+  const term = birthId || legacyNationalId || q
   if (!term) {
-    return res.status(400).json({ success: false, message: 'nationalId or q query param required' })
+    return res.status(400).json({ success: false, message: 'birthId or q query param required' })
   }
   try {
     const officer = await prisma.villageOfficer.findUnique({
@@ -638,16 +663,23 @@ router.get('/citizen-lookup', async (req, res) => {
     const vid = officer.villageId ?? -1
 
     let citizen = await prisma.citizen.findFirst({
-      where: { nationalId: term, currentVillageId: vid },
+      where: { birthId: term, currentVillageId: vid },
       select: CITIZEN_LOOKUP_SELECT,
     })
+
+    if (!citizen && legacyNationalId) {
+      citizen = await prisma.citizen.findFirst({
+        where: { nationalId: legacyNationalId, currentVillageId: vid },
+        select: CITIZEN_LOOKUP_SELECT,
+      })
+    }
 
     if (!citizen && q) {
       citizen = await prisma.citizen.findFirst({
         where: {
           currentVillageId: vid,
           OR: [
-            { birthRecord: { birthId: term } },
+            { birthId: term },
             { birthRecord: { birthCertNo: term } },
             { firstName: { contains: term, mode: 'insensitive' } },
             { surname: { contains: term, mode: 'insensitive' } },
@@ -660,7 +692,7 @@ router.get('/citizen-lookup', async (req, res) => {
     if (!citizen) {
       return res.status(404).json({
         success: false,
-        message: 'No citizen matching this NIN, Birth ID, or name was found registered in your village.',
+        message: 'No citizen matching this Birth ID or name was found registered in your village.',
       })
     }
 
@@ -804,13 +836,8 @@ router.post('/nin-issue', async (req, res) => {
       select: { villageId:true },
     })
 
-    // Generate NIN: YYYYMMDD-07031-SSSSS-CC
-    const yy  = dob.getFullYear()
-    const mm  = String(dob.getMonth()+1).padStart(2,'0')
-    const dd  = String(dob.getDate()).padStart(2,'0')
-    const seq = String(Math.floor(Math.random()*89999)+10001).padStart(5,'0')
-    const cc  = String(Math.floor(Math.random()*89)+10)
-    const nationalId = `${yy}${mm}${dd}-07031-${seq}-${cc}`
+    // PATCH-PRIVACY-2026: NIN no longer encodes date of birth — see genNationalId().
+    const nationalId = genNationalId()
 
     const issuedDate  = new Date()
     const expiresDate = new Date()
@@ -832,6 +859,10 @@ router.post('/nin-issue', async (req, res) => {
     const citizen = await prisma.citizen.create({
       data: {
         nationalId,
+        // PATCH-BID-LOOKUP-2026: denormalize the Birth ID straight onto the new
+        // Citizen row so every future lookup for this person can go via BID
+        // alone, with no join back through the Birth record required.
+        birthId:          birth.birthId,
         firstName:        birth.childFirstName,
         middleName:       birth.childMiddleName ?? '',
         surname:          birth.childSurname,
@@ -848,7 +879,7 @@ router.post('/nin-issue', async (req, res) => {
         registeredById:   officerId,
         registeredAt:     new Date(),
       },
-      select: { id:true, nationalId:true },
+      select: { id:true, nationalId:true, birthId:true },
     })
 
     await prisma.birth.update({
