@@ -51,7 +51,8 @@ const { prisma } = require('../lib/prisma')
 const { getRedis, isRedisReady } = require('../lib/redis')
 const { requireAuth, requireRole } = require('../middleware/auth')
 
-const { sendAuthTokenEmail } = require('../lib/email')
+// PATCH-NOTOKEN-2026: no more Resend email / one-time token round-trip for
+// new accounts — see generateDefaultPassword() below.
 
 // PATCH-EMAIL-VALIDATE-2026
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -188,10 +189,15 @@ async function logAction(req, { action, targetTable, targetId, oldData, newData,
   }
 }
 
-/** Generate a one-time authorization token (e.g. SADM-XXXX-XXXX / DADM-XXXX-XXXX). */
-function generateAuthToken(prefix) {
-  const part = () => crypto.randomInt(1000, 9999)
-  return `${prefix}-${part()}-${part()}`
+// PATCH-NOTOKEN-2026: new accounts are created ACTIVE immediately with a real
+// default password (no email/token step). The admin creating the account
+// relays this password directly to the new user, who already gave the admin
+// their email address, so there's nothing left for an email round-trip to do.
+function generateDefaultPassword() {
+  const words = ['Tembo', 'Simba', 'Twiga', 'Kilimo', 'Amani', 'Jua', 'Baobab', 'Ngoma']
+  const word = words[crypto.randomInt(0, words.length)]
+  const digits = crypto.randomInt(1000, 9999)
+  return `${word}${digits}!`
 }
 
 const AGE_BANDS = [
@@ -469,43 +475,36 @@ router.get('/district-admins', requireRole('super_admin'), async (req, res) => {
 })
 
 router.post('/district-admins', requireRole('super_admin'), async (req, res) => {
-  const { fullName, email, nidaNumber, employeeId, mobile, regionId, districtId, department } = req.body
-  if (!fullName || !email || !nidaNumber || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  const { fullName, email, birthId, employeeId, mobile, regionId, districtId, department } = req.body
+  if (!fullName || !email || !birthId || !employeeId) {
+    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
     if (err) return res.status(400).json({ success: false, message: err })
   }
   try {
-    const token = generateAuthToken('DADM')
-    const tokenHash = await bcrypt.hash(token, 10)
+    // PATCH-NOTOKEN-2026: created active immediately, default password
+    // returned once for the super admin to relay directly.
+    const defaultPassword = generateDefaultPassword()
+    const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.districtAdmin.create({
       data: {
-        fullName, email, nidaNumber, employeeId,
+        fullName, email, birthId, employeeId,
         mobile: mobile || undefined,
         regionId: regionId ? Number(regionId) : undefined,
         districtId: districtId ? Number(districtId) : undefined,
         department: department || undefined,
-        status: 'pending',
-        loginTokenHash: tokenHash,
-        loginTokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        status: 'active',
+        passwordHash,
         createdById: req.user.id,
       },
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
     })
     await logAction(req, { action: 'create_district_admin', targetTable: 'district_admins', targetId: created.id, newData: created })
-    // PATCH-EMAIL-2025: send one-time token to newly registered district admin
-    sendAuthTokenEmail({
-      to:        email,
-      fullName,
-      token,
-      role:      'district_admin',
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    }).catch(err => console.error('[email/district-admin]', err.message))
-    return res.json({ success: true, data: { ...created, authToken: token } })
+    return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, NIDA number, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
     console.error('[admin/create-district-admin]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -579,9 +578,9 @@ router.get('/village-officers', async (req, res) => {
 })
 
 router.post('/village-officers', requireRole('district_admin'), async (req, res) => {
-  const { fullName, email, nidaNumber, employeeId, mobile, villageId, wardId } = req.body
-  if (!fullName || !email || !nidaNumber || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  const { fullName, email, birthId, employeeId, mobile, villageId, wardId } = req.body
+  if (!fullName || !email || !birthId || !employeeId) {
+    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
@@ -589,26 +588,28 @@ router.post('/village-officers', requireRole('district_admin'), async (req, res)
   }
   try {
     const adminDistrictId = await getAdminDistrictId(req)
-    const token = generateAuthToken('VOFF')
-    const tokenHash = await bcrypt.hash(token, 10)
+    // PATCH-NOTOKEN-2026: created active immediately, default password
+    // returned once for the district admin to relay directly. The officer
+    // can start working on mobile right away — no separate activation step.
+    const defaultPassword = generateDefaultPassword()
+    const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.villageOfficer.create({
       data: {
-        fullName, email, nidaNumber, employeeId,
+        fullName, email, birthId, employeeId,
         mobile: mobile || undefined,
         villageId: villageId ? Number(villageId) : undefined,
         wardId: wardId ? Number(wardId) : undefined,
         districtId: adminDistrictId,
-        status: 'pending',
-        loginTokenHash: tokenHash,
-        loginTokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        status: 'active',
+        passwordHash,
         createdById: req.user.id,
       },
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
     })
     await logAction(req, { action: 'create_village_officer', targetTable: 'village_officers', targetId: created.id, newData: created })
-    return res.json({ success: true, data: { ...created, authToken: token } })
+    return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, NIDA number, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
     console.error('[admin/create-village-officer]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -693,9 +694,9 @@ router.get('/health-officers', async (req, res) => {
 })
 
 router.post('/health-officers', requireRole('district_admin'), async (req, res) => {
-  const { fullName, email, nidaNumber, employeeId, mobile, facilityId } = req.body
-  if (!fullName || !email || !nidaNumber || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  const { fullName, email, birthId, employeeId, mobile, facilityId } = req.body
+  if (!fullName || !email || !birthId || !employeeId) {
+    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
@@ -703,25 +704,26 @@ router.post('/health-officers', requireRole('district_admin'), async (req, res) 
   }
   try {
     const adminDistrictId = await getAdminDistrictId(req)
-    const token = generateAuthToken('HOFF')
-    const tokenHash = await bcrypt.hash(token, 10)
+    // PATCH-NOTOKEN-2026: created active immediately, default password
+    // returned once for the district admin to relay directly.
+    const defaultPassword = generateDefaultPassword()
+    const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.hospitalOfficer.create({
       data: {
-        fullName, email, nidaNumber, employeeId,
+        fullName, email, birthId, employeeId,
         mobile: mobile || undefined,
         facilityId: facilityId ? Number(facilityId) : undefined,
         districtId: adminDistrictId,
-        status: 'pending',
-        loginTokenHash: tokenHash,
-        loginTokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        status: 'active',
+        passwordHash,
         createdById: req.user.id,
       },
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
     })
     await logAction(req, { action: 'create_hospital_officer', targetTable: 'hospital_officers', targetId: created.id, newData: created })
-    return res.json({ success: true, data: { ...created, authToken: token } })
+    return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, NIDA number, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
     console.error('[admin/create-hospital-officer]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -810,25 +812,26 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
       message: `System already has the maximum of ${SUPER_ADMIN_MAX} Super Administrators.`,
     })
   }
-  const { fullName, email, nidaNumber, employeeId, mobile, department } = req.body
-  if (!fullName || !email || !nidaNumber || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, nidaNumber and employeeId are required' })
+  const { fullName, email, birthId, employeeId, mobile, department } = req.body
+  if (!fullName || !email || !birthId || !employeeId) {
+    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
     if (err) return res.status(400).json({ success: false, message: err })
   }
   try {
-    const token     = generateAuthToken('SADM')
-    const tokenHash = await bcrypt.hash(token, 10)
+    // PATCH-NOTOKEN-2026: created active immediately, default password
+    // returned once for the requesting super admin to relay directly.
+    const defaultPassword = generateDefaultPassword()
+    const passwordHash    = await bcrypt.hash(defaultPassword, 10)
     const created   = await prisma.superAdmin.create({
       data: {
-        fullName, email, nidaNumber, employeeId,
+        fullName, email, birthId, employeeId,
         mobile:     mobile     || undefined,
         department: department || undefined,
-        status:            'pending',
-        loginTokenHash:    tokenHash,
-        loginTokenExpires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        status:            'active',
+        passwordHash,
         createdById:       req.user.id,
       },
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
@@ -837,17 +840,9 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
       action: 'create_super_admin', targetTable: 'super_admins', targetId: created.id,
       newData: created, severity: 'warning',
     })
-    // PATCH-EMAIL-2025: send one-time token to newly registered super admin
-    sendAuthTokenEmail({
-      to:        email,
-      fullName,
-      token,
-      role:      'super_admin',
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    }).catch(err => console.error('[email/super-admin]', err.message))
-    return res.json({ success: true, data: { ...created, authToken: token } })
+    return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, NIDA number, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
     console.error('[admin/create-super-admin]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }

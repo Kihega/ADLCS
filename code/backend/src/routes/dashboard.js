@@ -506,24 +506,29 @@ router.post('/sync/trigger', async (req, res) => {
 })
 
 // ── GET /api/officer/citizen-lookup ──────────────────────────────────────────
+// PATCH-BID-LOOKUP-2026: Birth ID (BID) is the primary key for finding an
+// already-registered citizen (parent, spouse, deceased) — a citizen only
+// ever has a NIN because they already had a BID, so BID alone is enough;
+// no need to also ask for/know their NIN. Exact NIN match is kept as a
+// legacy fallback, then partial name/BID/NIN search.
 router.get('/citizen-lookup', async (req, res) => {
   const q = req.query.q?.toString().trim()
   if (!q) return res.status(400).json({ success: false, message: 'Query required' })
+  const CITIZEN_SELECT = { id: true, birthId: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true, dateOfBirth: true, vitalStatus: true }
   try {
-    // Try exact NID match first (most common mobile use-case: scan/type NID)
-    let citizen = await prisma.citizen.findFirst({
-      where: { nationalId: q },
-      select: { id: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true, dateOfBirth: true, vitalStatus: true },
-    })
-    // Fallback: partial name search (if not an exact NID query)
+    let citizen = await prisma.citizen.findFirst({ where: { birthId: q }, select: CITIZEN_SELECT })
+    if (!citizen) {
+      citizen = await prisma.citizen.findFirst({ where: { nationalId: q }, select: CITIZEN_SELECT })
+    }
     if (!citizen) {
       citizen = await prisma.citizen.findFirst({
         where: { OR: [
+          { birthId:    { contains: q, mode: 'insensitive' } },
           { nationalId: { contains: q, mode: 'insensitive' } },
           { firstName:  { contains: q, mode: 'insensitive' } },
           { surname:    { contains: q, mode: 'insensitive' } },
         ]},
-        select: { id: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true, dateOfBirth: true, vitalStatus: true },
+        select: CITIZEN_SELECT,
       })
     }
     if (!citizen) return res.json({ success: false, message: 'Not found' })

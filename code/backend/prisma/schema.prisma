@@ -68,7 +68,7 @@ model Village {
 model SuperAdmin {
   id                    String          @id @default(uuid())
   employeeId            String          @unique @map("employee_id") @db.VarChar(30)
-  nidaNumber            String          @unique @map("nida_number") @db.VarChar(100)
+  birthId   String          @unique @map("birth_id") @db.VarChar(20)
   fullName              String          @map("full_name") @db.VarChar(120)
   email                 String          @unique @db.VarChar(120)
   passwordHash          String?         @map("password_hash")
@@ -93,7 +93,7 @@ model SuperAdmin {
 model DistrictAdmin {
   id                String            @id @default(uuid())
   employeeId        String            @unique @map("employee_id") @db.VarChar(30)
-  nidaNumber        String            @unique @map("nida_number") @db.VarChar(100)
+  birthId   String            @unique @map("birth_id") @db.VarChar(20)
   fullName          String            @map("full_name") @db.VarChar(120)
   email             String            @unique @db.VarChar(120)
   passwordHash      String?           @map("password_hash")
@@ -121,7 +121,7 @@ model DistrictAdmin {
 model VillageOfficer {
   id                  String        @id @default(uuid())
   employeeId          String        @unique @map("employee_id") @db.VarChar(30)
-  nidaNumber          String        @unique @map("nida_number") @db.VarChar(100)
+  birthId   String        @unique @map("birth_id") @db.VarChar(20)
   fullName            String        @map("full_name") @db.VarChar(120)
   email               String        @unique @db.VarChar(120)
   passwordHash        String?       @map("password_hash")
@@ -158,7 +158,7 @@ model VillageOfficer {
 model HospitalOfficer {
   id                String          @id @default(uuid())
   employeeId        String          @unique @map("employee_id") @db.VarChar(30)
-  nidaNumber        String          @unique @map("nida_number") @db.VarChar(100)
+  birthId   String          @unique @map("birth_id") @db.VarChar(20)
   fullName          String          @map("full_name") @db.VarChar(120)
   email             String          @unique @db.VarChar(120)
   passwordHash      String?         @map("password_hash")
@@ -202,7 +202,12 @@ model PublicUser {
 }
 
 model Citizen {
+  // PATCH-PRIVACY-2026: birthId is the canonical lookup key for an existing
+  // citizen (father/mother, spouse, deceased, migrating resident, profile
+  // search) — a citizen only has a nationalId because they already had a
+  // birthId, so birthId alone is sufficient.
   id                  String          @id @default(uuid())
+  birthId             String?         @unique @map("birth_id") @db.VarChar(20)
   nationalId          String          @unique @map("national_id") @db.VarChar(23)
   firstName           String          @map("first_name") @db.VarChar(60)
   middleName          String?         @map("middle_name") @db.VarChar(60)

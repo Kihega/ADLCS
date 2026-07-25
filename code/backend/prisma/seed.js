@@ -152,7 +152,7 @@ async function main() {
     update: { passwordHash, status: 'active' },
     create: {
       employeeId:  'SA-0001',
-      nidaNumber:  'SA00000000000001',
+      birthId:     'BID-SUPERADMIN01',
       fullName:    'Super Admin Test',
       email:       'super@adlcs.tz',
       mobile:      '+255700000001',
@@ -170,7 +170,7 @@ async function main() {
     update: { passwordHash, status: 'active', regionId: regionDSM.id, districtId: districtKinondoni.id },
     create: {
       employeeId:  'DA-0001',
-      nidaNumber:  'DA00000000000001',
+      birthId:     'BID-DISTADMIN001',
       fullName:    'District Admin Test',
       email:       'district@adlcs.tz',
       mobile:      '+255700000002',
@@ -195,7 +195,7 @@ async function main() {
     },
     create: {
       employeeId:  'VO-0001',
-      nidaNumber:  'VO00000000000001',
+      birthId:     'BID-VILLOFFICER1',
       fullName:    'Village Officer Test',
       email:       'village@adlcs.tz',
       mobile:      '+255700000003',
@@ -220,7 +220,7 @@ async function main() {
     },
     create: {
       employeeId:  'HO-0001',
-      nidaNumber:  'HO00000000000001',
+      birthId:     'BID-HOSPOFFICER1',
       fullName:    'Hospital Officer Test',
       email:       'hospital@adlcs.tz',
       mobile:      '+255700000004',
@@ -249,15 +249,19 @@ async function main() {
   // ══════════════════════════════════════════════════════════════════════════
   console.log('👨‍👩‍  Test Parent Citizens…')
 
+  // PATCH-BID-LOOKUP-2026: test parents are now looked up by Birth ID (BID) —
+  // this is what the Hospital Officer's RegisterBirth screen's "Auto-fill
+  // test father/mother ID" button and MOCK_CITIZENS fallback both use.
   // ── Father: John Michael Makonde ──────────────────────────────────────────
   const father = await prisma.citizen.upsert({
-    where:  { nationalId: '19850315-07031-00001-24' },
+    where:  { birthId: 'BID-FATHER0001' },
     update: {
       // keep up-to-date if re-seeded
       age:         41,
       vitalStatus: 'alive',
     },
     create: {
+      birthId:         'BID-FATHER0001',
       nationalId:      '19850315-07031-00001-24',
       firstName:       'John',
       middleName:      'Michael',
@@ -286,12 +290,13 @@ async function main() {
 
   // ── Mother: Grace Rose Mwamba ─────────────────────────────────────────────
   const mother = await prisma.citizen.upsert({
-    where:  { nationalId: '19880622-07031-00002-13' },
+    where:  { birthId: 'BID-MOTHER0001' },
     update: {
       age:         37,
       vitalStatus: 'alive',
     },
     create: {
+      birthId:         'BID-MOTHER0001',
       nationalId:      '19880622-07031-00002-13',
       firstName:       'Grace',
       middleName:      'Rose',
