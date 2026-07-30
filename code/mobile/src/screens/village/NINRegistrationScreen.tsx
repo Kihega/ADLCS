@@ -742,9 +742,13 @@ export default function NINRegistrationScreen({ navigation }: Props) {
     setDownloading(false)
   }
 
-  const generateNationalId = (dob: string) => {
-    const d = dob.replace(/[^0-9]/g, '').slice(0, 8)
-    return `NIN-${d || Date.now().toString().slice(-8)}`
+  // PATCH-PRIVACY-2026: preview only (server issues the real NIN) — no DOB
+  // or other personal detail is encoded in it any more.
+  const generateNationalId = (_dob: string) => {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    let seq = ''
+    for (let i = 0; i < 12; i++) seq += alphabet[Math.floor(Math.random() * alphabet.length)]
+    return `NIDA-${seq}`
   }
 
   const canProceedStep2 = !!photoUri && fp2Valid

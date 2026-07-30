@@ -41,6 +41,13 @@ export async function apiGetVillages(wardId) {
 // registered lives somewhere not yet in the dropdown. Hits the shared
 // /api/geo endpoint (any authenticated role, not just super/district admin)
 // which enforces one canonical row per (wardId, name) via a DB constraint.
+// PATCH-ADMINREG-2026: BID search used by the unified admin/officer
+// registration form to confirm identity before creating an account.
+export async function apiLookupCitizenByBID(birthId) {
+  const { data } = await apiClient.get('/admin/citizen-lookup', { params: { birthId } })
+  return data
+}
+
 export async function apiCreateVillage(wardId, name, type = 'village') {
   const { data } = await apiClient.post('/geo/villages', { wardId, name, type })
   return data
@@ -61,11 +68,8 @@ export async function apiDeleteSuperAdmin(id) {
   return data
 }
 
-// ── Token validation ────────────────────────────────────────────────────────────
-export async function apiValidateToken(token) {
-  const { data } = await apiClient.post('/auth/validate-token', { token })
-  return data
-}
+// PATCH-NOTOKEN-2026: apiValidateToken removed — accounts are created active
+// with a default password now, no token round-trip to validate.
 
 // ── District admins [super_admin] ───────────────────────────────────────────────
 export async function apiGetDistrictAdmins(params = {}) {

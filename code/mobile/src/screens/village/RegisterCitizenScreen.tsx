@@ -20,7 +20,7 @@ import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
 
 import { User, Shield, AlertTriangle, CheckCircle2 as CC } from 'lucide-react-native'
-import { generateNationalId } from '../../services/localDb'
+import { generateNationalId, generateBirthId } from '../../services/localDb' // PATCH-BID-LOOKUP-2026
 
 // ── Reusable calendar picker (no external packages) ──────────────────────────
 function CalPicker({
@@ -395,6 +395,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
   const [occupation, setOccupation] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [genNid, setGenNid] = useState('')
+  const [genBid, setGenBid] = useState('') // PATCH-BID-LOOKUP-2026
   const [toast, setToast] = useState('')
   const [toastVis, setToastVis] = useState(false)
 
@@ -424,7 +425,12 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
     setSubmitting(true)
     try {
       const nid = generateNationalId(dob)
+      const bid = generateBirthId() // PATCH-BID-LOOKUP-2026: this citizen has no
+      // prior birth record, so give them a Birth ID here — it becomes their
+      // canonical lookup key everywhere else in the system, same as anyone
+      // who came through the Birth → NIN-issuance flow.
       setGenNid(nid)
+      setGenBid(bid)
       if (isOnline()) {
         try {
           await apiPost('/village/citizen', {
@@ -434,6 +440,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
             gender,
             dateOfBirth: dob,
             nationalId: nid,
+            birthId: bid,
             bloodGroup,
             phone: phone.trim(),
             occupation: occupation.trim(),
@@ -825,6 +832,49 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
                   style={{ padding: 4 }}
                 >
                   <Copy size={15} color={TZ.blue} />
+                </TouchableOpacity>
+              </View>
+              {/* PATCH-BID-LOOKUP-2026: this is the citizen's lookup key everywhere
+                  else in the system (marriage, migration, death, profile search) */}
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: T.textSub,
+                  marginTop: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}
+              >
+                Generated Birth ID (BID)
+              </Text>
+              <View
+                style={{
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: `${TZ.green}50`,
+                  backgroundColor: `${TZ.green}10`,
+                  padding: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '900',
+                    color: TZ.green,
+                    flex: 1,
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  {genBid}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => copy(genBid, 'Birth ID')}
+                  style={{ padding: 4 }}
+                >
+                  <Copy size={15} color={TZ.green} />
                 </TouchableOpacity>
               </View>
               <Text style={{ fontSize: 10, color: T.textDim, fontStyle: 'italic' }}>

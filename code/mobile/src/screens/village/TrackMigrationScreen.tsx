@@ -123,7 +123,8 @@ export default function TrackMigrationScreen({ navigation }: Props) {
                 const token = json.data?.migrationToken
                 const expiry = json.data?.expiryDate ? new Date(json.data.expiryDate).toLocaleDateString('en-TZ') : null
                 const tokenNote = token
-                  ? `\n\nMigration Token: ${token}\nValid until: ${expiry ?? '7 days from today'}\n\nGive this token to the citizen — they must present it with their NIN to the destination village officer within one week, or it expires and a new request must be issued.`
+                  // PATCH-BID-LOOKUP-2026: citizen now presents their Birth ID (BID), not NIN
+                  ? `\n\nMigration Token: ${token}\nValid until: ${expiry ?? '7 days from today'}\n\nGive this token to the citizen — they must present it with their Birth ID (BID) to the destination village officer within one week, or it expires and a new request must be issued.`
                   : ''
                 Alert.alert('Request Sent', (json.message || 'Migration request sent successfully.') + tokenNote, [
                   { text: 'OK', onPress: () => navigation.goBack() },

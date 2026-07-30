@@ -94,11 +94,23 @@ export interface OfficerCache {
 }
 
 // ─── Cert / ID generators ──────────────────────────────────────────────────────
+// PATCH-PRIVACY-2026: neither ID format below encodes date of birth (or any
+// other personal detail) any more — regulatory/privacy requirement. Both are
+// opaque, high-entropy random identifiers; uniqueness is enforced by the
+// database UNIQUE constraint server-side (with retry on collision). The `dob`
+// (and region/district/ward) parameters are kept-but-unused so existing call
+// sites don't need to change.
+const ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I — avoids confusion
+function randomIdBlock(len: number): string {
+  let out = ''
+  for (let i = 0; i < len; i++) out += ID_ALPHABET[Math.floor(Math.random() * ID_ALPHABET.length)]
+  return out
+}
+
 /**
  * generateBirthId — Birth Registration tracking ID
  *
- * Format: BID-YYYYMMDD-XXXXXXX
- * Example: BID-20260601-3847291
+ * Format: BID-XXXXXXXXXX (10 chars, opaque — no DOB or other PII derivable)
  *
  * This ID is stored with the birth record and presented to the family.
  * At age 18 a Village Officer enters this ID to look up the birth record
@@ -106,14 +118,8 @@ export interface OfficerCache {
  *
  * NO NIN is generated at birth — NIN issuance is a Village Officer workflow.
  */
-export function generateBirthId(dob: string): string {
-  const parts = dob.split('/')
-  const day = (parts[0] ?? '01').padStart(2, '0')
-  const month = (parts[1] ?? '01').padStart(2, '0')
-  const year = parts[2] ?? String(new Date().getFullYear())
-  const date = `${year}${month}${day}`
-  const seq = String(Math.floor(Math.random() * 9000000) + 1000000)
-  return `BID-${date}-${seq}`
+export function generateBirthId(_dob?: string): string {
+  return `BID-${randomIdBlock(10)}`
 }
 
 export function generateBirthCertNo(): string {
@@ -129,21 +135,15 @@ export function generateDeathCertNo(): string {
 // generateNewbornNationalId() REMOVED — NIN is NOT issued at birth.
 // Village Officer issues NIN at age 18 via the NIN issuance workflow.
 
+// National ID (NIN) — format: NIDA-XXXXXXXXXXXX-CC
 export function generateNationalId(
-  dob: string,
-  regionCode = '07',
-  districtCode = '03',
-  wardCode = '1'
+  _dob?: string,
+  _regionCode?: string,
+  _districtCode?: string,
+  _wardCode?: string
 ): string {
-  const parts = dob.split('/')
-  const day = (parts[0] ?? '01').padStart(2, '0')
-  const month = (parts[1] ?? '01').padStart(2, '0')
-  const year = parts[2] ?? '2026'
-  const date = `${year}${month}${day}`
-  const loc = `${regionCode.padStart(2, '0')}${districtCode.padStart(2, '0')}${wardCode.padStart(1, '0')}`
-  const seq = String(Math.floor(Math.random() * 90000) + 10000).padStart(5, '0')
   const cc = String(Math.floor(Math.random() * 90) + 10)
-  return `${date}-${loc}-${seq}-${cc}`
+  return `NIDA-${randomIdBlock(12)}-${cc}`
 }
 
 // ─── No-op stubs (satisfy imports, no SQLite operations) ──────────────────────

@@ -10,10 +10,14 @@
     <title>NBS-CRVS — NBS Tanzania</title>
     <!-- PATCH-EMAIL-2025: light mode overrides — class toggled on <html> by useTheme() -->
   <style>
-    .tzcrvs-light { filter: invert(1) hue-rotate(180deg); }
+    /* PATCH-LIGHTMODE-2026: small contrast/brightness correction — translucent
+       text and borders (rgba-based Tailwind classes) looked washed out under
+       a plain invert because low alpha stays low alpha either way. This is a
+       best-effort nudge, not a full light-theme rewrite. */
+    .tzcrvs-light { filter: invert(1) hue-rotate(180deg) contrast(1.12) brightness(1.04); }
     .tzcrvs-light img,
     .tzcrvs-light video,
-    .tzcrvs-light [data-no-invert] { filter: invert(1) hue-rotate(180deg); }
+    .tzcrvs-light [data-no-invert] { filter: invert(1) hue-rotate(180deg) contrast(1.12) brightness(1.04); }
   </style>
 </head>
   <body>

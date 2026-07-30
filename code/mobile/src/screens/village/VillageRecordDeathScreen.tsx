@@ -628,7 +628,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                   }}
                   value={lookupId}
                   onChangeText={setLookupId}
-                  placeholder="National ID or full name"
+                  placeholder="Birth ID (BID) or full name"  /* PATCH-BID-LOOKUP-2026 */
                   placeholderTextColor={T.textDim}
                   returnKeyType="search"
                   blurOnSubmit={false}

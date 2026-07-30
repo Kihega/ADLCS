@@ -523,8 +523,9 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
 
   const NidSearch = ({ label, nid, setNid, data, loading, party, color }: any) => (
     <View>
+      {/* PATCH-BID-LOOKUP-2026: husband/wife are now looked up by Birth ID (BID) */}
       <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
-        {label} National ID *
+        {label} Birth ID (BID) *
       </Text>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
         <TextInput
@@ -540,8 +541,8 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
             color: T.text,
           }}
           value={nid}
-          onChangeText={setNid}
-          placeholder="YYYYMMDD-LLLLL-SSSSS-CC"
+          onChangeText={(raw) => setNid(raw.toUpperCase())}
+          placeholder="BID-XXXXXXXXXX"
           placeholderTextColor={T.textDim}
           returnKeyType="search"
           blurOnSubmit={false}

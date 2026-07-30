@@ -73,22 +73,22 @@ type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'>
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 const { width: W } = Dimensions.get('window')
 
-// ─── NIN formatter ────────────────────────────────────────────────────────────
+// PATCH-BID-LOOKUP-2026: father/mother are now looked up by their Birth ID
+// (BID) instead of NIN — a citizen only ever has a NIN because they already
+// had a BID, so BID alone is enough. Names kept as formatNIN/isNINComplete to
+// avoid touching every call site below; they now format/validate a BID.
 function formatNIN(raw: string): string {
-  const clean = raw.replace(/[^0-9]/g, '')
-  let out = clean.slice(0, 8)
-  if (clean.length > 8) out += '-' + clean.slice(8, 13)
-  if (clean.length > 13) out += '-' + clean.slice(13, 18)
-  if (clean.length > 18) out += '-' + clean.slice(18, 20)
-  return out
+  return raw.toUpperCase().replace(/[^A-Z0-9-]/g, '')
 }
 function isNINComplete(nin: string) {
-  return /^\d{8}-\d{5}-\d{5}-\d{2}$/.test(nin)
+  return /^BID-[A-Z0-9]{6,12}$/.test(nin.trim())
 }
 
 // ─── Test citizens ─────────────────────────────────────────────────────────────
+// PATCH-BID-LOOKUP-2026: keyed by test Birth ID now (matches seed.js)
 const MOCK_CITIZENS: Record<string, any> = {
-  '19850315-07031-00001-24': {
+  'BID-FATHER0001': {
+    birthId: 'BID-FATHER0001',
     nationalId: '19850315-07031-00001-24',
     firstName: 'John',
     middleName: 'Michael',
@@ -101,7 +101,8 @@ const MOCK_CITIZENS: Record<string, any> = {
     district: 'Kinondoni',
     occupation: 'Civil Engineer',
   },
-  '19880622-07031-00002-13': {
+  'BID-MOTHER0001': {
+    birthId: 'BID-MOTHER0001',
     nationalId: '19880622-07031-00002-13',
     firstName: 'Grace',
     middleName: 'Rose',
@@ -781,14 +782,14 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           const foundGender = json.data.gender?.toUpperCase()
           if (isFather && foundGender !== 'MALE') {
             setError(
-              'This National ID belongs to a FEMALE citizen and cannot be used for the Father.'
+              'This Birth ID belongs to a FEMALE citizen and cannot be used for the Father.'
             )
             setLoading(false)
             return
           }
           if (!isFather && foundGender !== 'FEMALE') {
             setError(
-              'This National ID belongs to a MALE citizen and cannot be used for the Mother.'
+              'This Birth ID belongs to a MALE citizen and cannot be used for the Mother.'
             )
             setLoading(false)
             return
@@ -818,7 +819,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
     await new Promise<void>((r) => setTimeout(r, 600))
     const found = MOCK_CITIZENS[nid.trim()]
     if (!found) {
-      setError('National ID not found in NBS Central Database.')
+      setError('Birth ID not found in NBS Central Database.') // PATCH-BID-LOOKUP-2026
       setLoading(false)
       return
     }
@@ -983,7 +984,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
     const data = isFather ? fatherData : motherData
     const loading = isFather ? fatherLoading : motherLoading
     const error = isFather ? fatherError : motherError
-    const testNid = isFather ? '19850315-07031-00001-24' : '19880622-07031-00002-13'
+    const testNid = isFather ? 'BID-FATHER0001' : 'BID-MOTHER0001' // PATCH-BID-LOOKUP-2026
     const accent = isFather ? H.primary : '#8b5cf6'
     const label = isFather ? 'Father' : 'Mother'
 
@@ -993,12 +994,12 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           {label} Identification
         </Text>
         <Text style={{ fontSize: 12, color: T.textSub, lineHeight: 18 }}>
-          Enter the {label.toLowerCase()}'s National ID. The system validates the record in the NBS
+          Enter the {label.toLowerCase()}'s Birth ID (BID). The system validates the record in the NBS
           Central Database.
         </Text>
         <View>
           <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
-            National ID Number *
+            Birth ID (BID) *
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
@@ -1016,10 +1017,10 @@ export default function RegisterBirthScreen({ navigation }: Props) {
               }}
               value={nid}
               onChangeText={(raw) => handleNINInput(raw, role)}
-              placeholder="YYYYMMDD-LLLLL-SSSSS-CC"
+              placeholder="BID-XXXXXXXXXX"
               placeholderTextColor={T.textDim}
-              keyboardType="numeric"
-              maxLength={23}
+              keyboardType="default"
+              maxLength={14}
               returnKeyType="search"
               blurOnSubmit={false}
             />
@@ -1047,7 +1048,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           <TouchableOpacity
             style={{ paddingTop: 6 }}
             onPress={() => {
-              handleNINInput(testNid.replace(/-/g, ''), role)
+              handleNINInput(testNid, role) // PATCH-BID-LOOKUP-2026: BID keeps its dash
               lookupParent(testNid, role)
             }}
           >

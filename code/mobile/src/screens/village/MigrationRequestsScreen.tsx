@@ -131,8 +131,10 @@ export default function MigrationRequestsScreen({ navigation }: Props) {
 
       <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
         <Text style={{ fontSize: 11, color: T.textDim }}>
-          Tip: if the citizen already has their NIN and migration token in hand, use "Incoming Citizen"
-          from the Migration menu to confirm instantly instead of waiting for it to appear below.
+          {/* PATCH-BID-LOOKUP-2026 */}
+          Tip: if the citizen already has their Birth ID (BID) and migration token in hand, use
+          "Incoming Citizen" from the Migration menu to confirm instantly instead of waiting for it to
+          appear below.
         </Text>
       </View>
 

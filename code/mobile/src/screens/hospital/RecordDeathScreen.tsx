@@ -406,16 +406,11 @@ export default function RecordDeathScreen({ navigation }: Props) {
     { val: 'maternal', label: 'Maternal' },
   ]
 
-  // NIN formatter (for parent lookup in INFANT case)
-  const formatNIN = (raw: string) => {
-    const clean = raw.replace(/[^0-9]/g, '')
-    let out = clean.slice(0, 8)
-    if (clean.length > 8) out += '-' + clean.slice(8, 13)
-    if (clean.length > 13) out += '-' + clean.slice(13, 18)
-    if (clean.length > 18) out += '-' + clean.slice(18, 20)
-    return out
-  }
-  const isNINComplete = (nin: string) => /^\d{8}-\d{5}-\d{5}-\d{2}$/.test(nin)
+  // PATCH-BID-LOOKUP-2026: father/mother now looked up by Birth ID (BID), not
+  // NIN. Names kept as formatNIN/isNINComplete to avoid touching every call
+  // site below; they now format/validate a BID.
+  const formatNIN = (raw: string) => raw.toUpperCase().replace(/[^A-Z0-9-]/g, '')
+  const isNINComplete = (nin: string) => /^BID-[A-Z0-9]{6,12}$/.test(nin.trim())
 
   // ── ADULT: Citizen lookup ─────────────────────────────────────────────────
   const lookupCitizen = useCallback(async () => {
@@ -830,7 +825,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                 <Text
                   style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}
                 >
-                  National ID / Full Name *
+                  Birth ID (BID) / Full Name *
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <TextInput
@@ -840,7 +835,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                     ]}
                     value={lookupId}
                     onChangeText={(t) => setLookupId(t.toUpperCase())}
-                    placeholder="National ID or full name"
+                    placeholder="Birth ID (BID) or full name"
                     placeholderTextColor={T.textDim}
                     returnKeyType="search"
                     blurOnSubmit={false}
@@ -898,8 +893,8 @@ export default function RecordDeathScreen({ navigation }: Props) {
             <View style={{ gap: 18 }}>
               <Text style={[s.stepTitle, { color: T.text }]}>Infant — Parent Identification</Text>
               <Text style={{ fontSize: 12, color: T.textSub, lineHeight: 18 }}>
-                The infant has no National ID yet. Enter Father and Mother NIDs to link this death
-                record to their lineage.
+                The infant has no National ID yet. Enter Father and Mother Birth IDs (BID) to link this
+                death record to their lineage.
               </Text>
 
               {/* Father NID */}
@@ -925,7 +920,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                     }}
                   >
                     <Text style={{ fontSize: 13, fontWeight: '800', color: accent }}>
-                      {label} National ID
+                      {label} Birth ID (BID)
                     </Text>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <TextInput
@@ -941,10 +936,10 @@ export default function RecordDeathScreen({ navigation }: Props) {
                         ]}
                         value={nid}
                         onChangeText={(raw) => setNid(formatNIN(raw))}
-                        placeholder="YYYYMMDD-LLLLL-SSSSS-CC"
+                        placeholder="BID-XXXXXXXXXX"
                         placeholderTextColor={T.textDim}
-                        keyboardType="numeric"
-                        maxLength={23}
+                        keyboardType="default"
+                        maxLength={14}
                       />
                       <TouchableOpacity
                         style={[

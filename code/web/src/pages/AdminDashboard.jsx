@@ -41,6 +41,7 @@ import GeoFilterBar from '../components/GeoFilterBar'
 import YearMonthFilter from '../components/YearMonthFilter'
 import ChangePasswordModal from '../modals/ChangePasswordModal'
 import NewRegistrationModal from '../modals/NewRegistrationModal'
+import ConfirmModal from '../components/ConfirmModal' // PATCH-ADMINREG-2026
 
 // ── Shared UI primitives ─────────────────────────────────────────────────────
 
@@ -188,22 +189,19 @@ function IconButton({ onClick, title, danger, disabled, children }) {
 function DashboardSection({ role }) {
   const [overview, setOverview] = useState(null)
   const [population, setPopulation] = useState(null)
-  const [recentLogs, setRecentLogs] = useState([])
   const [perf, setPerf] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [ov, pop, logs, perfRes] = await Promise.all([
+      const [ov, pop, perfRes] = await Promise.all([
         api.apiGetOverview(),
         api.apiGetPopulation({}),
-        api.apiGetAuditLogs({ limit: 6 }),
         api.apiGetSystemPerformance().catch(() => null),  // graceful — not fatal if role has no access
       ])
       setOverview(ov.data)
       setPopulation(pop.data)
-      setRecentLogs(logs.data || [])
       setPerf(perfRes?.data || null)
     } catch (err) {
       console.error('[dashboard]', err)
@@ -260,22 +258,6 @@ function DashboardSection({ role }) {
         </div>
       </Card>
 
-      <Card>
-        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Recent Activity</p>
-        <div className="space-y-2">
-          {recentLogs.length === 0 && <p className="text-gray-600 text-xs">No recent activity</p>}
-          {recentLogs.map(l => (
-            <div key={l.id} className="flex items-center gap-3 text-xs">
-              {l.severity === 'critical' || l.severity === 'warning'
-                ? <AlertTriangle size={14} className="text-red-400 shrink-0" />
-                : <CheckCircle2 size={14} className="text-[#00ff9d] shrink-0" />}
-              <span className="text-gray-300 flex-1 truncate">{l.action.replace(/_/g, ' ')} — {l.targetTable}</span>
-              <span className="text-gray-600 shrink-0">{new Date(l.timestamp).toLocaleString('en-TZ')}</span>
-              <SeverityPill severity={l.severity} />
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   )
 }
@@ -377,13 +359,17 @@ function DemographicsSection({ role }) {
 
 // ── Section: District Admins [super_admin] ──────────────────────────────────
 
-function DistrictAdminsSection({ onRegister }) {
+// PATCH-ADMINREG-2026: no more standalone "New District Admin" button here —
+// admin registration now lives on Manage Users ("Add New Admin").
+function DistrictAdminsSection() {
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState('all')
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
+  const [confirmTarget, setConfirmTarget] = useState(null)
+  const [notice, setNotice] = useState('')
   const limit = 10
 
   const load = useCallback(() => {
@@ -401,26 +387,23 @@ function DistrictAdminsSection({ onRegister }) {
     try {
       await api.apiUpdateDistrictAdminStatus(id, newStatus)
       load()
-    } catch (err) { alert(err.response?.data?.message || 'Update failed') }
+    } catch (err) { setNotice(err.response?.data?.message || 'Update failed') }
   }
-  async function remove(id, name) {
-    if (!window.confirm(`Delete district admin "${name}"? This cannot be undone.`)) return
+  function remove(id, name) { setConfirmTarget({ id, name }) }
+  async function confirmRemove() {
+    const t = confirmTarget
+    setConfirmTarget(null)
     try {
-      await api.apiDeleteDistrictAdmin(id)
+      await api.apiDeleteDistrictAdmin(t.id)
       load()
-    } catch (err) { alert(err.response?.data?.message || 'Delete failed') }
+    } catch (err) { setNotice(err.response?.data?.message || 'Delete failed') }
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <SearchBox value={q} onChange={v => { setPage(1); setQ(v) }} placeholder="Search name, email, ID…" />
-          <StatusSelect value={status} options={['all', 'pending', 'active', 'suspended']} onChange={v => { setPage(1); setStatus(v) }} />
-        </div>
-        <button onClick={onRegister} className="flex items-center gap-1.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#00d4ff]/20">
-          <UserPlus size={13} /> New District Admin
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchBox value={q} onChange={v => { setPage(1); setQ(v) }} placeholder="Search name, email, ID…" />
+        <StatusSelect value={status} options={['all', 'pending', 'active', 'suspended']} onChange={v => { setPage(1); setStatus(v) }} />
       </div>
 
       <Card className="p-0 overflow-x-auto">
@@ -456,13 +439,22 @@ function DistrictAdminsSection({ onRegister }) {
         </table>
         <PagerFooter page={page} total={total} limit={limit} onPage={setPage} />
       </Card>
+
+      {confirmTarget && (
+        <ConfirmModal
+          title="Delete District Admin"
+          message={`Delete district admin "${confirmTarget.name}"? This cannot be undone.`}
+          danger
+          confirmLabel="Delete"
+          onConfirm={confirmRemove}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
     </div>
   )
 }
-
-// ── Section: Officers (Village / Health) ─────────────────────────────────────
-
-function OfficersSection({ kind, role, onRegister }) {
+// ── Section: Officers (Village / Hospital) ({ kind, role, onRegister }) {
   const isVillage = kind === 'village'
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
@@ -487,14 +479,19 @@ function OfficersSection({ kind, role, onRegister }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
+  // PATCH-ADMINREG-PT2-2026
+  const [confirmTarget, setConfirmTarget] = useState(null)
+  const [notice, setNotice] = useState('')
   async function setRowStatus(id, newStatus) {
     try { await setStatusApi(id, newStatus); load() }
-    catch (err) { alert(err.response?.data?.message || 'Update failed') }
+    catch (err) { setNotice(err.response?.data?.message || 'Update failed') }
   }
-  async function remove(id, name) {
-    if (!window.confirm(`Delete officer "${name}"? This cannot be undone.`)) return
-    try { await deleteApi(id); load() }
-    catch (err) { alert(err.response?.data?.message || 'Delete failed') }
+  function remove(id, name) { setConfirmTarget({ id, name }) }
+  async function confirmRemove() {
+    const t = confirmTarget
+    setConfirmTarget(null)
+    try { await deleteApi(t.id); load() }
+    catch (err) { setNotice(err.response?.data?.message || 'Delete failed') }
   }
 
   return (
@@ -535,7 +532,11 @@ function OfficersSection({ kind, role, onRegister }) {
                     {r.status !== 'suspended' && (
                       <IconButton title="Suspend" onClick={() => setRowStatus(r.id, 'suspended')}><UserX size={13} /></IconButton>
                     )}
-                    <IconButton title="Delete" danger onClick={() => remove(r.id, r.fullName)}><Trash2 size={13} /></IconButton>
+                    {/* PATCH-ADMINREG-PT2-2026: only national-scope (Super Admin)
+                        accounts may delete officer accounts. */}
+                    {role === 'super_admin' && (
+                      <IconButton title="Delete" danger onClick={() => remove(r.id, r.fullName)}><Trash2 size={13} /></IconButton>
+                    )}
                   </div>
                 </Td>
               </tr>
@@ -544,17 +545,30 @@ function OfficersSection({ kind, role, onRegister }) {
         </table>
         <PagerFooter page={page} total={total} limit={limit} onPage={setPage} />
       </Card>
+
+      {confirmTarget && (
+        <ConfirmModal
+          title="Delete Officer"
+          message={`Delete officer "${confirmTarget.name}"? This cannot be undone.`}
+          danger
+          confirmLabel="Delete"
+          onConfirm={confirmRemove}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
     </div>
   )
 }
 // ── Section: Manage Users [super_admin] ──────────────────────────────────────
 
+// PATCH-ADMINREG-PT2-2026: dropped the 'Public Users' tab — that slot is now
+// the always-visible "Add New Admin" button instead (see ManageUsersSection).
 const USER_ROLES = [
   { key: 'super_admin',      label: 'Super Admins',  statuses: ['pending', 'active', 'suspended'] },
   { key: 'district_admin',   label: 'District Admins', statuses: ['pending', 'active', 'suspended'] },
   { key: 'village_officer',  label: 'Village Officers', statuses: ['pending', 'active', 'offline', 'suspended'] },
   { key: 'hospital_officer', label: 'Health Officers', statuses: ['pending', 'active', 'offline', 'suspended'] },
-  { key: 'public_user',      label: 'Public Users', statuses: ['active', 'suspended'] },
 ]
 
 // PATCH-EMAIL-2025: accepts onRegister so super_admin tab can open the modal
@@ -585,21 +599,25 @@ function ManageUsersSection({ currentUserId, onRegister }) {
   const roleDef = USER_ROLES.find(r => r.key === tab)
   const rows = data[tab] || []
 
+  // PATCH-ADMINREG-PT2-2026
+  const [confirmTarget, setConfirmTarget] = useState(null)
+  const [notice, setNotice] = useState('')
   async function setRowStatus(id, newStatus) {
     try { await api.apiUpdateUserStatus(tab, id, newStatus); load() }
-    catch (err) { alert(err.response?.data?.message || 'Update failed') }
+    catch (err) { setNotice(err.response?.data?.message || 'Update failed') }
   }
-  async function remove(id, name) {
-    if (!window.confirm(`Delete user "${name}"? This cannot be undone.`)) return
+  function remove(id, name) { setConfirmTarget({ id, name }) }
+  async function confirmRemove() {
+    const t = confirmTarget
+    setConfirmTarget(null)
     try {
-      // PATCH-EMAIL-2025: super_admin deletion uses the guarded endpoint
       if (tab === 'super_admin') {
-        await apiDeleteSuperAdmin(id)
+        await apiDeleteSuperAdmin(t.id)
       } else {
-        await api.apiDeleteUser(tab, id)
+        await api.apiDeleteUser(tab, t.id)
       }
       load()
-    } catch (err) { alert(err.response?.data?.message || 'Delete failed') }
+    } catch (err) { setNotice(err.response?.data?.message || 'Delete failed') }
   }
 
   return (
@@ -618,19 +636,22 @@ function ManageUsersSection({ currentUserId, onRegister }) {
             </button>
           ))}
         </div>
-        {/* PATCH-EMAIL-2025: Add National Admin button — super_admin tab only */}
-        {tab === 'super_admin' && (
-          <div className="flex items-center gap-2">
+        {/* PATCH-ADMINREG-PT2-2026: always-visible unified registration entry
+            point — was previously conditional on the super_admin tab and only
+            created National Admins; the modal itself now offers a Scope
+            (National/District) picker, and this is where "Public Users" used
+            to sit. */}
+        <div className="flex items-center gap-2">
+          {tab === 'super_admin' && (
             <span className="text-[10px] text-gray-500">{superAdminMeta.total}/{3} admins</span>
-            <button
-              onClick={() => onRegister && onRegister('super_admin')}
-              disabled={!superAdminMeta.canAdd}
-              className="flex items-center gap-1.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#00d4ff]/20 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <UserPlus size={13} /> Add National Admin
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={() => onRegister && onRegister()}
+            className="flex items-center gap-1.5 bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#00d4ff]/20"
+          >
+            <UserPlus size={13} /> Add New Admin
+          </button>
+        </div>
         <SearchBox value={q} onChange={setQ} placeholder="Search name / email…" />
       </div>
 
@@ -680,6 +701,18 @@ function ManageUsersSection({ currentUserId, onRegister }) {
           </tbody>
         </table>
       </Card>
+
+      {confirmTarget && (
+        <ConfirmModal
+          title="Delete User"
+          message={`Delete user "${confirmTarget.name}"? This cannot be undone.`}
+          danger
+          confirmLabel="Delete"
+          onConfirm={confirmRemove}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
     </div>
   )
 }
@@ -883,19 +916,34 @@ function RITASection({ role }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load({ ...filters, ...period }) }, [filters, period, load])
 
-  const handleDelete = async () => {
-    if (!window.confirm('Delete ALL birth records? This cannot be undone. Test parent citizens will be preserved.')) return
+  // PATCH-ADMINREG-PT2-2026
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [notice, setNotice] = useState('')
+  const handleDelete = () => setConfirmClear(true)
+  const confirmDelete = async () => {
+    setConfirmClear(false)
     setDeleting(true)
     try {
       const r = await api.apiDeleteBirths()
-      alert(r.message || 'Births deleted')
+      setNotice(r.message || 'Births deleted')
       load({ ...filters, ...period })
-    } catch(e) { alert('Failed: ' + e.message) }
+    } catch(e) { setNotice('Failed: ' + e.message) }
     finally { setDeleting(false) }
   }
 
   return (
     <div className="space-y-4">
+      {confirmClear && (
+        <ConfirmModal
+          title="Clear All Births"
+          message="Delete ALL birth records? This cannot be undone. Test parent citizens will be preserved."
+          danger
+          confirmLabel="Delete All"
+          onConfirm={confirmDelete}
+          onCancel={() => setConfirmClear(false)}
+        />
+      )}
+      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
       <div className="flex items-center justify-between">
         <h2 className="text-white font-bold text-lg">RITA — Registration Trends</h2>
         {role === 'super_admin' && (
@@ -1154,7 +1202,6 @@ export default function AdminDashboard({ role }) {
   const [activeNav,   setActiveNav]   = useState('dashboard')
   const [showChangePwd, setShowChangePwd]       = useState(false)
   const [showNewReg,    setShowNewReg]           = useState(false)
-  const [pendingRegTarget, setPendingRegTarget] = useState(undefined)  // PATCH-EMAIL-2025
   const [loggingOut,    setLoggingOut]           = useState(false)
 
   const nav = NAV.filter(n => n.roles.includes(role))
@@ -1172,8 +1219,7 @@ export default function AdminDashboard({ role }) {
       case 'district_admins':     return <DistrictAdminsSection onRegister={() => setShowNewReg(true)} />
       case 'village_officers':    return <OfficersSection kind="village" role={role} onRegister={() => setShowNewReg(true)} />
       case 'health_officers':     return <OfficersSection kind="health" role={role} onRegister={() => setShowNewReg(true)} />
-      case 'manage_users':        return <ManageUsersSection currentUserId={user?.id}
-                                    onRegister={(target) => { setShowNewReg(true); setPendingRegTarget(target) }} />
+      case 'manage_users':        return <ManageUsersSection currentUserId={user?.id} onRegister={() => setShowNewReg(true)} />
       case 'marriages':           return <MarriagesSection />
       case 'audit_logs':          return <AuditLogsSection />
       case 'security_alerts':     return <AuditLogsSection securityOnly />
@@ -1185,7 +1231,7 @@ export default function AdminDashboard({ role }) {
     }
   }
 
-  const roleLabel = role === 'super_admin' ? 'Super Administrator' : 'District Administrator'
+  const roleLabel = role === 'super_admin' ? 'Administrator' : 'District Administrator' // PATCH-ADMINREG-2026
   const [theme, setTheme] = useTheme(user?.id)  // PATCH-POP-3: scoped to logged-in user
 
   return (
@@ -1264,15 +1310,13 @@ export default function AdminDashboard({ role }) {
       {showChangePwd && <ChangePasswordModal onClose={() => setShowChangePwd(false)} />}
       {showNewReg && (
         <NewRegistrationModal
-          role={role}
           defaultTarget={
-            pendingRegTarget ||
-            (activeNav === 'health_officers'  ? 'hospital_officer'  :
-             activeNav === 'village_officers' ? 'village_officer'   : undefined)
+            activeNav === 'health_officers'  ? 'hospital_officer'  :
+            activeNav === 'village_officers' ? 'village_officer'   : undefined
           }
-          onClose={() => { setShowNewReg(false); setPendingRegTarget(undefined) }}
+          onClose={() => { setShowNewReg(false); setActiveNav(activeNav) }}
         />
-      )}{/* HOTFIX-LINT-3 */}
+      )}{/* PATCH-ADMINREG-PT2-2026 */}
     </div>
   )
 }

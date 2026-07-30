@@ -97,16 +97,18 @@ export default function CitizenProfileScreen({ navigation }: Props) {
   const [expanded, setExpanded] = useState(true)
 
   const handleSearch = async () => {
+    // PATCH-BID-LOOKUP-2026: search by Birth ID (BID) — a citizen only ever has
+    // a NIN because they already had a BID, so BID alone is enough.
     const value = nin.trim()
     if (!value) {
-      setError('Enter a citizen NIN to search.')
+      setError('Enter a citizen Birth ID to search.')
       return
     }
     setSearching(true)
     setError('')
     setProfile(null)
     try {
-      const json = await apiGet(`/village/citizen-lookup?nationalId=${encodeURIComponent(value)}`)
+      const json = await apiGet(`/village/citizen-lookup?birthId=${encodeURIComponent(value)}`)
       if (json.success && json.data) {
         setProfile(json.data)
         setExpanded(true)
@@ -114,7 +116,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
         setError(json.message ?? 'Citizen not found in your village.')
       }
     } catch (e: any) {
-      setError(e?.message ?? 'No citizen with this NIN was found registered in your village.')
+      setError(e?.message ?? 'No citizen with this Birth ID was found registered in your village.')
     } finally {
       setSearching(false)
     }
@@ -172,7 +174,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
-            Citizen National ID (NIN) *
+            Citizen Birth ID (BID) *
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
@@ -193,7 +195,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                 setNin(t)
                 setError('')
               }}
-              placeholder="YYYYMMDD-07031-XXXXX-CC"
+              placeholder="BID-XXXXXXXXXX"
               placeholderTextColor={T.textDim}
               autoCapitalize="characters"
               returnKeyType="search"
