@@ -454,7 +454,9 @@ function DistrictAdminsSection() {
     </div>
   )
 }
-// ── Section: Officers (Village / Hospital) ({ kind, role, onRegister }) {
+// ── Section: Officers (Village / Hospital) ───────────────────────────────────
+
+function OfficersSection({ kind, role, onRegister }) {
   const isVillage = kind === 'village'
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)

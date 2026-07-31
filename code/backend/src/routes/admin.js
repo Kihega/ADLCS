@@ -547,7 +547,9 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
         mobile: mobile || undefined,
         regionId: regionId ? Number(regionId) : undefined,
         districtId: districtId ? Number(districtId) : undefined,
-        department: department || undefined,
+        // PATCH-DISTRICTADMIN-DEPT-FIX-2026: DistrictAdmin has no `department`
+        // column in this schema (unlike SuperAdmin) — accepted in the request
+        // body but intentionally not written here.
         status: 'active',
         passwordHash,
         createdById: req.user.id,

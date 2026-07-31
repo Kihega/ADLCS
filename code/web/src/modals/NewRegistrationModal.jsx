@@ -353,11 +353,13 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
                   </div>
                 )}
 
-                {(target === 'super_admin' || target === 'district_admin') && (
+                {/* PATCH-DISTRICTADMIN-DEPT-FIX-2026: District Admin has no
+                    `department` column in this schema — only National Admin does. */}
+                {target === 'super_admin' && (
                   <div>
                     <label className={lbl}>Department (optional)</label>
                     <input className={inp} value={form.department} onChange={e => set('department', e.target.value)}
-                      placeholder={target === 'super_admin' ? 'e.g. Statistics & Data Management' : 'e.g. Civil Registration'} />
+                      placeholder="e.g. Statistics & Data Management" />
                   </div>
                 )}
 

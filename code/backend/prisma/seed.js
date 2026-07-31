@@ -1,5 +1,11 @@
 // prisma/seed.js
-// PATCH-SEED-CLEAN-2026: clean rewrite of the test/demo data set.
+// PATCH-SEED-FKFIX-2026: fixes a real bug from the previous seed.js rewrite
+// — Step 0 was deleting old test Village/Hospital Officers and District/
+// Super Admins directly, before deleting the records that still reference
+// them (migrations, deaths, marriages, births, citizens from a previous
+// seed run). Postgres correctly rejected that with a foreign-key violation
+// (e.g. `migrations_source_officer_id_fkey`). Cleanup now deletes/unlinks
+// dependents FIRST, parents last.
 //
 // Run with: node prisma/seed.js  (safe to re-run — everything is upserted
 // or deleted-then-recreated by fixed key, never duplicated).
@@ -22,8 +28,17 @@ const prisma = new PrismaClient()
 
 const DEFAULT_PASSWORD = 'Admin@1234'
 
-async function getOrCreateRegion(name) {
-  return prisma.region.upsert({ where: { name }, update: {}, create: { name } })
+// PATCH-SEED-REGIONFIX-2026: unlike District/Ward/Village, Region.name is
+// NOT a unique column in this schema (only `id` is) — upsert-by-name is
+// invalid here. Use the same find-first, create-if-missing pattern as the
+// other geo helpers below instead.
+// PATCH-REGION-JURISDICTION-FIX-2026: Region.jurisdiction is a REQUIRED enum
+// (mainland | zanzibar) with no default — creating a brand-new region
+// without it fails. Every region this script seeds is mainland Tanzania.
+async function getOrCreateRegion(name, jurisdiction = 'mainland') {
+  const existing = await prisma.region.findFirst({ where: { name } })
+  if (existing) return existing
+  return prisma.region.create({ data: { name, jurisdiction } })
 }
 async function getOrCreateDistrict(name, regionId) {
   const existing = await prisma.district.findFirst({ where: { name, regionId } })
@@ -41,24 +56,108 @@ async function getOrCreateVillage(name, wardId, type = 'village') {
   return prisma.village.create({ data: { name, wardId, type } })
 }
 
-async function main() {
-  console.log('── Seeding TzCRVS test data ──────────────────────────────────────')
-
-  // ── Step 0: clean slate for anything from a previous seed run ─────────────
-  // Both the old (pre-rewrite) and current test emails/birthIds are listed
-  // here so this is safe to run regardless of which seed version ran last.
+// PATCH-SEED-FKFIX-2026: dependency-safe cleanup of any test data left over
+// from a previous run of this seed script (or an earlier version of it).
+async function cleanupOldTestData() {
   const oldAndNewEmails = [
     'super@adlcs.tz', 'district@adlcs.tz', 'village@adlcs.tz', 'hospital@adlcs.tz',
     'sinakishosha@gmail.com', 'kuhega2025@gmail.com',
   ]
   const oldAndNewBirthIds = ['BID-FATHER0001', 'BID-MOTHER0001']
 
-  await prisma.villageOfficer.deleteMany({ where: { email: { in: oldAndNewEmails } } })
-  await prisma.hospitalOfficer.deleteMany({ where: { email: { in: oldAndNewEmails } } })
-  await prisma.districtAdmin.deleteMany({ where: { email: { in: oldAndNewEmails } } })
-  await prisma.superAdmin.deleteMany({ where: { email: { in: oldAndNewEmails } } })
-  await prisma.citizen.deleteMany({ where: { birthId: { in: oldAndNewBirthIds } } })
-  console.log('  Cleared any previous test admins/officers/citizens')
+  // ── Step A: find old test accounts by email ──────────────────────────────
+  const oldSuperAdmins    = await prisma.superAdmin.findMany({ where: { email: { in: oldAndNewEmails } }, select: { id: true } })
+  const oldDistrictAdmins = await prisma.districtAdmin.findMany({ where: { email: { in: oldAndNewEmails } }, select: { id: true } })
+  let saIds = oldSuperAdmins.map(a => a.id)
+  let daIds = oldDistrictAdmins.map(a => a.id)
+
+  // Sweep up any District Admins created BY those Super Admins in a
+  // previous run (a leftover chain), so deleting the root doesn't fail.
+  if (saIds.length) {
+    const chained = await prisma.districtAdmin.findMany({ where: { createdById: { in: saIds } }, select: { id: true } })
+    daIds = [...new Set([...daIds, ...chained.map(a => a.id)])]
+  }
+
+  const oldVillageOfficers = await prisma.villageOfficer.findMany({
+    where: { OR: [{ email: { in: oldAndNewEmails } }, ...(daIds.length ? [{ createdById: { in: daIds } }] : [])] },
+    select: { id: true },
+  })
+  const oldHospitalOfficers = await prisma.hospitalOfficer.findMany({
+    where: { OR: [{ email: { in: oldAndNewEmails } }, ...(daIds.length ? [{ createdById: { in: daIds } }] : [])] },
+    select: { id: true },
+  })
+  const voIds = oldVillageOfficers.map(o => o.id)
+  const hoIds = oldHospitalOfficers.map(o => o.id)
+
+  const oldCitizens = await prisma.citizen.findMany({ where: { birthId: { in: oldAndNewBirthIds } }, select: { id: true } })
+  const citizenIds = oldCitizens.map(c => c.id)
+
+  if (!voIds.length && !hoIds.length && !daIds.length && !saIds.length && !citizenIds.length) {
+    console.log('  No previous test data found — clean slate.')
+    return
+  }
+
+  // ── Step B: delete records that reference these officers/citizens ───────
+  // (children before parents — this is the fix: the previous version of
+  // this script deleted the officers/admins FIRST, which Postgres rejects
+  // if anything still points at them.)
+  await prisma.migration.deleteMany({
+    where: { OR: [
+      { sourceOfficerId: { in: voIds } },
+      { targetOfficerId: { in: voIds } },
+      { citizenId: { in: citizenIds } },
+    ] },
+  })
+  await prisma.death.deleteMany({
+    where: { OR: [
+      { villageOfficerId: { in: voIds } },
+      { hospitalOfficerId: { in: hoIds } },
+      { citizenId: { in: citizenIds } },
+      { infantFatherId: { in: citizenIds } },
+      { infantMotherId: { in: citizenIds } },
+    ] },
+  })
+  await prisma.marriage.deleteMany({
+    where: { OR: [
+      { registeredById: { in: voIds } },
+      { husbandId: { in: citizenIds } },
+      { wifeId: { in: citizenIds } },
+    ] },
+  })
+  await prisma.birth.deleteMany({
+    where: { OR: [
+      { officerId: { in: hoIds } },
+      { childCitizenId: { in: citizenIds } },
+      { fatherCitizenId: { in: citizenIds } },
+      { motherCitizenId: { in: citizenIds } },
+    ] },
+  })
+
+  // ── Step C: unlink (never delete) anything else that merely points at
+  // these officers/citizens, so unrelated real records are preserved ──────
+  if (voIds.length) {
+    await prisma.citizen.updateMany({ where: { registeredById: { in: voIds } }, data: { registeredById: null } })
+  }
+  if (citizenIds.length) {
+    await prisma.citizen.updateMany({ where: { fatherCitizenId: { in: citizenIds } }, data: { fatherCitizenId: null } })
+    await prisma.citizen.updateMany({ where: { motherCitizenId: { in: citizenIds } }, data: { motherCitizenId: null } })
+  }
+
+  // ── Step D: now safe to delete, parents last ─────────────────────────────
+  await prisma.citizen.deleteMany({ where: { id: { in: citizenIds } } })
+  await prisma.villageOfficer.deleteMany({ where: { id: { in: voIds } } })
+  await prisma.hospitalOfficer.deleteMany({ where: { id: { in: hoIds } } })
+  await prisma.districtAdmin.deleteMany({ where: { id: { in: daIds } } })
+  await prisma.superAdmin.deleteMany({ where: { id: { in: saIds } } })
+
+  console.log('  Cleared previous test admins/officers/citizens and their dependent records')
+}
+
+async function main() {
+  console.log('── Seeding TzCRVS test data ──────────────────────────────────────')
+
+  // ── Step 0: clean slate for anything from a previous seed run ─────────────
+  await cleanupOldTestData()
 
   // ── Step 1: geography — Iringa → Mufindi District Council → Mdabulo → Ikanga
   const region   = await getOrCreateRegion('Iringa')
@@ -92,9 +191,10 @@ async function main() {
       mobile:       '0613142030',
       birthId:      'BID-DISTADMIN001',
       employeeId:   'DA-0001',
+      // PATCH-DISTRICTADMIN-DEPT-FIX-2026: DistrictAdmin has no `department`
+      // column in this schema (unlike SuperAdmin) — removed.
       regionId:     region.id,
       districtId:   district.id,
-      department:   'Civil Registration',
       status:       'active',
       passwordHash: districtAdminPasswordHash,
       createdById:  superAdmin.id,
