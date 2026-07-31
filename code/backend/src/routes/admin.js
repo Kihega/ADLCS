@@ -51,8 +51,10 @@ const { prisma } = require('../lib/prisma')
 const { getRedis, isRedisReady } = require('../lib/redis')
 const { requireAuth, requireRole } = require('../middleware/auth')
 
-// PATCH-NOTOKEN-2026: no more Resend email / one-time token round-trip for
-// new accounts — see generateDefaultPassword() below.
+// PATCH-ADMINREG-2026: bring email back as a one-way welcome notice (role +
+// default password + change-within-3-days reminder) — not a token, and
+// nothing blocks on it (every call site below is fire-and-forget).
+const { sendWelcomeEmail } = require('../lib/email')
 
 // PATCH-EMAIL-VALIDATE-2026
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -199,6 +201,54 @@ function generateDefaultPassword() {
   const digits = crypto.randomInt(1000, 9999)
   return `${word}${digits}!`
 }
+
+// PATCH-ADMINREG-2026: deleting a District Admin who has created Village/
+// Health Officers, or an officer who has registered citizens/records, used
+// to bubble up as a bare 500 (an uncaught Postgres foreign-key violation —
+// P2003). Surface a clear, specific message instead. We deliberately do NOT
+// cascade-delete the dependent records — that would silently destroy real
+// civil-registration data.
+function handleDeleteError(res, err, label) {
+  if (err.code === 'P2025') return res.status(404).json({ success: false, message: 'Not found' })
+  if (err.code === 'P2003') {
+    return res.status(409).json({
+      success: false,
+      message: `Cannot delete this ${label} — other records (accounts they created, or citizens/registrations they handled) still reference them. Reassign or remove those first.`,
+    })
+  }
+  console.error(`[admin/delete-${label}]`, err)
+  return res.status(500).json({ success: false, message: 'Internal server error' })
+}
+
+// PATCH-ADMINREG-2026: admin-wide Birth ID (BID) lookup, used by the
+// registration modal to confirm a person's identity before creating their
+// admin/officer account. Unlike the village officer's own-village-scoped
+// lookup, a national/district admin needs to find a citizen ANYWHERE.
+router.get('/citizen-lookup', async (req, res) => {
+  const birthId = typeof req.query.birthId === 'string' ? req.query.birthId.trim() : ''
+  if (!birthId) return res.status(400).json({ success: false, message: 'birthId query param required' })
+  try {
+    const citizen = await prisma.citizen.findFirst({
+      where: { birthId },
+      select: {
+        id: true, birthId: true, nationalId: true, firstName: true, middleName: true, surname: true,
+        gender: true, dateOfBirth: true, vitalStatus: true,
+        currentVillage: { select: { name: true, ward: { select: { name: true, district: { select: { name: true, region: { select: { name: true } } } } } } } },
+      },
+    })
+    if (!citizen) return res.status(404).json({ success: false, message: 'No citizen found with this Birth ID.' })
+    return res.json({
+      success: true,
+      data: {
+        ...citizen,
+        fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
+      },
+    })
+  } catch (err) {
+    console.error('[admin/citizen-lookup]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
 
 const AGE_BANDS = [
   '0-4', '5-9', '10-14', '15-19', '20-24', '25-29', '30-34', '35-39',
@@ -475,7 +525,7 @@ router.get('/district-admins', requireRole('super_admin'), async (req, res) => {
 })
 
 router.post('/district-admins', requireRole('super_admin'), async (req, res) => {
-  const { fullName, email, birthId, employeeId, mobile, regionId, districtId, department } = req.body
+  const { fullName, email, birthId, employeeId, mobile, regionId, districtId, department, citizenId, password } = req.body
   if (!fullName || !email || !birthId || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
@@ -484,17 +534,22 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
     if (err) return res.status(400).json({ success: false, message: err })
   }
   try {
-    // PATCH-NOTOKEN-2026: created active immediately, default password
-    // returned once for the super admin to relay directly.
-    const defaultPassword = generateDefaultPassword()
+    // PATCH-ADMINREG-2026: created active immediately; password is whatever
+    // was entered on the form (pre-filled Admin@1234), falling back to a
+    // generated one. citizenId links this account to the citizen record
+    // confirmed via BID search. A welcome email follows, fire-and-forget.
+    const defaultPassword = (typeof password === 'string' && password.trim()) ? password.trim() : generateDefaultPassword()
     const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.districtAdmin.create({
       data: {
         fullName, email, birthId, employeeId,
+        citizenId: citizenId || undefined,
         mobile: mobile || undefined,
         regionId: regionId ? Number(regionId) : undefined,
         districtId: districtId ? Number(districtId) : undefined,
-        department: department || undefined,
+        // PATCH-DISTRICTADMIN-DEPT-FIX-2026: DistrictAdmin has no `department`
+        // column in this schema (unlike SuperAdmin) — accepted in the request
+        // body but intentionally not written here.
         status: 'active',
         passwordHash,
         createdById: req.user.id,
@@ -502,6 +557,7 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
     })
     await logAction(req, { action: 'create_district_admin', targetTable: 'district_admins', targetId: created.id, newData: created })
+    sendWelcomeEmail({ to: email, fullName, role: 'district_admin', defaultPassword }).catch(err => console.error('[email/district-admin]', err.message))
     return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
@@ -536,9 +592,7 @@ router.delete('/district-admins/:id', requireRole('super_admin'), async (req, re
     await logAction(req, { action: 'delete_district_admin', targetTable: 'district_admins', targetId: req.params.id, severity: 'warning' })
     return res.json({ success: true })
   } catch (err) {
-    if (err.code === 'P2025') return res.status(404).json({ success: false, message: 'Not found' })
-    console.error('[admin/delete-district-admin]', err)
-    return res.status(500).json({ success: false, message: 'Internal server error' })
+    return handleDeleteError(res, err, 'district admin')
   }
 })
 
@@ -578,7 +632,7 @@ router.get('/village-officers', async (req, res) => {
 })
 
 router.post('/village-officers', requireRole('district_admin'), async (req, res) => {
-  const { fullName, email, birthId, employeeId, mobile, villageId, wardId } = req.body
+  const { fullName, email, birthId, employeeId, mobile, villageId, wardId, citizenId, password } = req.body
   if (!fullName || !email || !birthId || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
@@ -588,14 +642,16 @@ router.post('/village-officers', requireRole('district_admin'), async (req, res)
   }
   try {
     const adminDistrictId = await getAdminDistrictId(req)
-    // PATCH-NOTOKEN-2026: created active immediately, default password
-    // returned once for the district admin to relay directly. The officer
-    // can start working on mobile right away — no separate activation step.
-    const defaultPassword = generateDefaultPassword()
+    // PATCH-ADMINREG-2026: created active immediately; password is whatever
+    // was entered on the form (pre-filled Admin@1234), falling back to a
+    // generated one. citizenId links this account to the citizen record
+    // confirmed via BID search. A welcome email follows, fire-and-forget.
+    const defaultPassword = (typeof password === 'string' && password.trim()) ? password.trim() : generateDefaultPassword()
     const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.villageOfficer.create({
       data: {
         fullName, email, birthId, employeeId,
+        citizenId: citizenId || undefined,
         mobile: mobile || undefined,
         villageId: villageId ? Number(villageId) : undefined,
         wardId: wardId ? Number(wardId) : undefined,
@@ -607,6 +663,7 @@ router.post('/village-officers', requireRole('district_admin'), async (req, res)
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
     })
     await logAction(req, { action: 'create_village_officer', targetTable: 'village_officers', targetId: created.id, newData: created })
+    sendWelcomeEmail({ to: email, fullName, role: 'village_officer', defaultPassword }).catch(err => console.error('[email/village-officer]', err.message))
     return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
@@ -641,7 +698,9 @@ router.patch('/village-officers/:id', async (req, res) => {
   }
 })
 
-router.delete('/village-officers/:id', async (req, res) => {
+// PATCH-ADMINREG-2026: only national-scope (Super Admin) accounts may
+// delete officer accounts.
+router.delete('/village-officers/:id', requireRole('super_admin'), async (req, res) => {
   try {
     const adminDistrictId = await getAdminDistrictId(req)
     const where = req.user.role === 'district_admin'
@@ -654,8 +713,7 @@ router.delete('/village-officers/:id', async (req, res) => {
     await logAction(req, { action: 'delete_village_officer', targetTable: 'village_officers', targetId: req.params.id, severity: 'warning' })
     return res.json({ success: true })
   } catch (err) {
-    console.error('[admin/delete-village-officer]', err)
-    return res.status(500).json({ success: false, message: 'Internal server error' })
+    return handleDeleteError(res, err, 'village officer')
   }
 })
 
@@ -694,7 +752,7 @@ router.get('/health-officers', async (req, res) => {
 })
 
 router.post('/health-officers', requireRole('district_admin'), async (req, res) => {
-  const { fullName, email, birthId, employeeId, mobile, facilityId } = req.body
+  const { fullName, email, birthId, employeeId, mobile, facilityId, facilityName, citizenId, password } = req.body
   if (!fullName || !email || !birthId || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
@@ -704,15 +762,47 @@ router.post('/health-officers', requireRole('district_admin'), async (req, res) 
   }
   try {
     const adminDistrictId = await getAdminDistrictId(req)
-    // PATCH-NOTOKEN-2026: created active immediately, default password
-    // returned once for the district admin to relay directly.
-    const defaultPassword = generateDefaultPassword()
+
+    // PATCH-ADMINREG-2026: the registration form now takes a free-text
+    // Facility Name instead of picking an existing facility by ID (there
+    // was previously no facility field wired up here at all). Find an
+    // existing facility by name in this district first; otherwise create a
+    // minimal record with sensible defaults that can be refined later.
+    let resolvedFacilityId = facilityId ? Number(facilityId) : undefined
+    if (!resolvedFacilityId && facilityName && facilityName.trim()) {
+      const name = facilityName.trim()
+      let facility = await prisma.healthFacility.findFirst({
+        where: { facilityName: { equals: name, mode: 'insensitive' }, ...(adminDistrictId ? { districtId: adminDistrictId } : {}) },
+        select: { id: true },
+      })
+      if (!facility) {
+        facility = await prisma.healthFacility.create({
+          data: {
+            facilityRegNo: `FAC-${Date.now().toString(36).toUpperCase()}`,
+            facilityName: name,
+            facilityType: 'hospital',
+            facilityGrade: 'H',
+            ownershipType: 'public',
+            districtId: adminDistrictId ?? undefined,
+          },
+          select: { id: true },
+        })
+      }
+      resolvedFacilityId = facility.id
+    }
+
+    // PATCH-ADMINREG-2026: created active immediately; password is whatever
+    // was entered on the form (pre-filled Admin@1234), falling back to a
+    // generated one. citizenId links this account to the citizen record
+    // confirmed via BID search. A welcome email follows, fire-and-forget.
+    const defaultPassword = (typeof password === 'string' && password.trim()) ? password.trim() : generateDefaultPassword()
     const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.hospitalOfficer.create({
       data: {
         fullName, email, birthId, employeeId,
+        citizenId: citizenId || undefined,
         mobile: mobile || undefined,
-        facilityId: facilityId ? Number(facilityId) : undefined,
+        facilityId: resolvedFacilityId,
         districtId: adminDistrictId,
         status: 'active',
         passwordHash,
@@ -721,6 +811,7 @@ router.post('/health-officers', requireRole('district_admin'), async (req, res) 
       select: { id: true, fullName: true, email: true, employeeId: true, status: true },
     })
     await logAction(req, { action: 'create_hospital_officer', targetTable: 'hospital_officers', targetId: created.id, newData: created })
+    sendWelcomeEmail({ to: email, fullName, role: 'hospital_officer', defaultPassword }).catch(err => console.error('[email/hospital-officer]', err.message))
     return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
@@ -755,7 +846,9 @@ router.patch('/health-officers/:id', async (req, res) => {
   }
 })
 
-router.delete('/health-officers/:id', async (req, res) => {
+// PATCH-ADMINREG-2026: only national-scope (Super Admin) accounts may
+// delete officer accounts.
+router.delete('/health-officers/:id', requireRole('super_admin'), async (req, res) => {
   try {
     const adminDistrictId = await getAdminDistrictId(req)
     const where = req.user.role === 'district_admin'
@@ -768,8 +861,7 @@ router.delete('/health-officers/:id', async (req, res) => {
     await logAction(req, { action: 'delete_hospital_officer', targetTable: 'hospital_officers', targetId: req.params.id, severity: 'warning' })
     return res.json({ success: true })
   } catch (err) {
-    console.error('[admin/delete-hospital-officer]', err)
-    return res.status(500).json({ success: false, message: 'Internal server error' })
+    return handleDeleteError(res, err, 'hospital officer')
   }
 })
 
@@ -812,7 +904,7 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
       message: `System already has the maximum of ${SUPER_ADMIN_MAX} Super Administrators.`,
     })
   }
-  const { fullName, email, birthId, employeeId, mobile, department } = req.body
+  const { fullName, email, birthId, employeeId, mobile, department, citizenId, password } = req.body
   if (!fullName || !email || !birthId || !employeeId) {
     return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
   }
@@ -821,13 +913,16 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
     if (err) return res.status(400).json({ success: false, message: err })
   }
   try {
-    // PATCH-NOTOKEN-2026: created active immediately, default password
-    // returned once for the requesting super admin to relay directly.
-    const defaultPassword = generateDefaultPassword()
+    // PATCH-ADMINREG-2026: created active immediately; password is whatever
+    // was entered on the form (pre-filled Admin@1234), falling back to a
+    // generated one. citizenId links this account to the citizen record
+    // confirmed via BID search. A welcome email follows, fire-and-forget.
+    const defaultPassword = (typeof password === 'string' && password.trim()) ? password.trim() : generateDefaultPassword()
     const passwordHash    = await bcrypt.hash(defaultPassword, 10)
     const created   = await prisma.superAdmin.create({
       data: {
         fullName, email, birthId, employeeId,
+        citizenId:  citizenId || undefined,
         mobile:     mobile     || undefined,
         department: department || undefined,
         status:            'active',
@@ -840,9 +935,10 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
       action: 'create_super_admin', targetTable: 'super_admins', targetId: created.id,
       newData: created, severity: 'warning',
     })
+    sendWelcomeEmail({ to: email, fullName, role: 'super_admin', defaultPassword }).catch(err => console.error('[email/super-admin]', err.message))
     return res.json({ success: true, data: { ...created, defaultPassword } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' }) // PATCH-ADMINREG-2026
     console.error('[admin/create-super-admin]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -865,9 +961,7 @@ router.delete('/super-admins/:id', requireRole('super_admin'), async (req, res) 
     await logAction(req, { action: 'delete_super_admin', targetTable: 'super_admins', targetId: id, severity: 'warning' })
     return res.json({ success: true })
   } catch (err) {
-    if (err.code === 'P2025') return res.status(404).json({ success: false, message: 'Not found' })
-    console.error('[admin/delete-super-admin]', err)
-    return res.status(500).json({ success: false, message: 'Internal server error' })
+    return handleDeleteError(res, err, 'super admin')
   }
 })
 
@@ -959,13 +1053,12 @@ router.delete('/users/:role/:id', requireRole('super_admin'), async (req, res) =
     return res.status(400).json({ success: false, message: 'You cannot delete your own account' })
   }
   try {
+    // PATCH-ADMINREG-DELUSERS-2026
     await prisma[model].delete({ where: { id } })
     await logAction(req, { action: 'delete_user', targetTable: `${role}s`, targetId: id, newData: { role }, severity: 'warning' })
     return res.json({ success: true })
   } catch (err) {
-    if (err.code === 'P2025') return res.status(404).json({ success: false, message: 'Not found' })
-    console.error('[admin/delete-user]', err)
-    return res.status(500).json({ success: false, message: 'Internal server error' })
+    return handleDeleteError(res, err, role.replace('_', ' '))
   }
 })
 

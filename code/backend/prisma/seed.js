@@ -1,375 +1,288 @@
-/**
- * seed.js — TzCRVS Test Data Seeder  v2.1
- *
- * Creates all data needed to run the Hospital Officer birth-registration
- * flow end-to-end, including real geography, a health facility, staff
- * accounts, and two adult citizen records to serve as test parents.
- *
- * FK CREATION ORDER (must respect FK constraints):
- *   1.  Region          (no parent)
- *   2.  District        (→ Region)
- *   3.  Ward            (→ District)
- *   4.  Village         (→ Ward)
- *   5.  HealthFacility  (→ Village, optional)
- *   6.  SuperAdmin      (no FK)
- *   7.  DistrictAdmin   (→ SuperAdmin, Region, District)
- *   8.  VillageOfficer  (→ DistrictAdmin, Village, Ward, District)
- *   9.  HospitalOfficer (→ DistrictAdmin, HealthFacility, District)
- *   10. Citizen – Father (→ Region, Village, VillageOfficer)
- *   11. Citizen – Mother (→ Region, Village, VillageOfficer)
- *
- * IDEMPOTENT — safe to re-run:
- *   • Geography uses findFirst-or-create (no unique name constraint).
- *   • All user + citizen records use upsert on their unique key fields.
- *
- * RUN:
- *   npm run prisma:seed
- *   — or —
- *   node prisma/seed.js
- */
+// prisma/seed.js
+// PATCH-SEED-FKFIX-2026: fixes a real bug from the previous seed.js rewrite
+// — Step 0 was deleting old test Village/Hospital Officers and District/
+// Super Admins directly, before deleting the records that still reference
+// them (migrations, deaths, marriages, births, citizens from a previous
+// seed run). Postgres correctly rejected that with a foreign-key violation
+// (e.g. `migrations_source_officer_id_fkey`). Cleanup now deletes/unlinks
+// dependents FIRST, parents last.
+//
+// Run with: node prisma/seed.js  (safe to re-run — everything is upserted
+// or deleted-then-recreated by fixed key, never duplicated).
+//
+// Test accounts (all use the default password Admin@1234):
+//   National Admin — Sina Ngusa Kishosha   (sinakishosha@gmail.com)
+//   District Admin — Kishosha Sina Ngusa   (kuhega2025@gmail.com), scoped to
+//                     Iringa / Mufindi District Council
+//   Village Officer / Hospital Officer — kept from the original demo set,
+//     relocated to the same area so everything lines up: Iringa → Mufindi
+//     District Council → Mdabulo → Ikanga.
+//
+// Test father/mother citizens (used by the Hospital Officer's "auto-fill
+// test father/mother ID" button and the offline MOCK_CITIZENS fallback in
+// RegisterBirthScreen.tsx) are seeded at that same village.
 
-require('dotenv').config()
 const { PrismaClient } = require('@prisma/client')
 const bcrypt = require('bcryptjs')
-
 const prisma = new PrismaClient()
 
-// ─── Shared password ─────────────────────────────────────────────────────────
-const TEST_PASSWORD  = 'Admin@1234'
-const BCRYPT_ROUNDS  = 12
+const DEFAULT_PASSWORD = 'Admin@1234'
 
-// ─── Helper: find-first-or-create for models without a unique name field ─────
-async function getOrCreate(modelName, findWhere, createData) {
-  const existing = await prisma[modelName].findFirst({ where: findWhere })
-  if (existing) {
-    console.log(`   ↩  ${modelName} already exists: "${createData.name || JSON.stringify(findWhere)}"`)
-    return existing
-  }
-  const created = await prisma[modelName].create({ data: createData })
-  console.log(`   ✨ ${modelName} created:        "${created.name}" (id: ${created.id})`)
-  return created
+// PATCH-SEED-REGIONFIX-2026: unlike District/Ward/Village, Region.name is
+// NOT a unique column in this schema (only `id` is) — upsert-by-name is
+// invalid here. Use the same find-first, create-if-missing pattern as the
+// other geo helpers below instead.
+// PATCH-REGION-JURISDICTION-FIX-2026: Region.jurisdiction is a REQUIRED enum
+// (mainland | zanzibar) with no default — creating a brand-new region
+// without it fails. Every region this script seeds is mainland Tanzania.
+async function getOrCreateRegion(name, jurisdiction = 'mainland') {
+  const existing = await prisma.region.findFirst({ where: { name } })
+  if (existing) return existing
+  return prisma.region.create({ data: { name, jurisdiction } })
+}
+async function getOrCreateDistrict(name, regionId) {
+  const existing = await prisma.district.findFirst({ where: { name, regionId } })
+  if (existing) return existing
+  return prisma.district.create({ data: { name, regionId } })
+}
+async function getOrCreateWard(name, districtId) {
+  const existing = await prisma.ward.findFirst({ where: { name, districtId } })
+  if (existing) return existing
+  return prisma.ward.create({ data: { name, districtId } })
+}
+async function getOrCreateVillage(name, wardId, type = 'village') {
+  const existing = await prisma.village.findFirst({ where: { name, wardId } })
+  if (existing) return existing
+  return prisma.village.create({ data: { name, wardId, type } })
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// PATCH-SEED-FKFIX-2026: dependency-safe cleanup of any test data left over
+// from a previous run of this seed script (or an earlier version of it).
+async function cleanupOldTestData() {
+  const oldAndNewEmails = [
+    'super@adlcs.tz', 'district@adlcs.tz', 'village@adlcs.tz', 'hospital@adlcs.tz',
+    'sinakishosha@gmail.com', 'kuhega2025@gmail.com',
+  ]
+  const oldAndNewBirthIds = ['BID-FATHER0001', 'BID-MOTHER0001']
+
+  // ── Step A: find old test accounts by email ──────────────────────────────
+  const oldSuperAdmins    = await prisma.superAdmin.findMany({ where: { email: { in: oldAndNewEmails } }, select: { id: true } })
+  const oldDistrictAdmins = await prisma.districtAdmin.findMany({ where: { email: { in: oldAndNewEmails } }, select: { id: true } })
+  let saIds = oldSuperAdmins.map(a => a.id)
+  let daIds = oldDistrictAdmins.map(a => a.id)
+
+  // Sweep up any District Admins created BY those Super Admins in a
+  // previous run (a leftover chain), so deleting the root doesn't fail.
+  if (saIds.length) {
+    const chained = await prisma.districtAdmin.findMany({ where: { createdById: { in: saIds } }, select: { id: true } })
+    daIds = [...new Set([...daIds, ...chained.map(a => a.id)])]
+  }
+
+  const oldVillageOfficers = await prisma.villageOfficer.findMany({
+    where: { OR: [{ email: { in: oldAndNewEmails } }, ...(daIds.length ? [{ createdById: { in: daIds } }] : [])] },
+    select: { id: true },
+  })
+  const oldHospitalOfficers = await prisma.hospitalOfficer.findMany({
+    where: { OR: [{ email: { in: oldAndNewEmails } }, ...(daIds.length ? [{ createdById: { in: daIds } }] : [])] },
+    select: { id: true },
+  })
+  const voIds = oldVillageOfficers.map(o => o.id)
+  const hoIds = oldHospitalOfficers.map(o => o.id)
+
+  const oldCitizens = await prisma.citizen.findMany({ where: { birthId: { in: oldAndNewBirthIds } }, select: { id: true } })
+  const citizenIds = oldCitizens.map(c => c.id)
+
+  if (!voIds.length && !hoIds.length && !daIds.length && !saIds.length && !citizenIds.length) {
+    console.log('  No previous test data found — clean slate.')
+    return
+  }
+
+  // ── Step B: delete records that reference these officers/citizens ───────
+  // (children before parents — this is the fix: the previous version of
+  // this script deleted the officers/admins FIRST, which Postgres rejects
+  // if anything still points at them.)
+  await prisma.migration.deleteMany({
+    where: { OR: [
+      { sourceOfficerId: { in: voIds } },
+      { targetOfficerId: { in: voIds } },
+      { citizenId: { in: citizenIds } },
+    ] },
+  })
+  await prisma.death.deleteMany({
+    where: { OR: [
+      { villageOfficerId: { in: voIds } },
+      { hospitalOfficerId: { in: hoIds } },
+      { citizenId: { in: citizenIds } },
+      { infantFatherId: { in: citizenIds } },
+      { infantMotherId: { in: citizenIds } },
+    ] },
+  })
+  await prisma.marriage.deleteMany({
+    where: { OR: [
+      { registeredById: { in: voIds } },
+      { husbandId: { in: citizenIds } },
+      { wifeId: { in: citizenIds } },
+    ] },
+  })
+  await prisma.birth.deleteMany({
+    where: { OR: [
+      { officerId: { in: hoIds } },
+      { childCitizenId: { in: citizenIds } },
+      { fatherCitizenId: { in: citizenIds } },
+      { motherCitizenId: { in: citizenIds } },
+    ] },
+  })
+
+  // ── Step C: unlink (never delete) anything else that merely points at
+  // these officers/citizens, so unrelated real records are preserved ──────
+  if (voIds.length) {
+    await prisma.citizen.updateMany({ where: { registeredById: { in: voIds } }, data: { registeredById: null } })
+  }
+  if (citizenIds.length) {
+    await prisma.citizen.updateMany({ where: { fatherCitizenId: { in: citizenIds } }, data: { fatherCitizenId: null } })
+    await prisma.citizen.updateMany({ where: { motherCitizenId: { in: citizenIds } }, data: { motherCitizenId: null } })
+  }
+
+  // ── Step D: now safe to delete, parents last ─────────────────────────────
+  await prisma.citizen.deleteMany({ where: { id: { in: citizenIds } } })
+  await prisma.villageOfficer.deleteMany({ where: { id: { in: voIds } } })
+  await prisma.hospitalOfficer.deleteMany({ where: { id: { in: hoIds } } })
+  await prisma.districtAdmin.deleteMany({ where: { id: { in: daIds } } })
+  await prisma.superAdmin.deleteMany({ where: { id: { in: saIds } } })
+
+  console.log('  Cleared previous test admins/officers/citizens and their dependent records')
+}
+
 async function main() {
-  console.log('🌱  TzCRVS Seed v2.1 — Starting…\n')
+  console.log('── Seeding TzCRVS test data ──────────────────────────────────────')
 
-  // ── STEP 0: Delete existing test accounts so hashes are always fresh ──────
-  // This is the fix for "wrong credentials" — stale bcrypt hashes in the DB
-  // after a code/env change are wiped and replaced with a clean hash below.
-  console.log('🗑️   Deleting existing test accounts…')
-  const deleteResults = await Promise.allSettled([
-    prisma.hospitalOfficer.deleteMany({ where: { email: 'hospital@adlcs.tz' } }),
-    prisma.villageOfficer.deleteMany({ where: { email: 'village@adlcs.tz' } }),
-    prisma.districtAdmin.deleteMany({ where: { email: 'district@adlcs.tz' } }),
-    prisma.superAdmin.deleteMany({ where: { email: 'super@adlcs.tz' } }),
-  ])
-  deleteResults.forEach((r, i) => {
-    const labels = ['HospitalOfficer', 'VillageOfficer', 'DistrictAdmin', 'SuperAdmin']
-    if (r.status === 'fulfilled') console.log(`   🗑️  Deleted ${labels[i]} test account (count: ${r.value.count})`)
-    else console.warn(`   ⚠️  Delete ${labels[i]} warning:`, r.reason?.message)
-  })
-  console.log()
+  // ── Step 0: clean slate for anything from a previous seed run ─────────────
+  await cleanupOldTestData()
 
-  const passwordHash = await bcrypt.hash(TEST_PASSWORD, BCRYPT_ROUNDS)
-  console.log('🔑  Password hashed\n')
+  // ── Step 1: geography — Iringa → Mufindi District Council → Mdabulo → Ikanga
+  const region   = await getOrCreateRegion('Iringa')
+  const district = await getOrCreateDistrict('Mufindi District Council', region.id)
+  const ward     = await getOrCreateWard('Mdabulo', district.id)
+  const village  = await getOrCreateVillage('Ikanga', ward.id)
+  console.log(`  Geography ready: ${region.name} / ${district.name} / ${ward.name} / ${village.name}`)
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  STEP 1 — GEOGRAPHY
-  // ══════════════════════════════════════════════════════════════════════════
-  console.log('📍  Geography…')
-
-  // ── Regions ──────────────────────────────────────────────────────────────
-  const regionDSM = await getOrCreate(
-    'region',
-    { name: 'Dar es Salaam', jurisdiction: 'mainland' },
-    { name: 'Dar es Salaam', jurisdiction: 'mainland' },
-  )
-  const regionDodoma = await getOrCreate(
-    'region',
-    { name: 'Dodoma', jurisdiction: 'mainland' },
-    { name: 'Dodoma', jurisdiction: 'mainland' },
-  )
-
-  // ── Districts ─────────────────────────────────────────────────────────────
-  const districtKinondoni = await getOrCreate(
-    'district',
-    { name: 'Kinondoni', regionId: regionDSM.id },
-    { name: 'Kinondoni', regionId: regionDSM.id },
-  )
-  const districtDodoma = await getOrCreate(
-    'district',
-    { name: 'Dodoma Urban', regionId: regionDodoma.id },
-    { name: 'Dodoma Urban', regionId: regionDodoma.id },
-  )
-
-  // ── Ward ─────────────────────────────────────────────────────────────────
-  const wardMwananyamala = await getOrCreate(
-    'ward',
-    { name: 'Mwananyamala', districtId: districtKinondoni.id },
-    { name: 'Mwananyamala', districtId: districtKinondoni.id },
-  )
-
-  // ── Village ───────────────────────────────────────────────────────────────
-  const villageKinondoni = await getOrCreate(
-    'village',
-    { name: 'Kinondoni', wardId: wardMwananyamala.id },
-    { name: 'Kinondoni', wardId: wardMwananyamala.id },
-  )
-
-  console.log()
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  STEP 2 — HEALTH FACILITY
-  // ══════════════════════════════════════════════════════════════════════════
-  console.log('🏥  Health Facility…')
-
-  const facility = await prisma.healthFacility.upsert({
-    where:  { facilityRegNo: 'HF-DODOMA-REGIONAL-001' },
-    update: {},
-    create: {
-      facilityRegNo:  'HF-DODOMA-REGIONAL-001',
-      facilityName:   'Dodoma Regional Hospital',
-      facilityType:   'hospital',
-      facilityGrade:  'H',
-      ownershipType:  'public',
-      gpsLat:         -6.1730,
-      gpsLng:          35.7395,
-      // villageId intentionally omitted — Dodoma geography not fully seeded
+  // ── Step 2: National Admin ──────────────────────────────────────────────
+  const superAdminPasswordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
+  const superAdmin = await prisma.superAdmin.create({
+    data: {
+      fullName:     'Sina Ngusa Kishosha',
+      email:        'sinakishosha@gmail.com',
+      mobile:       '0742401630',
+      birthId:      'BID-SUPERADMIN01',
+      employeeId:   'SA-0001',
+      department:   'Statistics & Data Management',
+      status:       'active',
+      passwordHash: superAdminPasswordHash,
     },
   })
-  console.log(`   ✅  ${facility.facilityName}  (id: ${facility.id})`)
-  console.log()
+  console.log(`  National Admin:  ${superAdmin.fullName}  <${superAdmin.email}>`)
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  STEP 3 — STAFF ACCOUNTS
-  // ══════════════════════════════════════════════════════════════════════════
-  console.log('👤  Staff accounts…')
-
-  // ── SuperAdmin ────────────────────────────────────────────────────────────
-  const superAdmin = await prisma.superAdmin.upsert({
-    where:  { email: 'super@adlcs.tz' },
-    update: { passwordHash, status: 'active' },
-    create: {
-      employeeId:  'SA-0001',
-      birthId:     'BID-SUPERADMIN01',
-      fullName:    'Super Admin Test',
-      email:       'super@adlcs.tz',
-      mobile:      '+255700000001',
-      department:  'NBS Headquarters',
-      status:      'active',
-      mfaEnabled:  false,
-      passwordHash,
+  // ── Step 3: District Admin (Iringa / Mufindi District Council) ─────────
+  const districtAdminPasswordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
+  const districtAdmin = await prisma.districtAdmin.create({
+    data: {
+      fullName:     'Kishosha Sina Ngusa',
+      email:        'kuhega2025@gmail.com',
+      mobile:       '0613142030',
+      birthId:      'BID-DISTADMIN001',
+      employeeId:   'DA-0001',
+      // PATCH-DISTRICTADMIN-DEPT-FIX-2026: DistrictAdmin has no `department`
+      // column in this schema (unlike SuperAdmin) — removed.
+      regionId:     region.id,
+      districtId:   district.id,
+      status:       'active',
+      passwordHash: districtAdminPasswordHash,
+      createdById:  superAdmin.id,
     },
   })
-  console.log(`   ✅  SuperAdmin       → ${superAdmin.email}`)
+  console.log(`  District Admin:  ${districtAdmin.fullName}  <${districtAdmin.email}>  (${district.name})`)
 
-  // ── DistrictAdmin (scoped to Kinondoni, Dar es Salaam) ───────────────────
-  const districtAdmin = await prisma.districtAdmin.upsert({
-    where:  { email: 'district@adlcs.tz' },
-    update: { passwordHash, status: 'active', regionId: regionDSM.id, districtId: districtKinondoni.id },
-    create: {
-      employeeId:  'DA-0001',
-      birthId:     'BID-DISTADMIN001',
-      fullName:    'District Admin Test',
-      email:       'district@adlcs.tz',
-      mobile:      '+255700000002',
-      status:      'active',
-      mfaEnabled:  false,
-      passwordHash,
-      regionId:    regionDSM.id,
-      districtId:  districtKinondoni.id,
-      createdById: superAdmin.id,
+  // ── Step 4: Village Officer — relocated to the same village ─────────────
+  const villageOfficerPasswordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
+  const villageOfficer = await prisma.villageOfficer.create({
+    data: {
+      fullName:     'Village Officer Test',
+      email:        'village@adlcs.tz',
+      mobile:       '+255700000003',
+      birthId:      'BID-VILLOFFICER1',
+      employeeId:   'VO-0001',
+      villageId:    village.id,
+      wardId:       ward.id,
+      districtId:   district.id,
+      status:       'active',
+      passwordHash: villageOfficerPasswordHash,
+      createdById:  districtAdmin.id,
     },
   })
-  console.log(`   ✅  DistrictAdmin    → ${districtAdmin.email}  (district: Kinondoni)`)
+  console.log(`  Village Officer: ${villageOfficer.fullName}  <${villageOfficer.email}>  (${village.name})`)
 
-  // ── VillageOfficer (Kinondoni village) ────────────────────────────────────
-  const villageOfficer = await prisma.villageOfficer.upsert({
-    where:  { email: 'village@adlcs.tz' },
-    update: {
-      passwordHash, status: 'active',
-      villageId: villageKinondoni.id,
-      wardId:    wardMwananyamala.id,
-      districtId: districtKinondoni.id,
-    },
-    create: {
-      employeeId:  'VO-0001',
-      birthId:     'BID-VILLOFFICER1',
-      fullName:    'Village Officer Test',
-      email:       'village@adlcs.tz',
-      mobile:      '+255700000003',
-      status:      'active',
-      mfaEnabled:  false,
-      passwordHash,
-      villageId:   villageKinondoni.id,
-      wardId:      wardMwananyamala.id,
-      districtId:  districtKinondoni.id,
-      createdById: districtAdmin.id,
+  // ── Step 5: Hospital Officer ─────────────────────────────────────────────
+  const hospitalOfficerPasswordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
+  const hospitalOfficer = await prisma.hospitalOfficer.create({
+    data: {
+      fullName:     'Hospital Officer Test',
+      email:        'hospital@adlcs.tz',
+      mobile:       '+255700000004',
+      birthId:      'BID-HOSPOFFICER1',
+      employeeId:   'HO-0001',
+      districtId:   district.id,
+      status:       'active',
+      passwordHash: hospitalOfficerPasswordHash,
+      createdById:  districtAdmin.id,
     },
   })
-  console.log(`   ✅  VillageOfficer   → ${villageOfficer.email}  (village: Kinondoni)`)
+  console.log(`  Hospital Officer: ${hospitalOfficer.fullName}  <${hospitalOfficer.email}>`)
 
-  // ── HospitalOfficer (Dodoma Regional Hospital) ────────────────────────────
-  const hospitalOfficer = await prisma.hospitalOfficer.upsert({
-    where:  { email: 'hospital@adlcs.tz' },
-    update: {
-      passwordHash, status: 'active',
-      facilityId: facility.id,
-      districtId: districtDodoma.id,
-    },
-    create: {
-      employeeId:  'HO-0001',
-      birthId:     'BID-HOSPOFFICER1',
-      fullName:    'Hospital Officer Test',
-      email:       'hospital@adlcs.tz',
-      mobile:      '+255700000004',
-      status:      'active',
-      mfaEnabled:  false,
-      passwordHash,
-      facilityId:  facility.id,
-      districtId:  districtDodoma.id,
-      createdById: districtAdmin.id,
-    },
-  })
-  console.log(`   ✅  HospitalOfficer  → ${hospitalOfficer.email}  (facility: Dodoma Regional Hospital)`)
-  console.log()
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  STEP 4 — TEST PARENT CITIZENS
-  //
-  //  These two records are what the Hospital Officer's RegisterBirth screen
-  //  fetches when it validates a parent NID against the internal DB.
-  //
-  //  NID format: YYYYMMDD-LLLLL-SSSSS-CC
-  //    YYYYMMDD → date of birth
-  //    LLLLL    → location code (07=DSM region, 03=Kinondoni district, 1=ward)
-  //    SSSSS    → unique sequence
-  //    CC       → check digits
-  // ══════════════════════════════════════════════════════════════════════════
-  console.log('👨‍👩‍  Test Parent Citizens…')
-
-  // PATCH-BID-LOOKUP-2026: test parents are now looked up by Birth ID (BID) —
-  // this is what the Hospital Officer's RegisterBirth screen's "Auto-fill
-  // test father/mother ID" button and MOCK_CITIZENS fallback both use.
-  // ── Father: John Michael Makonde ──────────────────────────────────────────
+  // ── Step 6: test father/mother citizens (for birth-registration demo) ───
   const father = await prisma.citizen.upsert({
     where:  { birthId: 'BID-FATHER0001' },
-    update: {
-      // keep up-to-date if re-seeded
-      age:         41,
-      vitalStatus: 'alive',
-    },
+    update: { age: 41, vitalStatus: 'alive', currentVillageId: village.id },
     create: {
-      birthId:         'BID-FATHER0001',
-      nationalId:      '19850315-07031-00001-24',
-      firstName:       'John',
-      middleName:      'Michael',
-      surname:         'Makonde',
-      gender:          'male',
-      dateOfBirth:     new Date('1985-03-15'),
-      age:             41,
-      vitalStatus:     'alive',
-      bloodGroup:      'O+',
-      maritalStatus:   'married',
-      educationLevel:  'bachelor',
-      occupations:     JSON.stringify(['Civil Engineer']),
-      streetName:      'Mwananyamala Street',
-      houseRegNumber:  'KIN-2021-0047',
-      currentVillageId: villageKinondoni.id,
-      regionId:        regionDSM.id,
-      registeredById:  villageOfficer.id,
-      registeredAt:    new Date('2003-03-15'),   // registered at 18
-      idCardIssued:    new Date('2003-03-20'),
-      idCardExpires:   new Date('2013-03-20'),
-      healthInsurance: JSON.stringify({ provider: 'NHIF', memberNo: 'NHIF-0047821' }),
+      birthId:          'BID-FATHER0001',
+      nationalId:       '19850315-07031-00001-24',
+      firstName:        'John',
+      middleName:       'Michael',
+      surname:          'Makonde',
+      gender:           'male',
+      dateOfBirth:      new Date('1985-03-15'),
+      age:              41,
+      vitalStatus:      'alive',
+      currentVillageId: village.id,
+      registeredById:   villageOfficer.id,
+      registeredAt:     new Date(),
     },
   })
-  console.log(`   ✅  Father → ${father.firstName} ${father.middleName} ${father.surname}`)
-  console.log(`            NID: ${father.nationalId}  Age: ${father.age}  Status: ${father.vitalStatus.toUpperCase()}`)
+  console.log(`  Test father: ${father.firstName} ${father.surname}  BID: ${father.birthId}`)
 
-  // ── Mother: Grace Rose Mwamba ─────────────────────────────────────────────
   const mother = await prisma.citizen.upsert({
     where:  { birthId: 'BID-MOTHER0001' },
-    update: {
-      age:         37,
-      vitalStatus: 'alive',
-    },
+    update: { age: 37, vitalStatus: 'alive', currentVillageId: village.id },
     create: {
-      birthId:         'BID-MOTHER0001',
-      nationalId:      '19880622-07031-00002-13',
-      firstName:       'Grace',
-      middleName:      'Rose',
-      surname:         'Mwamba',
-      gender:          'female',
-      dateOfBirth:     new Date('1988-06-22'),
-      age:             37,
-      vitalStatus:     'alive',
-      bloodGroup:      'A+',
-      maritalStatus:   'married',
-      educationLevel:  'diploma',
-      occupations:     JSON.stringify(['Registered Nurse']),
-      streetName:      'Mwananyamala Street',
-      houseRegNumber:  'KIN-2021-0047',   // same household as father
-      currentVillageId: villageKinondoni.id,
-      regionId:        regionDSM.id,
-      registeredById:  villageOfficer.id,
-      registeredAt:    new Date('2006-06-22'),   // registered at 18
-      idCardIssued:    new Date('2006-06-28'),
-      idCardExpires:   new Date('2016-06-28'),
-      healthInsurance: JSON.stringify({ provider: 'NHIF', memberNo: 'NHIF-0051204' }),
-      // link to father as spouse (stored via marriage record, not direct FK)
+      birthId:          'BID-MOTHER0001',
+      nationalId:       '19880622-07031-00002-13',
+      firstName:        'Grace',
+      middleName:       'Rose',
+      surname:          'Mwamba',
+      gender:           'female',
+      dateOfBirth:      new Date('1988-06-22'),
+      age:              37,
+      vitalStatus:      'alive',
+      currentVillageId: village.id,
+      registeredById:   villageOfficer.id,
+      registeredAt:     new Date(),
     },
   })
-  console.log(`   ✅  Mother → ${mother.firstName} ${mother.middleName} ${mother.surname}`)
-  console.log(`            NID: ${mother.nationalId}  Age: ${mother.age}  Status: ${mother.vitalStatus.toUpperCase()}`)
-  console.log()
+  console.log(`  Test mother: ${mother.firstName} ${mother.surname}  BID: ${mother.birthId}`)
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  SUMMARY
-  // ══════════════════════════════════════════════════════════════════════════
-  console.log('═'.repeat(63))
-  console.log('  ✅  Seed v2.1 complete')
-  console.log('═'.repeat(63))
-  console.log()
-  console.log('  STAFF LOGIN (shared password: Admin@1234)')
-  console.log()
-  console.log('  ┌─────────────────────┬────────────────────────┐')
-  console.log('  │ Role                │ Email                  │')
-  console.log('  ├─────────────────────┼────────────────────────┤')
-  console.log('  │ super_admin         │ super@adlcs.tz         │')
-  console.log('  │ district_admin      │ district@adlcs.tz      │')
-  console.log('  │ village_officer     │ village@adlcs.tz       │')
-  console.log('  │ hospital_officer    │ hospital@adlcs.tz      │')
-  console.log('  └─────────────────────┴────────────────────────┘')
-  console.log()
-  console.log('  TEST PARENTS (for RegisterBirth screen)')
-  console.log()
-  console.log('  Father: John Michael Makonde')
-  console.log('          NID: 19850315-07031-00001-24')
-  console.log()
-  console.log('  Mother: Grace Rose Mwamba')
-  console.log('          NID: 19880622-07031-00002-13')
-  console.log()
-  console.log('  ⚡ Use the "Auto-fill test ID" button in the app,')
-  console.log('     or type the NIDs manually and tap Search.')
-  console.log()
-  console.log('  GEOGRAPHY SEEDED')
-  console.log(`  Region:   Dar es Salaam (id: ${regionDSM.id})`)
-  console.log(`  District: Kinondoni     (id: ${districtKinondoni.id})`)
-  console.log(`  Ward:     Mwananyamala  (id: ${wardMwananyamala.id})`)
-  console.log(`  Village:  Kinondoni     (id: ${villageKinondoni.id})`)
-  console.log(`  Facility: Dodoma Regional Hospital (id: ${facility.id})`)
-  console.log()
+  console.log('── Seed complete ─────────────────────────────────────────────────')
+  console.log(`  All test accounts use the default password: ${DEFAULT_PASSWORD}`)
 }
 
 main()
-  .catch((e) => {
-    console.error('\n❌  Seed failed:', e.message)
-    if (e.code) console.error('   Prisma error code:', e.code)
-    if (e.meta) console.error('   Meta:', JSON.stringify(e.meta, null, 2))
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+  .catch(e => { console.error(e); process.exit(1) })
+  .finally(async () => { await prisma.$disconnect() })

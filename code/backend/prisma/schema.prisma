@@ -9,10 +9,10 @@ datasource db {
 }
 
 model Region {
-  id             Int                  @id @default(autoincrement())
-  name           String               @db.VarChar(80)
+  id             Int             @id @default(autoincrement())
+  name           String          @db.VarChar(80)
   jurisdiction   Jurisdiction
-  createdAt      DateTime             @default(now()) @map("created_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
   citizens       Citizen[]
   districtAdmins DistrictAdmin[]
   districts      District[]
@@ -21,12 +21,12 @@ model Region {
 }
 
 model District {
-  id               Int                  @id @default(autoincrement())
-  regionId         Int                  @map("region_id")
-  name             String               @db.VarChar(80)
-  createdAt        DateTime             @default(now()) @map("created_at")
+  id               Int               @id @default(autoincrement())
+  regionId         Int               @map("region_id")
+  name             String            @db.VarChar(80)
+  createdAt        DateTime          @default(now()) @map("created_at")
   districtAdmins   DistrictAdmin[]
-  region           Region               @relation(fields: [regionId], references: [id])
+  region           Region            @relation(fields: [regionId], references: [id])
   facilities       HealthFacility[]
   hospitalOfficers HospitalOfficer[]
   villageOfficers  VillageOfficer[]
@@ -36,30 +36,30 @@ model District {
 }
 
 model Ward {
-  id              Int                  @id @default(autoincrement())
-  districtId      Int                  @map("district_id")
-  name            String               @db.VarChar(80)
-  createdAt       DateTime             @default(now()) @map("created_at")
+  id              Int              @id @default(autoincrement())
+  districtId      Int              @map("district_id")
+  name            String           @db.VarChar(80)
+  createdAt       DateTime         @default(now()) @map("created_at")
   facilities      HealthFacility[]
   villageOfficers VillageOfficer[]
   villages        Village[]
-  district        District             @relation(fields: [districtId], references: [id])
+  district        District         @relation(fields: [districtId], references: [id])
 
   @@map("wards")
 }
 
 model Village {
-  id             Int                  @id @default(autoincrement())
-  wardId         Int                  @map("ward_id")
-  name           String               @db.VarChar(80)
-  createdAt      DateTime             @default(now()) @map("created_at")
-  type           VillageType          @default(village)
-  birthsOfOrigin Birth[]              @relation("BirthOriginVillage")
+  id             Int              @id @default(autoincrement())
+  wardId         Int              @map("ward_id")
+  name           String           @db.VarChar(80)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  type           VillageType      @default(village)
+  birthsOfOrigin Birth[]          @relation("BirthOriginVillage")
   citizens       Citizen[]
-  migrationsFrom Migration[]          @relation("MigrationFrom")
-  migrationsTo   Migration[]          @relation("MigrationTo")
+  migrationsFrom Migration[]      @relation("MigrationFrom")
+  migrationsTo   Migration[]      @relation("MigrationTo")
   officers       VillageOfficer[]
-  ward           Ward                 @relation(fields: [wardId], references: [id])
+  ward           Ward             @relation(fields: [wardId], references: [id])
 
   @@unique([wardId, name])
   @@map("villages")
@@ -68,7 +68,7 @@ model Village {
 model SuperAdmin {
   id                    String          @id @default(uuid())
   employeeId            String          @unique @map("employee_id") @db.VarChar(30)
-  birthId   String          @unique @map("birth_id") @db.VarChar(20)
+  birthId               String          @unique(map: "super_admins_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName              String          @map("full_name") @db.VarChar(120)
   email                 String          @unique @db.VarChar(120)
   passwordHash          String?         @map("password_hash")
@@ -83,7 +83,9 @@ model SuperAdmin {
   createdById           String?         @map("created_by")
   createdAt             DateTime        @default(now()) @map("created_at")
   lastLogin             DateTime?       @map("last_login")
+  citizenId             String?         @unique @map("citizen_id")
   createdDistrictAdmins DistrictAdmin[]
+  citizenRecord         Citizen?        @relation("SuperAdminCitizen", fields: [citizenId], references: [id])
   createdBy             SuperAdmin?     @relation("SuperAdminCreatedBy", fields: [createdById], references: [id])
   createdAdmins         SuperAdmin[]    @relation("SuperAdminCreatedBy")
 
@@ -93,7 +95,7 @@ model SuperAdmin {
 model DistrictAdmin {
   id                String            @id @default(uuid())
   employeeId        String            @unique @map("employee_id") @db.VarChar(30)
-  birthId   String            @unique @map("birth_id") @db.VarChar(20)
+  birthId           String            @unique(map: "district_admins_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName          String            @map("full_name") @db.VarChar(120)
   email             String            @unique @db.VarChar(120)
   passwordHash      String?           @map("password_hash")
@@ -109,6 +111,8 @@ model DistrictAdmin {
   createdById       String            @map("created_by")
   createdAt         DateTime          @default(now()) @map("created_at")
   lastLogin         DateTime?         @map("last_login")
+  citizenId         String?           @unique @map("citizen_id")
+  citizenRecord     Citizen?          @relation("DistrictAdminCitizen", fields: [citizenId], references: [id])
   createdBy         SuperAdmin        @relation(fields: [createdById], references: [id])
   district          District?         @relation(fields: [districtId], references: [id])
   region            Region?           @relation(fields: [regionId], references: [id])
@@ -121,7 +125,7 @@ model DistrictAdmin {
 model VillageOfficer {
   id                  String        @id @default(uuid())
   employeeId          String        @unique @map("employee_id") @db.VarChar(30)
-  birthId   String        @unique @map("birth_id") @db.VarChar(20)
+  birthId             String        @unique(map: "village_officers_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName            String        @map("full_name") @db.VarChar(120)
   email               String        @unique @db.VarChar(120)
   passwordHash        String?       @map("password_hash")
@@ -141,11 +145,13 @@ model VillageOfficer {
   createdById         String        @map("created_by")
   createdAt           DateTime      @default(now()) @map("created_at")
   lastLogin           DateTime?     @map("last_login")
+  citizenId           String?       @unique @map("citizen_id")
   registeredCitizens  Citizen[]
   outsideDeaths       Death[]       @relation("VillageOfficerDeath")
   registeredMarriages Marriage[]
   sourceMigrations    Migration[]   @relation("SourceOfficer")
   targetMigrations    Migration[]   @relation("TargetOfficer")
+  citizenRecord       Citizen?      @relation("VillageOfficerCitizen", fields: [citizenId], references: [id])
   createdBy           DistrictAdmin @relation(fields: [createdById], references: [id])
   district            District?     @relation(fields: [districtId], references: [id])
   village             Village?      @relation(fields: [villageId], references: [id])
@@ -158,7 +164,7 @@ model VillageOfficer {
 model HospitalOfficer {
   id                String          @id @default(uuid())
   employeeId        String          @unique @map("employee_id") @db.VarChar(30)
-  birthId   String          @unique @map("birth_id") @db.VarChar(20)
+  birthId           String          @unique(map: "hospital_officers_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName          String          @map("full_name") @db.VarChar(120)
   email             String          @unique @db.VarChar(120)
   passwordHash      String?         @map("password_hash")
@@ -177,8 +183,10 @@ model HospitalOfficer {
   createdById       String          @map("created_by")
   createdAt         DateTime        @default(now()) @map("created_at")
   lastLogin         DateTime?       @map("last_login")
+  citizenId         String?         @unique @map("citizen_id")
   registeredBirths  Birth[]
   hospitalDeaths    Death[]         @relation("HospitalOfficerDeath")
+  citizenRecord     Citizen?        @relation("HospitalOfficerCitizen", fields: [citizenId], references: [id])
   createdBy         DistrictAdmin   @relation(fields: [createdById], references: [id])
   district          District?       @relation(fields: [districtId], references: [id])
   facility          HealthFacility? @relation(fields: [facilityId], references: [id])
@@ -202,65 +210,65 @@ model PublicUser {
 }
 
 model Citizen {
-  // PATCH-PRIVACY-2026: birthId is the canonical lookup key for an existing
-  // citizen (father/mother, spouse, deceased, migrating resident, profile
-  // search) — a citizen only has a nationalId because they already had a
-  // birthId, so birthId alone is sufficient.
-  id                  String          @id @default(uuid())
-  birthId             String?         @unique @map("birth_id") @db.VarChar(20)
-  nationalId          String          @unique @map("national_id") @db.VarChar(23)
-  firstName           String          @map("first_name") @db.VarChar(60)
-  middleName          String?         @map("middle_name") @db.VarChar(60)
-  surname             String          @db.VarChar(60)
+  id                  String           @id @default(uuid())
+  nationalId          String           @unique @map("national_id") @db.VarChar(23)
+  firstName           String           @map("first_name") @db.VarChar(60)
+  middleName          String?          @map("middle_name") @db.VarChar(60)
+  surname             String           @db.VarChar(60)
   gender              Gender
-  dateOfBirth         DateTime        @map("date_of_birth") @db.Date
-  age                 Int             @default(0)
-  vitalStatus         VitalStatus     @default(alive) @map("vital_status")
-  photoUrl            String?         @map("photo_url")
-  fingerprintTemplate String?         @map("fingerprint_template")
-  signatureUrl        String?         @map("signature_url")
-  idCardIssued        DateTime?       @map("id_card_issued") @db.Date
-  idCardExpires       DateTime?       @map("id_card_expires") @db.Date
-  idCardPdfUrl        String?         @map("id_card_pdf_url")
-  bloodGroup          String?         @map("blood_group") @db.VarChar(5)
-  currentVillageId    Int?            @map("current_village_id")
-  streetName          String?         @map("street_name") @db.VarChar(80)
-  houseRegNumber      String?         @map("house_reg_number") @db.VarChar(30)
-  fatherCitizenId     String?         @map("father_citizen_id")
-  motherCitizenId     String?         @map("mother_citizen_id")
-  maritalStatus       MaritalStatus   @default(single) @map("marital_status")
-  educationLevel      EducationLevel  @default(none) @map("education_level")
+  dateOfBirth         DateTime         @map("date_of_birth") @db.Date
+  age                 Int              @default(0)
+  vitalStatus         VitalStatus      @default(alive) @map("vital_status")
+  photoUrl            String?          @map("photo_url")
+  fingerprintTemplate String?          @map("fingerprint_template")
+  signatureUrl        String?          @map("signature_url")
+  idCardIssued        DateTime?        @map("id_card_issued") @db.Date
+  idCardExpires       DateTime?        @map("id_card_expires") @db.Date
+  idCardPdfUrl        String?          @map("id_card_pdf_url")
+  bloodGroup          String?          @map("blood_group") @db.VarChar(5)
+  currentVillageId    Int?             @map("current_village_id")
+  streetName          String?          @map("street_name") @db.VarChar(80)
+  houseRegNumber      String?          @map("house_reg_number") @db.VarChar(30)
+  fatherCitizenId     String?          @map("father_citizen_id")
+  motherCitizenId     String?          @map("mother_citizen_id")
+  maritalStatus       MaritalStatus    @default(single) @map("marital_status")
+  educationLevel      EducationLevel   @default(none) @map("education_level")
   occupations         Json?
-  disabilityStatus    Boolean         @default(false) @map("disability_status")
-  disabilityTypes     Json?           @map("disability_types")
-  disabilityCause     String?         @map("disability_cause")
-  landOwnershipAcres  Decimal?        @map("land_ownership_acres") @db.Decimal(10, 2)
-  animalKeeping       Json?           @map("animal_keeping")
-  healthInsurance     Json?           @map("health_insurance")
-  commDevices         Json?           @map("comm_devices")
-  socialFunds         Json?           @map("social_funds")
-  registeredById      String?         @map("registered_by")
-  registeredAt        DateTime?       @map("registered_at")
-  updatedAt           DateTime?       @updatedAt @map("updated_at")
-  regionId            Int?            @map("region_id")
-  birthRecord         Birth?          @relation("ChildBirth")
-  fatherBirths        Birth[]         @relation("FatherBirth")
-  motherBirths        Birth[]         @relation("MotherBirth")
-  parentLinks         CitizenChild[]  @relation("ChildLinks")
-  childrenLinks       CitizenChild[]  @relation("ParentLinks")
-  currentVillage      Village?        @relation(fields: [currentVillageId], references: [id])
-  father              Citizen?        @relation("FatherChildren", fields: [fatherCitizenId], references: [id])
-  fatherChildren      Citizen[]       @relation("FatherChildren")
-  mother              Citizen?        @relation("MotherChildren", fields: [motherCitizenId], references: [id])
-  motherChildren      Citizen[]       @relation("MotherChildren")
-  region              Region?         @relation(fields: [regionId], references: [id])
-  registeredBy        VillageOfficer? @relation(fields: [registeredById], references: [id])
-  deathRecord         Death?          @relation("CitizenDeath")
-  infantFatherDeaths  Death[]         @relation("InfantFatherDeath")
-  infantMotherDeaths  Death[]         @relation("InfantMotherDeath")
-  husbandMarriages    Marriage[]      @relation("HusbandMarriage")
-  wifeMarriages       Marriage[]      @relation("WifeMarriage")
+  disabilityStatus    Boolean          @default(false) @map("disability_status")
+  disabilityTypes     Json?            @map("disability_types")
+  disabilityCause     String?          @map("disability_cause")
+  landOwnershipAcres  Decimal?         @map("land_ownership_acres") @db.Decimal(10, 2)
+  animalKeeping       Json?            @map("animal_keeping")
+  healthInsurance     Json?            @map("health_insurance")
+  commDevices         Json?            @map("comm_devices")
+  socialFunds         Json?            @map("social_funds")
+  registeredById      String?          @map("registered_by")
+  registeredAt        DateTime?        @map("registered_at")
+  updatedAt           DateTime?        @updatedAt @map("updated_at")
+  regionId            Int?             @map("region_id")
+  birthId             String?          @unique @map("birth_id") @db.VarChar(20)
+  birthRecord         Birth?           @relation("ChildBirth")
+  fatherBirths        Birth[]          @relation("FatherBirth")
+  motherBirths        Birth[]          @relation("MotherBirth")
+  parentLinks         CitizenChild[]   @relation("ChildLinks")
+  childrenLinks       CitizenChild[]   @relation("ParentLinks")
+  currentVillage      Village?         @relation(fields: [currentVillageId], references: [id])
+  father              Citizen?         @relation("FatherChildren", fields: [fatherCitizenId], references: [id])
+  fatherChildren      Citizen[]        @relation("FatherChildren")
+  mother              Citizen?         @relation("MotherChildren", fields: [motherCitizenId], references: [id])
+  motherChildren      Citizen[]        @relation("MotherChildren")
+  region              Region?          @relation(fields: [regionId], references: [id])
+  registeredBy        VillageOfficer?  @relation(fields: [registeredById], references: [id])
+  deathRecord         Death?           @relation("CitizenDeath")
+  infantFatherDeaths  Death[]          @relation("InfantFatherDeath")
+  infantMotherDeaths  Death[]          @relation("InfantMotherDeath")
+  asDistrictAdmin     DistrictAdmin?   @relation("DistrictAdminCitizen")
+  asHospitalOfficer   HospitalOfficer? @relation("HospitalOfficerCitizen")
+  husbandMarriages    Marriage[]       @relation("HusbandMarriage")
+  wifeMarriages       Marriage[]       @relation("WifeMarriage")
   migrations          Migration[]
+  asSuperAdmin        SuperAdmin?      @relation("SuperAdminCitizen")
+  asVillageOfficer    VillageOfficer?  @relation("VillageOfficerCitizen")
 
   @@index([currentVillageId], map: "idx_citizens_current_village")
   @@index([gender, age], map: "idx_citizens_gender_age")
@@ -389,10 +397,10 @@ model Migration {
   status          MigrationStatus @default(pending)
   requestDate     DateTime        @default(now()) @map("request_date")
   expiryDate      DateTime        @map("expiry_date")
-  migrationToken  String?         @unique @map("migration_token")
   confirmedDate   DateTime?       @map("confirmed_date")
   sourceOfficerId String          @map("source_officer_id")
   targetOfficerId String?         @map("target_officer_id")
+  migrationToken  String?         @unique @map("migration_token")
   citizen         Citizen         @relation(fields: [citizenId], references: [id])
   fromVillage     Village         @relation("MigrationFrom", fields: [fromVillageId], references: [id])
   sourceOfficer   VillageOfficer  @relation("SourceOfficer", fields: [sourceOfficerId], references: [id])
@@ -439,43 +447,24 @@ model PopulationSnapshot {
   totalInfrastructure Int             @default(0) @map("total_infrastructure")
   generatedAt         DateTime        @default(now()) @map("generated_at")
 
-  // BUGFIX-SCHEMA-2026: `scopeId` is POLYMORPHIC — it points at a Region,
-  // District, Ward, or Village row depending on `level`. Postgres can't
-  // express a FK to one of several tables, so this is intentionally a
-  // plain scalar with no Prisma relation. Resolve the target table in
-  // application code by switching on `level`, e.g.:
-  //   level === 'region'   -> prisma.region.findUnique({ where: { id: scopeId } })
-  //   level === 'district' -> prisma.district.findUnique({ where: { id: scopeId } })
-  //   level === 'ward'     -> prisma.ward.findUnique({ where: { id: scopeId } })
-  //   level === 'village'  -> prisma.village.findUnique({ where: { id: scopeId } })
   @@map("population_snapshots")
 }
 
 model AuditLog {
-  id          String          @id @default(uuid())
-  actorId     String          @map("actor_id")
-  actorRole   AuditActorRole  @map("actor_role")
-  action      String          @db.VarChar(80)
-  targetTable String          @map("target_table") @db.VarChar(60)
-  targetId    String?         @map("target_id")
-  oldData     Json?           @map("old_data")
-  newData     Json?           @map("new_data")
-  ipAddress   String?         @map("ip_address") @db.VarChar(45)
-  gpsLat      Decimal?        @map("gps_lat") @db.Decimal(10, 8)
-  gpsLng      Decimal?        @map("gps_lng") @db.Decimal(11, 8)
-  timestamp   DateTime        @default(now())
-  severity    String          @default("info") @db.VarChar(10)
+  id          String         @id @default(uuid())
+  actorId     String         @map("actor_id")
+  actorRole   AuditActorRole @map("actor_role")
+  action      String         @db.VarChar(80)
+  targetTable String         @map("target_table") @db.VarChar(60)
+  targetId    String?        @map("target_id")
+  oldData     Json?          @map("old_data")
+  newData     Json?          @map("new_data")
+  ipAddress   String?        @map("ip_address") @db.VarChar(45)
+  gpsLat      Decimal?       @map("gps_lat") @db.Decimal(10, 8)
+  gpsLng      Decimal?       @map("gps_lng") @db.Decimal(11, 8)
+  timestamp   DateTime       @default(now())
+  severity    String         @default("info") @db.VarChar(10)
 
-  // BUGFIX-SCHEMA-2026: `actorId` is POLYMORPHIC — it points at a
-  // SuperAdmin, DistrictAdmin, HospitalOfficer, or VillageOfficer row
-  // depending on `actorRole`. Postgres can't express a FK to one of
-  // several tables, so this is intentionally a plain scalar with no
-  // Prisma relation. Resolve the target table in application code by
-  // switching on `actorRole`, e.g.:
-  //   actorRole === 'super_admin'      -> prisma.superAdmin.findUnique({ where: { id: actorId } })
-  //   actorRole === 'district_admin'   -> prisma.districtAdmin.findUnique({ where: { id: actorId } })
-  //   actorRole === 'hospital_officer' -> prisma.hospitalOfficer.findUnique({ where: { id: actorId } })
-  //   actorRole === 'village_officer'  -> prisma.villageOfficer.findUnique({ where: { id: actorId } })
   @@index([actorId, actorRole], map: "idx_audit_logs_actor")
   @@index([severity], map: "idx_audit_logs_severity")
   @@index([timestamp(sort: Desc)], map: "idx_audit_logs_timestamp")

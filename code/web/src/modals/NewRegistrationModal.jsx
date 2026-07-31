@@ -1,373 +1,410 @@
 /**
- * NewRegistrationModal.jsx — Register a new admin / officer account
+ * NewRegistrationModal.jsx — register a new admin or officer account
  *
- * Super Admin → registers a District Admin (POST /api/admin/district-admins)
- * District Admin → registers a Village Officer or Health Officer
- *                   (POST /api/admin/village-officers | /health-officers)
+ * PATCH-ADMINREG-2026: one unified, BID-driven form.
  *
- * On success the server returns a one-time authorization token
- * (e.g. DADM-1234-5678) which the new user enters on first login.
+ *  - defaultTarget === undefined  → opened from the "Add New Admin" button
+ *    on Manage Users. Shows a Scope dropdown (National / District); picking
+ *    District reveals Region + District pickers.
+ *  - defaultTarget === 'village_officer' | 'hospital_officer' → opened from
+ *    their own screens. No Scope dropdown; Village Officer keeps the
+ *    Region → District → Ward → Village cascade (with "add a new village"
+ *    inline); Hospital Officer gets a free-text Facility Name field (the
+ *    backend finds-or-creates the facility — there was no facility field
+ *    wired up here before at all).
+ *
+ * Every variant starts with a Birth ID (BID) search: the person's identity
+ * (name, gender, NIN, village) is pulled from the citizen registry and
+ * shown in a confirmation card. Nothing else on the form is editable until
+ * that's confirmed — there's no free-typed "Full Name" field any more.
+ *
+ * On success the account is already ACTIVE with the default password shown
+ * below (pre-filled `Admin@1234`, editable) — share it with the new user
+ * directly. A welcome email is also sent as a courtesy notice.
  */
-
 import { useState, useEffect } from 'react'
-import { X, RefreshCw, CheckCircle, AlertCircle, Copy } from 'lucide-react'
+import { X, RefreshCw, CheckCircle, AlertCircle, Copy, Search, Plus } from 'lucide-react'
 import {
-  apiCreateDistrictAdmin, apiCreateVillageOfficer, apiCreateHealthOfficer,
-  apiCreateSuperAdmin, apiGetSuperAdmins,
-  apiGetRegions, apiGetDistricts, apiGetWards, apiGetVillages,
+  apiCreateSuperAdmin,
+  apiCreateDistrictAdmin,
+  apiCreateVillageOfficer,
+  apiCreateHealthOfficer,
+  apiLookupCitizenByBID,
+  apiGetRegions,
+  apiGetDistricts,
+  apiGetWards,
+  apiGetVillages,
   apiCreateVillage,
-} from '../api/admin.api'  // PATCH-EMAIL-2025
+} from '../api/admin.api'
 
-export default function NewRegistrationModal({ role, onClose, defaultTarget }) {
-  const isSuperAdmin = role === 'super_admin'
-  // PATCH-EMAIL-2025: defaultTarget can now be 'super_admin' when opened from Manage Users
-  const [target, setTarget] = useState(defaultTarget || (isSuperAdmin ? 'district_admin' : 'village_officer'))
-  // Super admin count guard — loaded when defaultTarget === 'super_admin'
-  const [superAdminMeta, setSuperAdminMeta] = useState(null)
+const TARGET_LABEL = {
+  super_admin:      'National Admin',
+  district_admin:   'District Admin',
+  village_officer:  'Village Officer',
+  hospital_officer: 'Hospital Officer',
+}
 
+export default function NewRegistrationModal({ defaultTarget, onClose }) {
+  const unifiedAdminFlow = !defaultTarget
+  const [target, setTarget] = useState(defaultTarget || 'super_admin')
+
+  // ── BID search / identity confirmation ───────────────────────────────────
+  const [bidQuery, setBidQuery]       = useState('')
+  const [bidSearching, setBidSearching] = useState(false)
+  const [citizenMatch, setCitizenMatch] = useState(null) // null | 'not_found' | {..}
+  const [confirmed, setConfirmed]     = useState(false)
+
+  // ── Rest of the form ─────────────────────────────────────────────────────
   const [form, setForm] = useState({
-    fullName: '', email: '', nidaNumber: '', employeeId: '', mobile: '',
-    department: '',
-    regionId: '', districtId: '', wardId: '', villageId: '',  // PATCH-EMAIL-2025
+    email: '', mobile: '', employeeId: '', department: '',
+    password: 'Admin@1234',
+    regionId: '', districtId: '', wardId: '', villageId: '',
+    facilityName: '',
   })
-  const [regions,   setRegions]   = useState([])
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // ── Geo cascade (District Admin scope + Village Officer) ─────────────────
+  const [regions, setRegions]     = useState([])
   const [districts, setDistricts] = useState([])
-  const [wards,     setWards]     = useState([])
-  const [villages,  setVillages]  = useState([])
-
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
-  const [result,  setResult]  = useState(null)
-  const [copied,  setCopied]  = useState(false)
-
-  // Manual village/street entry — shown when the officer's home area isn't
-  // in the dropdown yet for the selected ward.
-  const [showNewVillage, setShowNewVillage] = useState(false)
+  const [wards, setWards]         = useState([])
+  const [villages, setVillages]   = useState([])
+  const [addingVillage, setAddingVillage] = useState(false)
   const [newVillageName, setNewVillageName] = useState('')
-  const [newVillageType, setNewVillageType] = useState('village')
-  const [creatingVillage, setCreatingVillage] = useState(false)
 
-  const set = (field, val) => setForm(p => ({ ...p, [field]: val }))
+  const needsGeo = target === 'district_admin' || target === 'village_officer'
 
-  // Get-or-create the village/street for the currently selected ward, then
-  // select it immediately so the rest of the form behaves exactly as if it
-  // had been picked from the dropdown.
-  const handleCreateVillage = async () => {
-    const name = newVillageName.trim()
-    if (!name || !form.wardId) return
-    setCreatingVillage(true)
+  useEffect(() => {
+    if (needsGeo) apiGetRegions().then(r => setRegions(r.data || [])).catch(() => {})
+  }, [needsGeo])
+
+  async function handleRegionChange(regionId) {
+    set('regionId', regionId); set('districtId', ''); set('wardId', ''); set('villageId', '')
+    setDistricts([]); setWards([]); setVillages([])
+    if (regionId) {
+      const r = await apiGetDistricts(regionId).catch(() => ({ data: [] }))
+      setDistricts(r.data || [])
+    }
+  }
+  async function handleDistrictChange(districtId) {
+    set('districtId', districtId); set('wardId', ''); set('villageId', '')
+    setWards([]); setVillages([])
+    if (districtId && target === 'village_officer') {
+      const r = await apiGetWards(districtId).catch(() => ({ data: [] }))
+      setWards(r.data || [])
+    }
+  }
+  async function handleWardChange(wardId) {
+    set('wardId', wardId); set('villageId', '')
+    setVillages([])
+    if (wardId) {
+      const r = await apiGetVillages(wardId).catch(() => ({ data: [] }))
+      setVillages(r.data || [])
+    }
+  }
+  async function handleAddVillage() {
+    if (!newVillageName.trim() || !form.wardId) return
     try {
-      const res = await apiCreateVillage(form.wardId, name, newVillageType)
-      if (res.success && res.data) {
-        setVillages(prev =>
-          prev.some(v => v.id === res.data.id) ? prev : [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name))
-        )
-        set('villageId', res.data.id)
-        setShowNewVillage(false)
-        setNewVillageName('')
-      }
-    } catch {
-      // leave the form open so the admin can retry
-    } finally {
-      setCreatingVillage(false)
+      const r = await apiCreateVillage(form.wardId, newVillageName.trim())
+      setVillages(v => [...v, r.data])
+      set('villageId', r.data.id)
+      setAddingVillage(false); setNewVillageName('')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not add village')
     }
   }
 
-  useEffect(() => {
-    if (isSuperAdmin) apiGetRegions().then(r => setRegions(r.data || [])).catch(() => {})
-  }, [isSuperAdmin])
+  // ── Submission state ──────────────────────────────────────────────────────
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]   = useState('')
+  const [result, setResult] = useState(null)
+  const [copied, setCopied] = useState(false)
 
-  // PATCH-EMAIL-2025: fetch super admin count to enforce max-3 guard in the UI
-  useEffect(() => {
-    if (target === 'super_admin') {
-      apiGetSuperAdmins().then(r => setSuperAdminMeta(r)).catch(() => {})
+  async function handleBidSearch() {
+    const bid = bidQuery.trim()
+    if (!bid) return
+    setBidSearching(true); setCitizenMatch(null); setConfirmed(false); setError('')
+    try {
+      const res = await apiLookupCitizenByBID(bid)
+      setCitizenMatch(res.data)
+    } catch {
+      setCitizenMatch('not_found')
+    } finally {
+      setBidSearching(false)
     }
-  }, [target])
-
-  useEffect(() => {
-    const fetch = form.regionId
-      ? apiGetDistricts(form.regionId).then(r => r.data || [])
-      : Promise.resolve([])
-    fetch.then(data => setDistricts(data)).catch(() => {})
-  }, [form.regionId])  
-
-  useEffect(() => {
-    const fetch = form.districtId
-      ? apiGetWards(form.districtId).then(r => r.data || [])
-      : Promise.resolve([])
-    fetch.then(data => setWards(data)).catch(() => {})
-  }, [form.districtId])  
-
-  useEffect(() => {
-    const fetch = form.wardId
-      ? apiGetVillages(form.wardId).then(r => r.data || [])
-      : Promise.resolve([])
-    fetch.then(data => setVillages(data)).catch(() => {})
-  }, [form.wardId])  
+  }
 
   async function handleSubmit() {
-    if (!form.fullName || !form.email || !form.nidaNumber || !form.employeeId) {
-      setError('Full name, email, NIDA number and employee ID are required'); return
+    setError('')
+    if (!confirmed || !citizenMatch || citizenMatch === 'not_found') {
+      setError('Search for and confirm the Birth ID first.'); return
     }
-    setError(''); setLoading(true)
+    if (!form.email || !form.employeeId) {
+      setError('Email and employee ID are required.'); return
+    }
+    if (target === 'district_admin' && (!form.regionId || !form.districtId)) {
+      setError('Region and District are required for a District Admin.'); return
+    }
+    if (target === 'village_officer' && !form.villageId) {
+      setError('Village is required for a Village Officer.'); return
+    }
+
+    setSubmitting(true)
     try {
+      const base = {
+        fullName:   citizenMatch.fullName,
+        birthId:    citizenMatch.birthId,
+        citizenId:  citizenMatch.id,
+        email:      form.email,
+        mobile:     form.mobile,
+        employeeId: form.employeeId,
+        password:   form.password,
+      }
       let res
       if (target === 'super_admin') {
-        // PATCH-EMAIL-2025: create a new super admin (min-1/max-3 enforced server-side)
-        res = await apiCreateSuperAdmin({
-          fullName: form.fullName, email: form.email, nidaNumber: form.nidaNumber,
-          employeeId: form.employeeId, mobile: form.mobile,
-          department: form.department || undefined,
-        })
+        res = await apiCreateSuperAdmin({ ...base, department: form.department || undefined })
       } else if (target === 'district_admin') {
-        res = await apiCreateDistrictAdmin({
-          fullName: form.fullName, email: form.email, nidaNumber: form.nidaNumber,
-          employeeId: form.employeeId, mobile: form.mobile,
-          regionId: form.regionId || undefined, districtId: form.districtId || undefined,
-        })
+        res = await apiCreateDistrictAdmin({ ...base, regionId: form.regionId, districtId: form.districtId })
       } else if (target === 'village_officer') {
-        res = await apiCreateVillageOfficer({
-          fullName: form.fullName, email: form.email, nidaNumber: form.nidaNumber,
-          employeeId: form.employeeId, mobile: form.mobile,
-          wardId: form.wardId || undefined, villageId: form.villageId || undefined,
-        })
+        res = await apiCreateVillageOfficer({ ...base, wardId: form.wardId || undefined, villageId: form.villageId })
       } else {
-        res = await apiCreateHealthOfficer({
-          fullName: form.fullName, email: form.email, nidaNumber: form.nidaNumber,
-          employeeId: form.employeeId, mobile: form.mobile,
-        })
+        res = await apiCreateHealthOfficer({ ...base, facilityName: form.facilityName || undefined })
       }
       setResult(res.data)
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed')
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
-  function copyToken() {
-    if (!result?.authToken) return
-    navigator.clipboard.writeText(result.authToken).then(() => {
+  function copyPassword() {
+    if (!result?.defaultPassword) return
+    navigator.clipboard.writeText(result.defaultPassword).then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 1500)
     })
   }
 
-  const inp = 'w-full bg-[#060f1e] border border-[#1e3a5f] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-700 outline-none focus:border-[#00d4ff]/50 transition-colors'
-  const sel = 'w-full bg-[#060f1e] border border-[#1e3a5f] rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-[#00d4ff]/50 transition-colors disabled:opacity-40'
-  const lbl = 'text-[10px] text-gray-400 uppercase tracking-widest mb-1.5 block'
-
-  // PATCH-EMAIL-2025: super_admin can now also register another super_admin
-  const tabs = isSuperAdmin
-    ? [
-        { key: 'super_admin',    label: 'National Admin' },
-        { key: 'district_admin', label: 'District Admin' },
-      ]
-    : [
-        { key: 'village_officer',  label: 'Village Officer' },
-        { key: 'hospital_officer', label: 'Health Officer' },
-      ]
+  const inp = 'w-full bg-[#0a1628] border border-[#1a3060] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-[#00d4ff]/50 transition-colors'
+  const lbl = 'text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
-      <div className="bg-[#0d1f38] border border-[#1e3a5f] rounded-2xl shadow-2xl w-full max-w-md my-8 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1a3060]">
-          <h3 className="text-white font-bold text-sm">New Registration</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-[#0d1f38] border border-[#1e3a5f] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a3060] sticky top-0 bg-[#0d1f38]">
+          <h3 className="text-white font-bold text-sm">
+            {result ? 'Account Created' : `Register ${TARGET_LABEL[target]}`}
+          </h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
         </div>
 
-        {result ? (
-          <div className="p-6 space-y-4 text-center">
-            <CheckCircle size={36} className="text-[#00ff9d] mx-auto" />
-            <p className="text-white font-bold text-sm">{result.fullName} registered</p>
-            <p className="text-gray-500 text-xs">
-              Status: <span className="text-yellow-400 uppercase">{result.status}</span> — share this one-time
-              authorization token so they can complete their profile on first login.
-            </p>
-            <div
-              onClick={copyToken}
-              className="flex items-center gap-2 bg-[#0a1628] border border-[#1a3060] rounded-lg px-3 py-2 cursor-pointer hover:border-[#00d4ff]/40 transition-colors"
-            >
-              <code className="text-[#00d4ff] text-sm font-mono flex-1 tracking-widest">{result.authToken}</code>
-              <Copy size={13} className="text-gray-500" />
-              {copied && <span className="text-[#00ff9d] text-[10px]">Copied</span>}
-            </div>
-            <button
-              onClick={onClose}
-              className="w-full py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-[#00d4ff] to-[#0088bb] text-[#060f1e] hover:opacity-90 transition-all"
-            >
-              Done
-            </button>
-          </div>
-        ) : (
-          <div className="p-6 space-y-4">
-            {tabs.length > 1 && (
-              <div className="flex gap-2">
-                {tabs.map(tb => (
-                  <button
-                    key={tb.key}
-                    onClick={() => setTarget(tb.key)}
-                    className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${
-                      target === tb.key
-                        ? 'bg-[#00d4ff]/10 border-[#00d4ff]/40 text-[#00d4ff]'
-                        : 'border-[#1e3a5f] text-gray-500 hover:border-[#2a4060]'
-                    }`}
-                  >
-                    {tb.label}
-                  </button>
-                ))}
+        {!result ? (
+          <div className="p-5 space-y-4">
+            {unifiedAdminFlow && (
+              <div>
+                <label className={lbl}>Scope</label>
+                <select className={inp} value={target} onChange={e => setTarget(e.target.value)}>
+                  <option value="super_admin">National</option>
+                  <option value="district_admin">District</option>
+                </select>
               </div>
             )}
 
+            {/* ── Birth ID search ──────────────────────────────────────────── */}
             <div>
-              <label className={lbl}>Full Name</label>
-              <input className={inp} value={form.fullName} onChange={e => set('fullName', e.target.value)} placeholder="Jane Doe" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={lbl}>Email</label>
-                <input className={inp} type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="name@nbs.go.tz" />
-              </div>
-              <div>
-                <label className={lbl}>Mobile</label>
-                <input className={inp} value={form.mobile} onChange={e => set('mobile', e.target.value)} placeholder="+255 7XX XXX XXX" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={lbl}>NIDA Number</label>
-                <input className={inp} value={form.nidaNumber} onChange={e => set('nidaNumber', e.target.value)} placeholder="19900101-07001-00001-21" />
-              </div>
-              <div>
-                <label className={lbl}>Employee ID</label>
-                <input className={inp} value={form.employeeId} onChange={e => set('employeeId', e.target.value)} placeholder="NBS-0001" />
+              <label className={lbl}>Birth ID (BID) *</label>
+              <div className="flex gap-2">
+                <input
+                  className={`${inp} flex-1`}
+                  value={bidQuery}
+                  onChange={e => { setBidQuery(e.target.value.toUpperCase()); setCitizenMatch(null); setConfirmed(false) }}
+                  placeholder="BID-7F3K9QXTZ2"
+                />
+                <button
+                  type="button"
+                  onClick={handleBidSearch}
+                  disabled={bidSearching || !bidQuery.trim()}
+                  className="px-3 py-2 rounded-lg bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold hover:bg-[#00d4ff]/20 disabled:opacity-40 flex items-center gap-1.5 shrink-0"
+                >
+                  {bidSearching ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
+                  Search
+                </button>
               </div>
             </div>
 
-            {target === 'district_admin' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={lbl}>Region</label>
-                  <select className={sel} value={form.regionId} onChange={e => { set('regionId', e.target.value); set('districtId', '') }}>
-                    <option value="">Select region</option>
-                    {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={lbl}>District</label>
-                  <select className={sel} value={form.districtId} onChange={e => set('districtId', e.target.value)} disabled={!form.regionId}>
-                    <option value="">Select district</option>
-                    {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {target === 'village_officer' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={lbl}>Ward</label>
-                  <select className={sel} value={form.wardId} onChange={e => { set('wardId', e.target.value); set('villageId', '') }}>
-                    <option value="">Select ward</option>
-                    {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={lbl}>Village</label>
-                  <select className={sel} value={form.villageId} onChange={e => set('villageId', e.target.value)} disabled={!form.wardId}>
-                    <option value="">Select village</option>
-                    {villages.map(v => <option key={v.id} value={v.id}>{v.name} {v.type === 'street' ? '(Street)' : ''}</option>)}
-                  </select>
-                </div>
-
-                {form.wardId && !showNewVillage && (
-                  <button
-                    type="button"
-                    onClick={() => setShowNewVillage(true)}
-                    className="col-span-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/40 bg-emerald-500/10 rounded-lg py-2 hover:bg-emerald-500/20"
-                  >
-                    <Plus size={12} /> Village/street not listed? Add new
-                  </button>
-                )}
-
-                {showNewVillage && (
-                  <div className="col-span-2 border border-white/10 rounded-lg p-3 space-y-2 bg-white/5">
-                    <p className="text-[10px] text-white/60 leading-snug">
-                      This will be saved and appear as a dropdown option for this ward going
-                      forward.
-                    </p>
-                    <div className="flex gap-2">
-                      {['village', 'street'].map(t => (
-                        <button
-                          type="button"
-                          key={t}
-                          onClick={() => setNewVillageType(t)}
-                          className={`flex-1 text-[11px] font-semibold rounded-lg py-1.5 border ${
-                            newVillageType === t
-                              ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
-                              : 'border-white/15 text-white/60'
-                          }`}
-                        >
-                          {t === 'village' ? 'Village (Rural)' : 'Street (Urban)'}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      className={sel}
-                      value={newVillageName}
-                      onChange={e => setNewVillageName(e.target.value)}
-                      placeholder="e.g. Kati"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={!newVillageName.trim() || creatingVillage}
-                        onClick={handleCreateVillage}
-                        className="flex-1 text-[11px] font-bold rounded-lg py-2 bg-emerald-500 text-white disabled:opacity-40"
-                      >
-                        {creatingVillage ? 'Saving…' : 'Use This Name'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowNewVillage(false); setNewVillageName('') }}
-                        className="text-[11px] font-semibold rounded-lg py-2 px-3 border border-white/15 text-white/60"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* PATCH-EMAIL-2025: Department field (shown for super_admin and district_admin) */}
-            {(target === 'super_admin' || target === 'district_admin') && (
-              <div>
-                <label className={lbl}>Department{target === 'super_admin' ? '' : ' (optional)'}</label>
-                <input className={inp} value={form.department} onChange={e => set('department', e.target.value)}
-                  placeholder={target === 'super_admin' ? 'e.g. Statistics & Data Management' : 'e.g. Civil Registration'} />
-              </div>
-            )}
-
-            {/* PATCH-EMAIL-2025: max-3 guard notice for super_admin */}
-            {target === 'super_admin' && superAdminMeta && !superAdminMeta.canAdd && (
-              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-400">
-                The system already has the maximum of 3 Super Administrators and cannot accept more.
-              </div>
-            )}
-
-            {error && (
-              <p className="text-red-400 text-[10px] flex items-center gap-1">
-                <AlertCircle size={10} />{error}
+            {citizenMatch === 'not_found' && (
+              <p className="text-red-400 text-[11px] flex items-center gap-1">
+                <AlertCircle size={11} /> No citizen found with this Birth ID. Double-check and try again.
               </p>
             )}
 
-            <button
-              onClick={handleSubmit}
-              disabled={loading || (target === 'super_admin' && superAdminMeta && !superAdminMeta.canAdd)}
-              className="w-full py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-[#00ff9d] to-[#00bb6e] text-[#060f1e] flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
+            {citizenMatch && citizenMatch !== 'not_found' && (
+              <div className="p-3 rounded-lg border border-[#00ff9d]/30 bg-[#00ff9d]/5 space-y-1.5">
+                <p className="text-[#00ff9d] text-xs font-bold flex items-center gap-1.5">
+                  <CheckCircle size={13} /> Citizen Found
+                </p>
+                <p className="text-white text-sm font-semibold">{citizenMatch.fullName}</p>
+                <p className="text-gray-400 text-[11px]">
+                  {citizenMatch.gender || '—'} · NIN: {citizenMatch.nationalId || 'not yet issued'} ·{' '}
+                  {citizenMatch.currentVillage?.name || 'village unknown'}
+                </p>
+                {!confirmed && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmed(true)}
+                    className="mt-1 w-full py-1.5 rounded-lg text-xs font-bold bg-[#00ff9d]/15 border border-[#00ff9d]/40 text-[#00ff9d] hover:bg-[#00ff9d]/25"
+                  >
+                    Confirm &amp; Continue
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── Rest of the form only appears once BID is confirmed ─────── */}
+            {confirmed && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={lbl}>Email</label>
+                    <input className={inp} type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="name@nbs.go.tz" />
+                  </div>
+                  <div>
+                    <label className={lbl}>Phone Number</label>
+                    <input className={inp} value={form.mobile} onChange={e => set('mobile', e.target.value)} placeholder="+255 7XX XXX XXX" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={lbl}>Employee ID</label>
+                  <input className={inp} value={form.employeeId} onChange={e => set('employeeId', e.target.value)} placeholder="NBS-0001" />
+                </div>
+
+                {target === 'district_admin' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={lbl}>Region</label>
+                      <select className={inp} value={form.regionId} onChange={e => handleRegionChange(e.target.value)}>
+                        <option value="">Select region…</option>
+                        {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={lbl}>District</label>
+                      <select className={inp} value={form.districtId} disabled={!form.regionId} onChange={e => set('districtId', e.target.value)}>
+                        <option value="">Select district…</option>
+                        {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {target === 'village_officer' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={lbl}>Region</label>
+                        <select className={inp} value={form.regionId} onChange={e => handleRegionChange(e.target.value)}>
+                          <option value="">Select region…</option>
+                          {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={lbl}>District</label>
+                        <select className={inp} value={form.districtId} disabled={!form.regionId} onChange={e => handleDistrictChange(e.target.value)}>
+                          <option value="">Select district…</option>
+                          {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={lbl}>Ward</label>
+                        <select className={inp} value={form.wardId} disabled={!form.districtId} onChange={e => handleWardChange(e.target.value)}>
+                          <option value="">Select ward…</option>
+                          {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={lbl}>Village / Street</label>
+                        <select className={inp} value={form.villageId} disabled={!form.wardId} onChange={e => set('villageId', e.target.value)}>
+                          <option value="">Select village…</option>
+                          {villages.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {form.wardId && !addingVillage && (
+                      <button type="button" onClick={() => setAddingVillage(true)} className="text-[11px] text-[#00d4ff] flex items-center gap-1">
+                        <Plus size={12} /> Village/street not listed? Add new
+                      </button>
+                    )}
+                    {addingVillage && (
+                      <div className="flex gap-2">
+                        <input className={`${inp} flex-1`} value={newVillageName} onChange={e => setNewVillageName(e.target.value)} placeholder="New village/street name" />
+                        <button type="button" onClick={handleAddVillage} className="px-3 py-2 rounded-lg bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold">Add</button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {target === 'hospital_officer' && (
+                  <div>
+                    <label className={lbl}>Facility Name</label>
+                    <input className={inp} value={form.facilityName} onChange={e => set('facilityName', e.target.value)} placeholder="e.g. Mufindi District Hospital" />
+                    <p className="text-[10px] text-gray-500 mt-1">Region/District are assigned automatically, matching your own account's district.</p>
+                  </div>
+                )}
+
+                {/* PATCH-DISTRICTADMIN-DEPT-FIX-2026: District Admin has no
+                    `department` column in this schema — only National Admin does. */}
+                {target === 'super_admin' && (
+                  <div>
+                    <label className={lbl}>Department (optional)</label>
+                    <input className={inp} value={form.department} onChange={e => set('department', e.target.value)}
+                      placeholder="e.g. Statistics & Data Management" />
+                  </div>
+                )}
+
+                <div>
+                  <label className={lbl}>Default Password</label>
+                  <input className={inp} value={form.password} onChange={e => set('password', e.target.value)} />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Shared with the new user directly — they should change it within 3 days of first login.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {error && (
+              <p className="text-red-400 text-[11px] flex items-center gap-1"><AlertCircle size={11} />{error}</p>
+            )}
+
+            {confirmed && (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="w-full py-2.5 rounded-lg font-bold text-sm bg-gradient-to-r from-[#00d4ff] to-[#0088bb] text-[#060f1e] flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {submitting ? <RefreshCw size={15} className="animate-spin" /> : 'Register'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="p-5 space-y-3">
+            <p className="text-[#00ff9d] text-sm font-bold flex items-center gap-2"><CheckCircle size={16} /> {result.fullName} registered successfully</p>
+            <p className="text-gray-500 text-xs">
+              Status: <span className="text-[#00ff9d] uppercase">{result.status}</span> — share this default
+              password with them directly. They can log in right away with their email and this password,
+              and should change it within 3 days. A confirmation email has also been sent to their address.
+            </p>
+            <div
+              onClick={copyPassword}
+              className="flex items-center gap-2 bg-[#0a1628] border border-[#1a3060] rounded-lg px-3 py-2 cursor-pointer hover:border-[#00d4ff]/40 transition-colors"
             >
-              {/* PATCH-EMAIL-2025 disabled guard */}
-              {loading ? <RefreshCw size={15} className="animate-spin" /> : 'Register'}
+              <code className="text-[#00d4ff] text-sm font-mono flex-1 tracking-widest">{result.defaultPassword}</code>
+              <Copy size={13} className="text-gray-500" />
+              {copied && <span className="text-[#00ff9d] text-[10px]">Copied</span>}
+            </div>
+            <button onClick={onClose} className="w-full py-2.5 rounded-lg font-bold text-sm bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff]">
+              Done
             </button>
           </div>
         )}

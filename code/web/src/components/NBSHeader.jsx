@@ -13,7 +13,7 @@ export default function NBSHeader({ activeSection = '' }) {
   const overlay = overlayMap[activeSection] || null
 
   return (
-    <div className="relative w-full shrink-0 overflow-hidden" style={{ height: '108px' }}>
+    <div data-no-invert className="relative w-full shrink-0 overflow-hidden" style={{ height: '108px' }}> {/* PATCH-LIGHTMODE-2026 */}
 
       {/* ── Flag base image */}
       <div className="absolute inset-0 z-0">

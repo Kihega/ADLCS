@@ -28,7 +28,7 @@ import {
   Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ArrowLeft, Repeat, CheckCircle2, User, Search } from 'lucide-react-native'
+import { ArrowLeft, Repeat, CheckCircle2, User, Search } from 'lucide-react-native' // PATCH-BID-LOOKUP-2026
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme } from '../../context/ThemeContext'
 import { apiPost } from '../../services/syncService'
@@ -40,18 +40,20 @@ const G = '#1eb53a'
 
 export default function ConfirmIncomingMigrationScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
-  const [nationalId, setNationalId] = useState('')
+  // PATCH-BID-LOOKUP-2026: confirm by Birth ID (BID), not NIN — a citizen
+  // only ever has a NIN because they already had a BID.
+  const [birthId, setBirthId] = useState('')
   const [migrationToken, setMigrationToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const canSubmit = nationalId.trim().length > 0 && migrationToken.trim().length > 0 && !submitting
+  const canSubmit = birthId.trim().length > 0 && migrationToken.trim().length > 0 && !submitting
 
   const handleConfirm = async () => {
     if (!canSubmit) return
     setSubmitting(true)
     try {
       const json = await apiPost('/village/migration/confirm', {
-        nationalId: nationalId.trim(),
+        birthId: birthId.trim(),
         migrationToken: migrationToken.trim(),
       })
       if (json.success) {
@@ -91,13 +93,14 @@ export default function ConfirmIncomingMigrationScreen({ navigation }: Props) {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
           <Text style={{ fontSize: 12, color: T.textSub }}>
-            Ask the citizen for their NIN and the migration token given to them by their previous village
-            officer, then confirm below. This is only valid within one week of the token being issued.
+            Ask the citizen for their Birth ID (BID) and the migration token given to them by their
+            previous village officer, then confirm below. This is only valid within one week of the
+            token being issued.
           </Text>
 
           <View>
             <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
-              Citizen NIN
+              Citizen Birth ID (BID)
             </Text>
             <View
               style={{
@@ -114,11 +117,11 @@ export default function ConfirmIncomingMigrationScreen({ navigation }: Props) {
               <User size={15} color={T.textDim} />
               <TextInput
                 style={{ flex: 1, paddingVertical: 12, color: T.text, fontSize: 14 }}
-                value={nationalId}
-                onChangeText={setNationalId}
-                placeholder="e.g. 19900101-07031-12345-67"
+                value={birthId}
+                onChangeText={(v) => setBirthId(v.toUpperCase())}
+                placeholder="e.g. BID-7F3K9QXTZ2"
                 placeholderTextColor={T.textDim}
-                autoCapitalize="none"
+                autoCapitalize="characters"
               />
             </View>
           </View>
