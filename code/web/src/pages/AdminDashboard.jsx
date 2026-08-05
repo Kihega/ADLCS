@@ -230,15 +230,22 @@ function DashboardSection({ role }) {
           sub={`${overview?.villageOfficersPending ?? 0} pending`} accent="text-[#00d4ff]" />
         <StatCard Icon={Stethoscope} label="Health Officers" value={overview?.hospitalOfficersTotal ?? 0}
           sub={`${overview?.hospitalOfficersPending ?? 0} pending`} accent="text-orange-400" />
-        {/* PATCH-POP-3: replaced simple boolean health cards with real system-perf cards */}
-        <StatCard Icon={Database} label="PostgreSQL (Supabase)" value={perf?.databaseOk ? 'Online' : 'Offline'}
-          sub={perf?.dbLatencyMs != null ? `${perf.dbLatencyMs} ms` : ''}
-          accent={perf?.databaseOk ? 'text-[#00ff9d]' : 'text-red-400'} />
-        <StatCard Icon={Server} label="Redis (Upstash)" value={perf?.redisOk ? 'Online' : 'Offline'}
-          sub={perf?.redisLatencyMs != null ? `${perf.redisLatencyMs} ms` : ''}
-          accent={perf?.redisOk ? 'text-[#00ff9d]' : 'text-gray-500'} />
-        <StatCard Icon={Cpu} label="Backend Uptime" value={perf ? `${Math.floor((perf.uptimeSeconds||0)/3600)}h ${Math.floor(((perf.uptimeSeconds||0)%3600)/60)}m` : '—'} accent="text-[#00d4ff]" />
-        <StatCard Icon={Globe} label="Node Runtime" value={perf?.nodeVersion || '—'} accent="text-purple-400" />
+        {/* PATCH-POP-3: real system-perf cards.
+            PATCH-DISTRICTCARDS-2026: these are national infra health
+            cards (DB/Redis/uptime/runtime) — meaningless for a
+            district_admin scoped to one district, so super_admin only. */}
+        {role === 'super_admin' && (
+          <>
+            <StatCard Icon={Database} label="PostgreSQL (Supabase)" value={perf?.databaseOk ? 'Online' : 'Offline'}
+              sub={perf?.dbLatencyMs != null ? `${perf.dbLatencyMs} ms` : ''}
+              accent={perf?.databaseOk ? 'text-[#00ff9d]' : 'text-red-400'} />
+            <StatCard Icon={Server} label="Redis (Upstash)" value={perf?.redisOk ? 'Online' : 'Offline'}
+              sub={perf?.redisLatencyMs != null ? `${perf.redisLatencyMs} ms` : ''}
+              accent={perf?.redisOk ? 'text-[#00ff9d]' : 'text-gray-500'} />
+            <StatCard Icon={Cpu} label="Backend Uptime" value={perf ? `${Math.floor((perf.uptimeSeconds||0)/3600)}h ${Math.floor(((perf.uptimeSeconds||0)%3600)/60)}m` : '—'} accent="text-[#00d4ff]" />
+            <StatCard Icon={Globe} label="Node Runtime" value={perf?.nodeVersion || '—'} accent="text-purple-400" />
+          </>
+        )}
       </div>
 
       <Card>

@@ -48,7 +48,7 @@ const { Router } = require('express')
 const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const { prisma } = require('../lib/prisma')
-const { findPersonByBid } = require('../lib/personLookup')
+const { findPersonByBid, calcAge, buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 const { getRedis, isRedisReady } = require('../lib/redis')
 const { requireAuth, requireRole } = require('../middleware/auth')
 
@@ -104,6 +104,33 @@ async function buildCitizenGeoWhere(req) {
   if (districtId) return { currentVillage: { ward: { districtId: Number(districtId) } } }
   if (regionId)   return { currentVillage: { ward: { district: { regionId: Number(regionId) } } } }
   return {}
+}
+
+// PATCH-BIRTHGEO-2026: same cascade contract as buildCitizenGeoWhere()
+// above, but for "unlinked" Birth rows (childCitizenId IS NULL — a
+// registered birth whose child hasn't reached 18 / been issued a NIN
+// yet, i.e. most day-to-day registrations). These are scoped by
+// originVillageId — the family's home village captured at birth
+// registration — instead of the hospital/facility's district, so a
+// district_admin's ward/village picks (and a super_admin's region/
+// district/ward/village picks) narrow this count exactly like they
+// already narrow citizen counts.
+async function buildBirthGeoWhere(req) {
+  const { regionId, districtId, wardId, villageId } = req.query
+  const base = { childCitizenId: null }
+
+  if (req.user.role === 'district_admin') {
+    const adminDistrictId = await getAdminDistrictId(req)
+    if (villageId) return { ...base, originVillageId: Number(villageId) }
+    if (wardId)    return { ...base, originVillage: { wardId: Number(wardId) } }
+    return { ...base, originVillage: { ward: { districtId: adminDistrictId } } }
+  }
+
+  if (villageId)  return { ...base, originVillageId: Number(villageId) }
+  if (wardId)     return { ...base, originVillage: { wardId: Number(wardId) } }
+  if (districtId) return { ...base, originVillage: { ward: { districtId: Number(districtId) } } }
+  if (regionId)   return { ...base, originVillage: { ward: { district: { regionId: Number(regionId) } } } }
+  return base
 }
 
 // PATCH-MIGTRENDS-2026: geo-scoping for Migration rows, which touch TWO
@@ -233,8 +260,8 @@ router.get('/citizen-lookup', async (req, res) => {
       where: { birthId },
       select: {
         id: true, birthId: true, nationalId: true, firstName: true, middleName: true, surname: true,
-        gender: true, dateOfBirth: true, vitalStatus: true,
-        currentVillage: { select: { name: true, ward: { select: { name: true, district: { select: { name: true, region: { select: { name: true } } } } } } } },
+        gender: true, dateOfBirth: true, vitalStatus: true, age: true,
+        currentVillage: { select: VILLAGE_GEO_SELECT },
       },
     })
     if (citizen) {
@@ -242,6 +269,8 @@ router.get('/citizen-lookup', async (req, res) => {
         success: true,
         data: {
           ...citizen,
+          age: citizen.age ?? calcAge(citizen.dateOfBirth),
+          ...buildGeo(citizen.currentVillage),
           fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
         },
       })
@@ -250,6 +279,8 @@ router.get('/citizen-lookup', async (req, res) => {
     // registered, before any Citizen/NIN exists — fall back to the Birth
     // table so a freshly-generated BID can be used immediately here too
     // (e.g. confirming identity when registering a new officer account).
+    // PATCH-BID-GEO-2026: findPersonByBid() already resolves the family's
+    // home village (originVillage) for this case — don't discard it.
     const person = await findPersonByBid(birthId)
     if (person) {
       return res.json({
@@ -257,7 +288,6 @@ router.get('/citizen-lookup', async (req, res) => {
         data: {
           ...person,
           fullName: [person.firstName, person.middleName, person.surname].filter(Boolean).join(' '),
-          currentVillage: null,
         },
       })
     }
@@ -311,12 +341,13 @@ router.get('/overview', async (req, res) => {
     const auditWhere = await buildAuditWhere(req)
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-    // PATCH-POP-3: build the geo-filter for unlinked births.
-    // Births belong to a HealthFacility which has a districtId — use that
-    // to scope district_admin counts. super_admin gets all births.
-    const birthGeoWhere = req.user.role === 'district_admin'
-      ? { childCitizenId: null, facility: { districtId: adminDistrictId } }
-      : { childCitizenId: null }
+    // PATCH-BIRTHGEO-2026: unlinked-birth (newborn, no NIN yet) population
+    // counts are now scoped by the family's actual home village
+    // (originVillageId, captured at birth registration) cascaded through
+    // ward/district/region — not by which district the hospital/facility
+    // happens to sit in. This also means region/district/ward/village
+    // filters actually narrow these counts, matching citizen counts.
+    const birthGeoWhere = await buildBirthGeoWhere(req)
 
     const [
       citizenCount, maleCitizenCount, femaleCitizenCount,
@@ -385,12 +416,10 @@ router.get('/population', async (req, res) => {
   try {
     const where = await buildCitizenGeoWhere(req)
 
-    // Build birth geo-filter (scoped by facility.districtId for district_admin)
-    let birthGeoWhere = { childCitizenId: null }
-    if (req.user.role === 'district_admin') {
-      const adminDistrictId = await getAdminDistrictId(req)
-      birthGeoWhere = { childCitizenId: null, facility: { districtId: adminDistrictId } }
-    }
+    // PATCH-BIRTHGEO-2026: see buildBirthGeoWhere() — scopes unlinked births
+    // by the family's home village hierarchy, honoring region/district/
+    // ward/village filters exactly like citizen counts do.
+    const birthGeoWhere = await buildBirthGeoWhere(req)
 
     // ── Citizens (age-band groupBy is fast — age is a stored Int) ───────────
     const rows = await prisma.citizen.groupBy({

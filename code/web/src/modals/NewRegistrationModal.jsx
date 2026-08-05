@@ -244,8 +244,12 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
                 </p>
                 <p className="text-white text-sm font-semibold">{citizenMatch.fullName}</p>
                 <p className="text-gray-400 text-[11px]">
-                  {citizenMatch.gender || '—'} · NIN: {citizenMatch.nationalId || 'not yet issued'} ·{' '}
-                  {citizenMatch.currentVillage?.name || 'village unknown'}
+                  {[
+                    citizenMatch.gender || null,
+                    citizenMatch.nationalId ? `NIN: ${citizenMatch.nationalId}` : null,
+                    citizenMatch.currentVillage?.name || citizenMatch.village || null,
+                    citizenMatch.currentVillage?.ward?.district?.name || citizenMatch.district || null,
+                  ].filter(Boolean).join(' · ')}
                 </p>
                 {!confirmed && (
                   <button

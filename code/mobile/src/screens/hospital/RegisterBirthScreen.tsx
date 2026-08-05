@@ -99,6 +99,7 @@ const MOCK_CITIZENS: Record<string, any> = {
     vitalStatus: 'ALIVE',
     region: 'Dar es Salaam',
     district: 'Kinondoni',
+    village: 'Mikocheni',
     occupation: 'Civil Engineer',
   },
   'BID-MOTHER0001': {
@@ -113,6 +114,7 @@ const MOCK_CITIZENS: Record<string, any> = {
     vitalStatus: 'ALIVE',
     region: 'Dar es Salaam',
     district: 'Kinondoni',
+    village: 'Mikocheni',
     occupation: 'Registered Nurse',
   },
 }
@@ -693,10 +695,10 @@ function CitizenCard({ c, role }: { c: any; role: 'Father' | 'Mother' }) {
       <View style={{ padding: 14, gap: 6 }}>
         {[
           ['Gender', c.gender],
-          ['Date of Birth', c.dateOfBirth],
-          ['Region', c.region],
-          ['District', c.district],
-          ['Occupation', c.occupation],
+          ['Age', c.age != null && c.age !== '' ? `${c.age} yrs` : '—'],
+          ['Region', c.region || '—'],
+          ['District', c.district || '—'],
+          ['Village', c.village || '—'],
         ].map(([k, v]) => (
           <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ fontSize: 11, color: T.textDim, width: '40%' }}>{k}</Text>
@@ -803,10 +805,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
             surname: json.data.surname,
             gender: foundGender,
             dateOfBirth: json.data.dateOfBirth,
-            age: 0,
-            region: 'Tanzania',
-            district: '—',
-            occupation: '—',
+            age: json.data.age ?? null,
+            region: json.data.region || null,
+            district: json.data.district || null,
+            ward: json.data.ward || null,
+            village: json.data.village || null,
             vitalStatus: json.data.vitalStatus?.toUpperCase() ?? 'ALIVE',
           })
           setLoading(false)

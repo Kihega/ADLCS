@@ -26,7 +26,7 @@
 const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
-const { findPersonByBid } = require('../lib/personLookup')
+const { findPersonByBid, calcAge, buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 
 const router = Router()
 router.use(requireAuth)
@@ -512,14 +512,23 @@ router.post('/sync/trigger', async (req, res) => {
 // ever has a NIN because they already had a BID, so BID alone is enough;
 // no need to also ask for/know their NIN. Exact NIN match is kept as a
 // legacy fallback, then partial name/BID/NIN search.
+// PATCH-BID-GEO-2026: always resolves + returns the citizen's full
+// geographic hierarchy (village/ward/district/region) and live age via the
+// shared personLookup helpers, so any BID-driven screen (e.g. the Register
+// Birth father/mother card) has the real data to show instead of
+// placeholder text.
+const OFFICER_CITIZEN_LOOKUP_SELECT = {
+  id: true, birthId: true, nationalId: true, firstName: true, middleName: true,
+  surname: true, gender: true, dateOfBirth: true, vitalStatus: true, age: true,
+  currentVillage: { select: VILLAGE_GEO_SELECT },
+}
 router.get('/citizen-lookup', async (req, res) => {
   const q = req.query.q?.toString().trim()
   if (!q) return res.status(400).json({ success: false, message: 'Query required' })
-  const CITIZEN_SELECT = { id: true, birthId: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true, dateOfBirth: true, vitalStatus: true }
   try {
-    let citizen = await prisma.citizen.findFirst({ where: { birthId: q }, select: CITIZEN_SELECT })
+    let citizen = await prisma.citizen.findFirst({ where: { birthId: q }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
     if (!citizen) {
-      citizen = await prisma.citizen.findFirst({ where: { nationalId: q }, select: CITIZEN_SELECT })
+      citizen = await prisma.citizen.findFirst({ where: { nationalId: q }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
     }
     if (!citizen) {
       citizen = await prisma.citizen.findFirst({
@@ -529,27 +538,32 @@ router.get('/citizen-lookup', async (req, res) => {
           { firstName:  { contains: q, mode: 'insensitive' } },
           { surname:    { contains: q, mode: 'insensitive' } },
         ]},
-        select: CITIZEN_SELECT,
+        select: OFFICER_CITIZEN_LOOKUP_SELECT,
+      })
+    }
+    if (citizen) {
+      return res.json({
+        success: true,
+        data: {
+          ...citizen,
+          age: citizen.age ?? calcAge(citizen.dateOfBirth),
+          ...buildGeo(citizen.currentVillage),
+          fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
+        },
       })
     }
     // PATCH-BID-UNIVERSAL-2026: a BID is valid the moment a birth is
     // registered, before any Citizen/NIN exists — fall back to the Birth
     // table so a freshly-generated BID can immediately be used here too
     // (e.g. as a father/mother during another birth registration).
-    if (!citizen) {
-      const person = await findPersonByBid(q)
-      if (person) {
-        return res.json({
-          success: true,
-          data: { ...person, fullName: [person.firstName, person.middleName, person.surname].filter(Boolean).join(' ') },
-        })
-      }
+    const person = await findPersonByBid(q)
+    if (person) {
+      return res.json({
+        success: true,
+        data: { ...person, fullName: [person.firstName, person.middleName, person.surname].filter(Boolean).join(' ') },
+      })
     }
-    if (!citizen) return res.json({ success: false, message: 'Not found' })
-    return res.json({
-      success: true,
-      data: { ...citizen, fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' ') },
-    })
+    return res.json({ success: false, message: 'Not found' })
   } catch (err) {
     console.error('[citizen-lookup]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })

@@ -23,6 +23,7 @@ const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { uploadBase64 } = require('../utils/cloudinaryUpload')
+const { buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 
 const router = Router()
 router.use(requireAuth)
@@ -650,6 +651,7 @@ const CITIZEN_LOOKUP_SELECT = {
   educationLevel: true,
   registeredAt: true,
   currentVillageId: true,
+  currentVillage: { select: VILLAGE_GEO_SELECT },
 }
 
 router.get('/citizen-lookup', async (req, res) => {
@@ -712,6 +714,7 @@ router.get('/citizen-lookup', async (req, res) => {
       success: true,
       data: {
         ...citizen,
+        ...buildGeo(citizen.currentVillage),
         fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
         ninCertificateIssued: !!citizen.idCardIssued,
         villageName: officer.village?.name ?? null,
