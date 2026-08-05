@@ -87,6 +87,12 @@ async function getAdminDistrictId(req) {
 async function buildCitizenGeoWhere(req) {
   const { regionId, districtId, wardId, villageId } = req.query
 
+  // PATCH-4: seeded/demo citizens (prisma/seed.js's test father & mother,
+  // isTestData: true) never count toward population snapshots — every
+  // branch below is ANDed with this floor so re-seeding test data can
+  // never inflate the dashboards' population totals.
+  const notTestData = { isTestData: false }
+
   // BUGFIX-9: a district_admin's ward/village filter selection used to be
   // silently discarded — this function always fell back to the full
   // district scope regardless of what was selected. District scope is now
@@ -94,16 +100,16 @@ async function buildCitizenGeoWhere(req) {
   // picks a ward or village within it.
   if (req.user.role === 'district_admin') {
     const adminDistrictId = await getAdminDistrictId(req)
-    if (villageId) return { currentVillageId: Number(villageId) }
-    if (wardId)    return { currentVillage: { wardId: Number(wardId) } }
-    return { currentVillage: { ward: { districtId: adminDistrictId } } }
+    if (villageId) return { ...notTestData, currentVillageId: Number(villageId) }
+    if (wardId)    return { ...notTestData, currentVillage: { wardId: Number(wardId) } }
+    return { ...notTestData, currentVillage: { ward: { districtId: adminDistrictId } } }
   }
 
-  if (villageId)  return { currentVillageId: Number(villageId) }
-  if (wardId)     return { currentVillage: { wardId: Number(wardId) } }
-  if (districtId) return { currentVillage: { ward: { districtId: Number(districtId) } } }
-  if (regionId)   return { currentVillage: { ward: { district: { regionId: Number(regionId) } } } }
-  return {}
+  if (villageId)  return { ...notTestData, currentVillageId: Number(villageId) }
+  if (wardId)     return { ...notTestData, currentVillage: { wardId: Number(wardId) } }
+  if (districtId) return { ...notTestData, currentVillage: { ward: { districtId: Number(districtId) } } }
+  if (regionId)   return { ...notTestData, currentVillage: { ward: { district: { regionId: Number(regionId) } } } }
+  return notTestData
 }
 
 // PATCH-BIRTHGEO-2026: same cascade contract as buildCitizenGeoWhere()
@@ -236,6 +242,17 @@ function generateDefaultPassword() {
 // P2003). Surface a clear, specific message instead. We deliberately do NOT
 // cascade-delete the dependent records — that would silently destroy real
 // civil-registration data.
+// PATCH-4: a missing value for any column the database still requires
+// NOT NULL (e.g. a future required field left blank) used to bubble up
+// as a bare 500 — Prisma's P2011 (null constraint violation) wasn't
+// recognised by any of the four create routes below. Surface it as a
+// clear 400 instead.
+function nullConstraintMessage(err) {
+  if (err.code !== 'P2011') return null
+  const target = Array.isArray(err.meta?.target) ? err.meta.target[0] : err.meta?.target
+  return target ? `${target} is required` : 'A required field is missing'
+}
+
 function handleDeleteError(res, err, label) {
   if (err.code === 'P2025') return res.status(404).json({ success: false, message: 'Not found' })
   if (err.code === 'P2003') {
@@ -565,14 +582,13 @@ router.get('/district-admins', requireRole('super_admin'), async (req, res) => {
       ...(q ? { OR: [
         { fullName: { contains: q, mode: 'insensitive' } },
         { email:    { contains: q, mode: 'insensitive' } },
-        { employeeId: { contains: q, mode: 'insensitive' } },
       ] } : {}),
     }
     const [data, total] = await Promise.all([
       prisma.districtAdmin.findMany({
         where, skip, take: limit, orderBy: { createdAt: 'desc' },
         select: {
-          id: true, employeeId: true, fullName: true, email: true, mobile: true,
+          id: true, fullName: true, email: true, mobile: true,
           status: true, mfaEnabled: true, createdAt: true, lastLogin: true,
           region: { select: { id: true, name: true } },
           district: { select: { id: true, name: true } },
@@ -588,9 +604,9 @@ router.get('/district-admins', requireRole('super_admin'), async (req, res) => {
 })
 
 router.post('/district-admins', requireRole('super_admin'), async (req, res) => {
-  const { fullName, email, birthId, employeeId, mobile, regionId, districtId, department, citizenId, password } = req.body
-  if (!fullName || !email || !birthId || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
+  const { fullName, email, birthId, mobile, regionId, districtId, department, citizenId, password } = req.body
+  if (!fullName || !email || !birthId) {
+    return res.status(400).json({ success: false, message: 'fullName, email and birthId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
@@ -605,7 +621,7 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
     const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.districtAdmin.create({
       data: {
-        fullName, email, birthId, employeeId,
+        fullName, email, birthId,
         citizenId: citizenId || undefined,
         mobile: mobile || undefined,
         regionId: regionId ? Number(regionId) : undefined,
@@ -617,7 +633,7 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
         passwordHash,
         createdById: req.user.id,
       },
-      select: { id: true, fullName: true, email: true, employeeId: true, status: true },
+      select: { id: true, fullName: true, email: true, status: true },
     })
     await logAction(req, { action: 'create_district_admin', targetTable: 'district_admins', targetId: created.id, newData: created })
     // PATCH-EMAIL-VISIBILITY-2026: await this instead of fire-and-forget so
@@ -633,7 +649,9 @@ router.post('/district-admins', requireRole('super_admin'), async (req, res) => 
     }
     return res.json({ success: true, data: { ...created, defaultPassword, emailSent, emailError } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email or Birth ID already exists' })
+    const nc = nullConstraintMessage(err)
+    if (nc) return res.status(400).json({ success: false, message: nc })
     console.error('[admin/create-district-admin]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -681,14 +699,13 @@ router.get('/village-officers', async (req, res) => {
       ...(q ? { OR: [
         { fullName: { contains: q, mode: 'insensitive' } },
         { email:    { contains: q, mode: 'insensitive' } },
-        { employeeId: { contains: q, mode: 'insensitive' } },
       ] } : {}),
     }
     const [data, total] = await Promise.all([
       prisma.villageOfficer.findMany({
         where, skip, take: limit, orderBy: { createdAt: 'desc' },
         select: {
-          id: true, employeeId: true, fullName: true, email: true, mobile: true,
+          id: true, fullName: true, email: true, mobile: true,
           status: true, mfaEnabled: true, createdAt: true, lastLogin: true,
           village: { select: { id: true, name: true } },
           ward:    { select: { id: true, name: true } },
@@ -705,9 +722,9 @@ router.get('/village-officers', async (req, res) => {
 })
 
 router.post('/village-officers', requireRole('district_admin'), async (req, res) => {
-  const { fullName, email, birthId, employeeId, mobile, villageId, wardId, citizenId, password } = req.body
-  if (!fullName || !email || !birthId || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
+  const { fullName, email, birthId, mobile, villageId, wardId, citizenId, password } = req.body
+  if (!fullName || !email || !birthId) {
+    return res.status(400).json({ success: false, message: 'fullName, email and birthId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
@@ -723,7 +740,7 @@ router.post('/village-officers', requireRole('district_admin'), async (req, res)
     const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.villageOfficer.create({
       data: {
-        fullName, email, birthId, employeeId,
+        fullName, email, birthId,
         citizenId: citizenId || undefined,
         mobile: mobile || undefined,
         villageId: villageId ? Number(villageId) : undefined,
@@ -733,7 +750,7 @@ router.post('/village-officers', requireRole('district_admin'), async (req, res)
         passwordHash,
         createdById: req.user.id,
       },
-      select: { id: true, fullName: true, email: true, employeeId: true, status: true },
+      select: { id: true, fullName: true, email: true, status: true },
     })
     await logAction(req, { action: 'create_village_officer', targetTable: 'village_officers', targetId: created.id, newData: created })
     // PATCH-EMAIL-VISIBILITY-2026: await this instead of fire-and-forget so
@@ -749,7 +766,9 @@ router.post('/village-officers', requireRole('district_admin'), async (req, res)
     }
     return res.json({ success: true, data: { ...created, defaultPassword, emailSent, emailError } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email or Birth ID already exists' })
+    const nc = nullConstraintMessage(err)
+    if (nc) return res.status(400).json({ success: false, message: nc })
     console.error('[admin/create-village-officer]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -812,7 +831,6 @@ router.get('/health-officers', async (req, res) => {
       ...(q ? { OR: [
         { fullName: { contains: q, mode: 'insensitive' } },
         { email:    { contains: q, mode: 'insensitive' } },
-        { employeeId: { contains: q, mode: 'insensitive' } },
       ] } : {}),
     }
     const [data, total] = await Promise.all([
@@ -835,9 +853,9 @@ router.get('/health-officers', async (req, res) => {
 })
 
 router.post('/health-officers', requireRole('district_admin'), async (req, res) => {
-  const { fullName, email, birthId, employeeId, mobile, facilityId, facilityName, citizenId, password } = req.body
-  if (!fullName || !email || !birthId || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
+  const { fullName, email, birthId, mobile, facilityId, facilityName, citizenId, password } = req.body
+  if (!fullName || !email || !birthId) {
+    return res.status(400).json({ success: false, message: 'fullName, email and birthId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
@@ -882,7 +900,7 @@ router.post('/health-officers', requireRole('district_admin'), async (req, res) 
     const passwordHash = await bcrypt.hash(defaultPassword, 10)
     const created = await prisma.hospitalOfficer.create({
       data: {
-        fullName, email, birthId, employeeId,
+        fullName, email, birthId,
         citizenId: citizenId || undefined,
         mobile: mobile || undefined,
         facilityId: resolvedFacilityId,
@@ -891,7 +909,7 @@ router.post('/health-officers', requireRole('district_admin'), async (req, res) 
         passwordHash,
         createdById: req.user.id,
       },
-      select: { id: true, fullName: true, email: true, employeeId: true, status: true },
+      select: { id: true, fullName: true, email: true, status: true },
     })
     await logAction(req, { action: 'create_hospital_officer', targetTable: 'hospital_officers', targetId: created.id, newData: created })
     // PATCH-EMAIL-VISIBILITY-2026: await this instead of fire-and-forget so
@@ -907,7 +925,9 @@ router.post('/health-officers', requireRole('district_admin'), async (req, res) 
     }
     return res.json({ success: true, data: { ...created, defaultPassword, emailSent, emailError } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' })
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email or Birth ID already exists' })
+    const nc = nullConstraintMessage(err)
+    if (nc) return res.status(400).json({ success: false, message: nc })
     console.error('[admin/create-hospital-officer]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -977,7 +997,7 @@ router.get('/super-admins', requireRole('super_admin'), async (req, res) => {
         where:   search,
         take,
         orderBy: { createdAt: 'desc' },
-        select:  { id: true, employeeId: true, fullName: true, email: true, mobile: true,
+        select:  { id: true, fullName: true, email: true, mobile: true,
                    department: true, status: true, mfaEnabled: true, createdAt: true, lastLogin: true },
       }),
       prisma.superAdmin.count(),
@@ -997,9 +1017,9 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
       message: `System already has the maximum of ${SUPER_ADMIN_MAX} Super Administrators.`,
     })
   }
-  const { fullName, email, birthId, employeeId, mobile, department, citizenId, password } = req.body
-  if (!fullName || !email || !birthId || !employeeId) {
-    return res.status(400).json({ success: false, message: 'fullName, email, birthId and employeeId are required' })
+  const { fullName, email, birthId, mobile, department, citizenId, password } = req.body
+  if (!fullName || !email || !birthId) {
+    return res.status(400).json({ success: false, message: 'fullName, email and birthId are required' })
   }
   {
     const err = emailFormatError(email) // PATCH-EMAIL-VALIDATE-2026
@@ -1014,7 +1034,7 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
     const passwordHash    = await bcrypt.hash(defaultPassword, 10)
     const created   = await prisma.superAdmin.create({
       data: {
-        fullName, email, birthId, employeeId,
+        fullName, email, birthId,
         citizenId:  citizenId || undefined,
         mobile:     mobile     || undefined,
         department: department || undefined,
@@ -1022,7 +1042,7 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
         passwordHash,
         createdById:       req.user.id,
       },
-      select: { id: true, fullName: true, email: true, employeeId: true, status: true },
+      select: { id: true, fullName: true, email: true, status: true },
     })
     await logAction(req, {
       action: 'create_super_admin', targetTable: 'super_admins', targetId: created.id,
@@ -1041,7 +1061,9 @@ router.post('/super-admins', requireRole('super_admin'), async (req, res) => {
     }
     return res.json({ success: true, data: { ...created, defaultPassword, emailSent, emailError } })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email, Birth ID, or employee ID already exists' }) // PATCH-ADMINREG-2026
+    if (err.code === 'P2002') return res.status(409).json({ success: false, message: 'A record with this email or Birth ID already exists' }) // PATCH-ADMINREG-2026
+    const nc = nullConstraintMessage(err)
+    if (nc) return res.status(400).json({ success: false, message: nc })
     console.error('[admin/create-super-admin]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
@@ -1369,22 +1391,6 @@ router.get('/marriages', async (req, res) => {
   } catch (err) {
     console.error('[admin/marriages]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
-  }
-})
-
-
-// ── PATCH-4: DELETE /births — wipe all birth records except test parents ──────
-// Used by super_admin to clear births for a fresh end-to-end test run.
-// "Test parents" (citizens seeded by prisma/seed.js) are identified by the
-// seeded employee_id prefix of the registering officer or by having no
-// linked birth records — so we only delete Birth rows, not Citizen rows.
-router.delete('/births', requireRole('super_admin'), async (req, res) => {
-  try {
-    const { count } = await prisma.birth.deleteMany({})
-    return res.json({ success: true, deleted: count, message: `Deleted ${count} birth record(s). Test parent citizens preserved.` })
-  } catch (err) {
-    console.error('[admin/births DELETE]', err)
-    return res.status(500).json({ success: false, message: 'Failed to delete births' })
   }
 })
 

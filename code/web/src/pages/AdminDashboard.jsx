@@ -902,8 +902,6 @@ function RITASection({ role }) {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
   })
-  const [deleting, setDeleting] = useState(false)
-
   // LINTFIX-2-v2: reverted to the exact same load()-useCallback pattern
   // already used successfully by every other section in this file
   // (OverviewSection, PopulationSection, OfficersSection, etc.). Inlining
@@ -925,46 +923,13 @@ function RITASection({ role }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load({ ...filters, ...period }) }, [filters, period, load])
 
-  // PATCH-ADMINREG-PT2-2026
-  const [confirmClear, setConfirmClear] = useState(false)
   const [notice, setNotice] = useState('')
-  const handleDelete = () => setConfirmClear(true)
-  const confirmDelete = async () => {
-    setConfirmClear(false)
-    setDeleting(true)
-    try {
-      const r = await api.apiDeleteBirths()
-      setNotice(r.message || 'Births deleted')
-      load({ ...filters, ...period })
-    } catch(e) { setNotice('Failed: ' + e.message) }
-    finally { setDeleting(false) }
-  }
 
   return (
     <div className="space-y-4">
-      {confirmClear && (
-        <ConfirmModal
-          title="Clear All Births"
-          message="Delete ALL birth records? This cannot be undone. Test parent citizens will be preserved."
-          danger
-          confirmLabel="Delete All"
-          onConfirm={confirmDelete}
-          onCancel={() => setConfirmClear(false)}
-        />
-      )}
       {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
       <div className="flex items-center justify-between">
         <h2 className="text-white font-bold text-lg">RITA — Registration Trends</h2>
-        {role === 'super_admin' && (
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors"
-          >
-            <Trash2 size={13} />
-            {deleting ? 'Deleting…' : 'Clear All Births (Test Reset)'}
-          </button>
-        )}
       </div>
       <YearMonthFilter onChange={p => setPeriod(p)} />
       <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />

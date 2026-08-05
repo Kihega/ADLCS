@@ -301,7 +301,9 @@ async function main() {
   // collide with on create.
   const father = await prisma.citizen.upsert({
     where:  { nationalId: TEST_FATHER.nationalId },
-    update: { age: 41, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_FATHER.birthId },
+    // PATCH-4: isTestData flags this row so it's excluded from every
+    // population-snapshot query (see buildCitizenGeoWhere in admin.js).
+    update: { age: 41, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_FATHER.birthId, isTestData: true },
     create: {
       birthId:          TEST_FATHER.birthId,
       nationalId:       TEST_FATHER.nationalId,
@@ -315,13 +317,16 @@ async function main() {
       currentVillageId: village.id,
       registeredById:   villageOfficer.id,
       registeredAt:     new Date(),
+      isTestData:       true,
     },
   })
   console.log(`  Test father: ${father.firstName} ${father.surname}  BID: ${father.birthId}`)
 
   const mother = await prisma.citizen.upsert({
     where:  { nationalId: TEST_MOTHER.nationalId },
-    update: { age: 37, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_MOTHER.birthId },
+    // PATCH-4: isTestData flags this row so it's excluded from every
+    // population-snapshot query (see buildCitizenGeoWhere in admin.js).
+    update: { age: 37, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_MOTHER.birthId, isTestData: true },
     create: {
       birthId:          TEST_MOTHER.birthId,
       nationalId:       TEST_MOTHER.nationalId,
@@ -335,6 +340,7 @@ async function main() {
       currentVillageId: village.id,
       registeredById:   villageOfficer.id,
       registeredAt:     new Date(),
+      isTestData:       true,
     },
   })
   console.log(`  Test mother: ${mother.firstName} ${mother.surname}  BID: ${mother.birthId}`)

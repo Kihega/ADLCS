@@ -56,7 +56,7 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
 
   // ── Rest of the form ─────────────────────────────────────────────────────
   const [form, setForm] = useState({
-    email: '', mobile: '', employeeId: '', department: '',
+    email: '', mobile: '', department: '',
     password: 'Admin@1234',
     regionId: '', districtId: '', wardId: '', villageId: '',
     facilityName: '',
@@ -138,8 +138,8 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
     if (!confirmed || !citizenMatch || citizenMatch === 'not_found') {
       setError('Search for and confirm the Birth ID first.'); return
     }
-    if (!form.email || !form.employeeId) {
-      setError('Email and employee ID are required.'); return
+    if (!form.email) {
+      setError('Email is required.'); return
     }
     if (target === 'district_admin' && (!form.regionId || !form.districtId)) {
       setError('Region and District are required for a District Admin.'); return
@@ -156,7 +156,6 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
         citizenId:  citizenMatch.id,
         email:      form.email,
         mobile:     form.mobile,
-        employeeId: form.employeeId,
         password:   form.password,
       }
       let res
@@ -277,11 +276,6 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
                   </div>
                 </div>
 
-                <div>
-                  <label className={lbl}>Employee ID</label>
-                  <input className={inp} value={form.employeeId} onChange={e => set('employeeId', e.target.value)} placeholder="NBS-0001" />
-                </div>
-
                 {target === 'district_admin' && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -370,9 +364,6 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
                 <div>
                   <label className={lbl}>Default Password</label>
                   <input className={inp} value={form.password} onChange={e => set('password', e.target.value)} />
-                  <p className="text-[10px] text-gray-500 mt-1">
-                    Shared with the new user directly — they should change it within 3 days of first login.
-                  </p>
                 </div>
               </>
             )}

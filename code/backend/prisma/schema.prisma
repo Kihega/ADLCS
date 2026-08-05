@@ -67,7 +67,7 @@ model Village {
 
 model SuperAdmin {
   id                    String          @id @default(uuid())
-  employeeId            String          @unique @map("employee_id") @db.VarChar(30)
+  employeeId            String?         @unique @map("employee_id") @db.VarChar(30) // PATCH-4: no longer required — see patch4.py
   birthId               String          @unique(map: "super_admins_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName              String          @map("full_name") @db.VarChar(120)
   email                 String          @unique @db.VarChar(120)
@@ -94,7 +94,7 @@ model SuperAdmin {
 
 model DistrictAdmin {
   id                String            @id @default(uuid())
-  employeeId        String            @unique @map("employee_id") @db.VarChar(30)
+  employeeId        String?           @unique @map("employee_id") @db.VarChar(30) // PATCH-4: no longer required — see patch4.py
   birthId           String            @unique(map: "district_admins_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName          String            @map("full_name") @db.VarChar(120)
   email             String            @unique @db.VarChar(120)
@@ -124,7 +124,7 @@ model DistrictAdmin {
 
 model VillageOfficer {
   id                  String        @id @default(uuid())
-  employeeId          String        @unique @map("employee_id") @db.VarChar(30)
+  employeeId          String?       @unique @map("employee_id") @db.VarChar(30) // PATCH-4: no longer required — see patch4.py
   birthId             String        @unique(map: "village_officers_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName            String        @map("full_name") @db.VarChar(120)
   email               String        @unique @db.VarChar(120)
@@ -163,7 +163,7 @@ model VillageOfficer {
 
 model HospitalOfficer {
   id                String          @id @default(uuid())
-  employeeId        String          @unique @map("employee_id") @db.VarChar(30)
+  employeeId        String?         @unique @map("employee_id") @db.VarChar(30) // PATCH-4: no longer required — see patch4.py
   birthId           String          @unique(map: "hospital_officers_nida_number_key") @map("birth_id") @db.VarChar(100)
   fullName          String          @map("full_name") @db.VarChar(120)
   email             String          @unique @db.VarChar(120)
@@ -247,6 +247,10 @@ model Citizen {
   updatedAt           DateTime?        @updatedAt @map("updated_at")
   regionId            Int?             @map("region_id")
   birthId             String?          @unique @map("birth_id") @db.VarChar(20)
+  // PATCH-4: true for seeded/demo citizens (prisma/seed.js's test father &
+  // mother) — excluded from every population-snapshot query in admin.js so
+  // re-seeding test data never inflates the dashboards.
+  isTestData          Boolean          @default(false) @map("is_test_data")
   birthRecord         Birth?           @relation("ChildBirth")
   fatherBirths        Birth[]          @relation("FatherBirth")
   motherBirths        Birth[]          @relation("MotherBirth")
