@@ -90,7 +90,7 @@ export default function ConfirmIncomingMigrationScreen({ navigation }: Props) {
         <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>Incoming Migration</Text>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
           <Text style={{ fontSize: 12, color: T.textSub }}>
             Ask the citizen for their Birth ID (BID) and the migration token given to them by their

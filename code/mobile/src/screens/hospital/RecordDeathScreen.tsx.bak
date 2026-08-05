@@ -670,7 +670,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header */}
         <View style={[s.header, { backgroundColor: T.card, borderBottomColor: T.border }]}>

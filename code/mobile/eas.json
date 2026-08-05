@@ -7,11 +7,22 @@
     "preview": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://adlcs-pjqt.onrender.com/api"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://adlcs-pjqt.onrender.com/api"
+      }
+    },
+    "development": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://adlcs-pjqt.onrender.com/api"
       }
     }
   }
