@@ -3,9 +3,8 @@
  *
  * Data strategy (hybrid):
  *   ONLINE  → fetch from remote API, display with sync badges
- *   OFFLINE → show anything still queued locally (PATCH-OFFLINE-QUEUE-2026),
- *             with an offline indicator
- *   MERGE   → queued records not yet on the server are shown alongside remote ones
+ *   OFFLINE → read from local SQLite, display with offline indicator
+ *   MERGE   → local records not yet on server are shown alongside remote ones
  */
 
 import React, { useState, useCallback, useRef } from 'react'
@@ -37,7 +36,8 @@ import {
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { fetchRemoteRecords, isOnline, getPendingBirths, getPendingDeaths } from '../../services/syncService'
+import { getAllBirths, getAllDeaths } from '../../services/localDb'
+import { fetchRemoteRecords, isOnline } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; ViewRecords: undefined }
@@ -71,43 +71,38 @@ export default function ViewRecordsScreen({ navigation }: Props) {
 
       const q = query.trim().toLowerCase()
 
-      // 1. Always show anything still waiting to sync to the central database
-      // (queued because the device was offline or the backend was briefly
-      // unreachable when the record was submitted — see syncService.ts).
-      const [pendingBirths, pendingDeaths] = await Promise.all([
-        getPendingBirths(),
-        getPendingDeaths(),
-      ])
+      // 1. Always load from local SQLite
+      const [localBirths, localDeaths] = await Promise.all([getAllBirths(), getAllDeaths()])
       const localRows: DisplayRecord[] = [
-        ...pendingBirths.map((b) => ({
-          id: `local-birth-${b.localId}`,
+        ...localBirths.map((b) => ({
+          id: `local-birth-${b.id}`,
           type: 'birth' as const,
-          certNo: b.payload.birthCertNo,
-          name: [b.payload.childFirstName, b.payload.childMiddleName, b.payload.childSurname]
+          certNo: b.certNo,
+          name: [b.childFirstName, b.childMiddleName, b.childSurname]
             .filter(Boolean)
             .join(' ')
             .toUpperCase(),
-          date: new Date(b.queuedAt).toLocaleDateString('en-TZ', {
+          date: new Date(b.registeredAt).toLocaleDateString('en-TZ', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',
           }),
-          synced: false,
-          certIssued: false,
+          synced: b.synced === 1,
+          certIssued: !!b.certPdfPath,
           source: 'local' as const,
         })),
-        ...pendingDeaths.map((d) => ({
-          id: `local-death-${d.localId}`,
+        ...localDeaths.map((d) => ({
+          id: `local-death-${d.id}`,
           type: 'death' as const,
-          certNo: d.payload.deathCertNo,
-          name: d.payload.informantName || d.payload.nationalId || '—',
-          date: new Date(d.queuedAt).toLocaleDateString('en-TZ', {
+          certNo: d.certNo,
+          name: d.deceasedName.toUpperCase() || d.nationalId || '—',
+          date: new Date(d.registeredAt).toLocaleDateString('en-TZ', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',
           }),
-          synced: false,
-          certIssued: false,
+          synced: d.synced === 1,
+          certIssued: !!d.certPdfPath,
           source: 'local' as const,
         })),
       ]

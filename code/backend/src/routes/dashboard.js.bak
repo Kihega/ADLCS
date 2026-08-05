@@ -26,7 +26,6 @@
 const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
-const { findPersonByBid } = require('../lib/personLookup')
 
 const router = Router()
 router.use(requireAuth)
@@ -531,19 +530,6 @@ router.get('/citizen-lookup', async (req, res) => {
         ]},
         select: CITIZEN_SELECT,
       })
-    }
-    // PATCH-BID-UNIVERSAL-2026: a BID is valid the moment a birth is
-    // registered, before any Citizen/NIN exists — fall back to the Birth
-    // table so a freshly-generated BID can immediately be used here too
-    // (e.g. as a father/mother during another birth registration).
-    if (!citizen) {
-      const person = await findPersonByBid(q)
-      if (person) {
-        return res.json({
-          success: true,
-          data: { ...person, fullName: [person.firstName, person.middleName, person.surname].filter(Boolean).join(' ') },
-        })
-      }
     }
     if (!citizen) return res.json({ success: false, message: 'Not found' })
     return res.json({

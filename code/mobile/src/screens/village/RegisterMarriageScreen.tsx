@@ -598,7 +598,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScreenHeader
           title="Register Marriage"

@@ -52,15 +52,21 @@ router.post('/birth/sync', async (req, res) => {
       select: { facilityId: true },
     })
 
-    // Resolve father citizen ID from NID
+    // PATCH-BID-E2E-2026: fatherNid/motherNid actually carry each
+    // parent's Birth ID (BID-XXXXXXXXXX), not their NIN — the mobile
+    // RegisterBirthScreen has collected BIDs here since
+    // PATCH-BID-LOOKUP-2026, but this lookup was never updated to match,
+    // so fatherCitizenId/motherCitizenId silently stayed empty on every
+    // synced birth. Look up by birthId instead, same as every other BID
+    // lookup in the system (marriage, migration, admin citizen-lookup).
     let fatherCitizenId
     let motherCitizenId
     if (fatherNid) {
-      const father = await prisma.citizen.findFirst({ where: { nationalId: fatherNid }, select: { id: true } })
+      const father = await prisma.citizen.findFirst({ where: { birthId: String(fatherNid).trim() }, select: { id: true } })
       fatherCitizenId = father?.id
     }
     if (motherNid) {
-      const mother = await prisma.citizen.findFirst({ where: { nationalId: motherNid }, select: { id: true } })
+      const mother = await prisma.citizen.findFirst({ where: { birthId: String(motherNid).trim() }, select: { id: true } })
       motherCitizenId = mother?.id
     }
 

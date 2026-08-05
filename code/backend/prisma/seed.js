@@ -1,22 +1,37 @@
 // prisma/seed.js
-// PATCH-SEED-FKFIX-2026: fixes a real bug from the previous seed.js rewrite
-// — Step 0 was deleting old test Village/Hospital Officers and District/
-// Super Admins directly, before deleting the records that still reference
-// them (migrations, deaths, marriages, births, citizens from a previous
-// seed run). Postgres correctly rejected that with a foreign-key violation
-// (e.g. `migrations_source_officer_id_fkey`). Cleanup now deletes/unlinks
-// dependents FIRST, parents last.
+// PATCH-SEED-NIDFIX-2026: fixes the P2002 unique constraint failure on
+// Citizen.national_id.
+//
+// Root cause: cleanupOldTestData() only found old test Citizen rows by
+// `birthId IN (BID-FATHER0001, BID-MOTHER0001)`. The father/mother upserts
+// further down also matched `where: { birthId: ... }`. birthId is a
+// *nullable* unique column here — so any leftover row from an older/partial
+// seed run that had this same nationalId but a different (or null) birthId
+// was invisible to both the cleanup query AND the upsert's match clause.
+// Prisma then tried to CREATE a brand new row with that nationalId, and
+// Postgres correctly rejected it: unique constraint on `national_id`.
+//
+// Fix: nationalId is the column that is actually guaranteed unique and
+// always populated by this script, so it's the right identity to match on.
+//   1. cleanupOldTestData() now also looks up citizens by nationalId (not
+//      just birthId), so any stale row sharing that identity is found and
+//      removed with the rest of the dependency-safe cleanup.
+//   2. The father/mother upserts now use `where: { nationalId }` instead of
+//      `where: { birthId }`, so if a row with that nationalId does exist
+//      (e.g. a manual insert, or a race with another process) it gets
+//      *updated* instead of colliding on create.
 //
 // Run with: node prisma/seed.js  (safe to re-run — everything is upserted
 // or deleted-then-recreated by fixed key, never duplicated).
 //
 // Test accounts (all use the default password Admin@1234):
 //   National Admin — Sina Ngusa Kishosha   (sinakishosha@gmail.com)
-//   District Admin — Kishosha Sina Ngusa   (kuhega2025@gmail.com), scoped to
+//   District Admin — Kishosha Sina Ngusa   (kihega2025@gmail.com), scoped to
 //                     Iringa / Mufindi District Council
-//   Village Officer / Hospital Officer — kept from the original demo set,
-//     relocated to the same area so everything lines up: Iringa → Mufindi
-//     District Council → Mdabulo → Ikanga.
+//   Village Officer — kept from the original demo set, relocated to Iringa →
+//     Mufindi District Council → Mdabulo → Ikanga.
+//   Hospital Officer — kept from the original demo set, assigned to Ifwagi
+//     Hospital (Iringa / Mufindi District Council).
 //
 // Test father/mother citizens (used by the Hospital Officer's "auto-fill
 // test father/mother ID" button and the offline MOCK_CITIZENS fallback in
@@ -27,6 +42,12 @@ const bcrypt = require('bcryptjs')
 const prisma = new PrismaClient()
 
 const DEFAULT_PASSWORD = 'Admin@1234'
+
+// Canonical identity for the two test citizens this script owns. Keeping
+// both keys together (rather than just birthId) is what lets cleanup find
+// *any* stale copy of them, no matter which key survived from a prior run.
+const TEST_FATHER = { birthId: 'BID-FATHER0001', nationalId: '19850315-07031-00001-24' }
+const TEST_MOTHER = { birthId: 'BID-MOTHER0001', nationalId: '19880622-07031-00002-13' }
 
 // PATCH-SEED-REGIONFIX-2026: unlike District/Ward/Village, Region.name is
 // NOT a unique column in this schema (only `id` is) — upsert-by-name is
@@ -56,14 +77,29 @@ async function getOrCreateVillage(name, wardId, type = 'village') {
   return prisma.village.create({ data: { name, wardId, type } })
 }
 
+// HealthFacility has no unique column on `name` — facilityRegNo is the one
+// unique field, so (as with Region above) match on that rather than
+// upserting by name.
+async function getOrCreateFacility(regNo, data) {
+  const existing = await prisma.healthFacility.findUnique({ where: { facilityRegNo: regNo } })
+  if (existing) return existing
+  return prisma.healthFacility.create({ data: { facilityRegNo: regNo, ...data } })
+}
+
 // PATCH-SEED-FKFIX-2026: dependency-safe cleanup of any test data left over
 // from a previous run of this seed script (or an earlier version of it).
 async function cleanupOldTestData() {
   const oldAndNewEmails = [
     'super@adlcs.tz', 'district@adlcs.tz', 'village@adlcs.tz', 'hospital@adlcs.tz',
-    'sinakishosha@gmail.com', 'kuhega2025@gmail.com',
+    'sinakishosha@gmail.com',
+    'kihega2025@gmail.com', // correct address
+    'kuhega2025@gmail.com', // PATCH-EMAILFIX-2026: old typo'd address — kept here so a row created by an earlier run of this script still gets cleaned up
   ]
-  const oldAndNewBirthIds = ['BID-FATHER0001', 'BID-MOTHER0001']
+  const oldAndNewBirthIds = [TEST_FATHER.birthId, TEST_MOTHER.birthId]
+  // PATCH-SEED-NIDFIX-2026: also match on nationalId — this is the field
+  // that is actually enforced unique, and the only reliable way to catch a
+  // stale row whose birthId got changed or nulled out in an older seed run.
+  const oldAndNewNationalIds = [TEST_FATHER.nationalId, TEST_MOTHER.nationalId]
 
   // ── Step A: find old test accounts by email ──────────────────────────────
   const oldSuperAdmins    = await prisma.superAdmin.findMany({ where: { email: { in: oldAndNewEmails } }, select: { id: true } })
@@ -89,7 +125,15 @@ async function cleanupOldTestData() {
   const voIds = oldVillageOfficers.map(o => o.id)
   const hoIds = oldHospitalOfficers.map(o => o.id)
 
-  const oldCitizens = await prisma.citizen.findMany({ where: { birthId: { in: oldAndNewBirthIds } }, select: { id: true } })
+  // PATCH-SEED-NIDFIX-2026: OR across birthId and nationalId so a stale
+  // row is found regardless of which identity field it still carries.
+  const oldCitizens = await prisma.citizen.findMany({
+    where: { OR: [
+      { birthId: { in: oldAndNewBirthIds } },
+      { nationalId: { in: oldAndNewNationalIds } },
+    ] },
+    select: { id: true },
+  })
   const citizenIds = oldCitizens.map(c => c.id)
 
   if (!voIds.length && !hoIds.length && !daIds.length && !saIds.length && !citizenIds.length) {
@@ -166,6 +210,18 @@ async function main() {
   const village  = await getOrCreateVillage('Ikanga', ward.id)
   console.log(`  Geography ready: ${region.name} / ${district.name} / ${ward.name} / ${village.name}`)
 
+  // ── Step 1b: Ifwagi Hospital — where the test Hospital Officer works ─────
+  const hospital = await getOrCreateFacility('HF-IFWAGI-001', {
+    facilityName:  'Ifwagi Hospital',
+    facilityType:  'hospital',
+    facilityGrade: 'H',
+    ownershipType: 'public',
+    villageId:     village.id,
+    wardId:        ward.id,
+    districtId:    district.id,
+  })
+  console.log(`  Facility ready: ${hospital.facilityName}`)
+
   // ── Step 2: National Admin ──────────────────────────────────────────────
   const superAdminPasswordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
   const superAdmin = await prisma.superAdmin.create({
@@ -187,12 +243,10 @@ async function main() {
   const districtAdmin = await prisma.districtAdmin.create({
     data: {
       fullName:     'Kishosha Sina Ngusa',
-      email:        'kuhega2025@gmail.com',
+      email:        'kihega2025@gmail.com',
       mobile:       '0613142030',
       birthId:      'BID-DISTADMIN001',
       employeeId:   'DA-0001',
-      // PATCH-DISTRICTADMIN-DEPT-FIX-2026: DistrictAdmin has no `department`
-      // column in this schema (unlike SuperAdmin) — removed.
       regionId:     region.id,
       districtId:   district.id,
       status:       'active',
@@ -231,20 +285,26 @@ async function main() {
       birthId:      'BID-HOSPOFFICER1',
       employeeId:   'HO-0001',
       districtId:   district.id,
+      facilityId:   hospital.id,
       status:       'active',
       passwordHash: hospitalOfficerPasswordHash,
       createdById:  districtAdmin.id,
     },
   })
-  console.log(`  Hospital Officer: ${hospitalOfficer.fullName}  <${hospitalOfficer.email}>`)
+  console.log(`  Hospital Officer: ${hospitalOfficer.fullName}  <${hospitalOfficer.email}>  (${hospital.facilityName})`)
 
   // ── Step 6: test father/mother citizens (for birth-registration demo) ───
+  // PATCH-SEED-NIDFIX-2026: upsert `where` now keys on nationalId — the
+  // column Postgres actually enforces as unique here — instead of birthId.
+  // Combined with the cleanup fix above, this means there is never a
+  // pre-existing row with this nationalId left dangling for Prisma to
+  // collide with on create.
   const father = await prisma.citizen.upsert({
-    where:  { birthId: 'BID-FATHER0001' },
-    update: { age: 41, vitalStatus: 'alive', currentVillageId: village.id },
+    where:  { nationalId: TEST_FATHER.nationalId },
+    update: { age: 41, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_FATHER.birthId },
     create: {
-      birthId:          'BID-FATHER0001',
-      nationalId:       '19850315-07031-00001-24',
+      birthId:          TEST_FATHER.birthId,
+      nationalId:       TEST_FATHER.nationalId,
       firstName:        'John',
       middleName:       'Michael',
       surname:          'Makonde',
@@ -260,11 +320,11 @@ async function main() {
   console.log(`  Test father: ${father.firstName} ${father.surname}  BID: ${father.birthId}`)
 
   const mother = await prisma.citizen.upsert({
-    where:  { birthId: 'BID-MOTHER0001' },
-    update: { age: 37, vitalStatus: 'alive', currentVillageId: village.id },
+    where:  { nationalId: TEST_MOTHER.nationalId },
+    update: { age: 37, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_MOTHER.birthId },
     create: {
-      birthId:          'BID-MOTHER0001',
-      nationalId:       '19880622-07031-00002-13',
+      birthId:          TEST_MOTHER.birthId,
+      nationalId:       TEST_MOTHER.nationalId,
       firstName:        'Grace',
       middleName:       'Rose',
       surname:          'Mwamba',

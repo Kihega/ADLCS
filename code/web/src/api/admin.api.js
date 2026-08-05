@@ -53,6 +53,12 @@ export async function apiCreateVillage(wardId, name, type = 'village') {
   return data
 }
 
+// PATCH-EMAIL-VISIBILITY-2026: standalone Resend delivery check.
+export async function apiSendTestEmail(to) {
+  const { data } = await apiClient.post('/admin/test-email', { to })
+  return data
+}
+
 // ── Super admins [super_admin, min-1/max-3 guard] ──────────────────────────────
 // PATCH-EMAIL-2025
 export async function apiGetSuperAdmins(params = {}) {

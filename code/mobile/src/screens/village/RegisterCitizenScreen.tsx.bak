@@ -465,7 +465,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScreenHeader
           title="Register Citizen"

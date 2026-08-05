@@ -11,106 +11,10 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import NetInfo from '@react-native-community/netinfo'
 import { LocalBirth, LocalDeath } from './localDb'
 import { resolveBase, resetResolver } from './apiResolver'
 
 // API_BASE is resolved dynamically — see apiResolver.ts
-
-// ── PATCH-OFFLINE-QUEUE-2026 ───────────────────────────────────────────────────
-// A registration must reach the central database directly whenever the
-// device is online — no local storage involved. If (and only if) the direct
-// POST cannot go through (offline, timeout, backend unreachable), the record
-// is queued in AsyncStorage instead of being silently dropped, and is
-// automatically retried the moment connectivity returns (or the next time
-// triggerSync() runs). This does NOT reintroduce SQLite/local-first storage —
-// it is a small pending-outbox for the rare case a submission can't reach
-// the server immediately.
-const PENDING_BIRTHS_KEY = 'tzcrvs_pending_births'
-const PENDING_DEATHS_KEY = 'tzcrvs_pending_deaths'
-
-async function readQueue(key: string): Promise<any[]> {
-  try {
-    const raw = await AsyncStorage.getItem(key)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
-  }
-}
-
-async function writeQueue(key: string, items: any[]): Promise<void> {
-  try {
-    await AsyncStorage.setItem(key, JSON.stringify(items))
-  } catch {
-    /* best-effort */
-  }
-}
-
-/** Pending birth registrations waiting to reach the central database. */
-export async function getPendingBirths(): Promise<any[]> {
-  return readQueue(PENDING_BIRTHS_KEY)
-}
-
-/** Pending death registrations waiting to reach the central database. */
-export async function getPendingDeaths(): Promise<any[]> {
-  return readQueue(PENDING_DEATHS_KEY)
-}
-
-/**
- * Retry every queued birth/death against the backend. Called on
- * triggerSync() and automatically when connectivity is restored.
- * Items that still fail stay queued for the next attempt.
- */
-export async function flushPendingSync(): Promise<{ syncedBirths: number; syncedDeaths: number }> {
-  let syncedBirths = 0
-  let syncedDeaths = 0
-
-  const births = await readQueue(PENDING_BIRTHS_KEY)
-  if (births.length) {
-    const remaining: any[] = []
-    for (const item of births) {
-      try {
-        const json = await apiPost('/officer/birth/sync', item.payload)
-        if (json.success || json.duplicate) syncedBirths++
-        else remaining.push(item)
-      } catch {
-        remaining.push(item)
-      }
-    }
-    await writeQueue(PENDING_BIRTHS_KEY, remaining)
-  }
-
-  const deaths = await readQueue(PENDING_DEATHS_KEY)
-  if (deaths.length) {
-    const remaining: any[] = []
-    for (const item of deaths) {
-      try {
-        const json = await apiPost('/officer/death/sync', item.payload)
-        if (json.success || json.duplicate) syncedDeaths++
-        else remaining.push(item)
-      } catch {
-        remaining.push(item)
-      }
-    }
-    await writeQueue(PENDING_DEATHS_KEY, remaining)
-  }
-
-  if (syncedBirths || syncedDeaths) {
-    await AsyncStorage.setItem('tzcrvs_last_sync', new Date().toISOString())
-  }
-  return { syncedBirths, syncedDeaths }
-}
-
-// Auto-flush the moment the device comes back online.
-let _wasConnected = true
-NetInfo.addEventListener((state) => {
-  const nowConnected = !!state.isConnected && state.isInternetReachable !== false
-  if (nowConnected && !_wasConnected) {
-    resetResolver()
-    flushPendingSync().catch(() => {})
-  }
-  _wasConnected = nowConnected
-})
 
 export type ConnQuality = 'Good' | 'Fair' | 'Offline'
 export interface SyncResult {
@@ -274,29 +178,6 @@ export async function saveAndSyncBirth(
     console.warn('[saveAndSyncBirth]', e)
   }
 
-  // Direct save failed (offline / backend unreachable) — queue for retry
-  // instead of losing the registration.
-  const queued = await readQueue(PENDING_BIRTHS_KEY)
-  queued.push({
-    localId: id,
-    queuedAt: now,
-    payload: {
-      localId: id,
-      birthCertNo: data.certNo,
-      birthId: data.birthId,
-      childFirstName: data.childFirstName,
-      childMiddleName: data.childMiddleName,
-      childSurname: data.childSurname,
-      gender: data.gender.toLowerCase(),
-      dateOfBirth: data.dateOfBirth,
-      fatherNid: data.fatherNid,
-      motherNid: data.motherNid,
-      originVillageId: data.originVillageId,
-      registeredAt: now,
-    },
-  })
-  await writeQueue(PENDING_BIRTHS_KEY, queued)
-
   return { birth, syncedRemote: false }
 }
 
@@ -327,26 +208,6 @@ export async function saveAndSyncDeath(
   } catch (e) {
     console.warn('[saveAndSyncDeath]', e)
   }
-
-  // Direct save failed (offline / backend unreachable) — queue for retry
-  // instead of losing the registration.
-  const queued = await readQueue(PENDING_DEATHS_KEY)
-  queued.push({
-    localId: id,
-    queuedAt: now,
-    payload: {
-      localId: id,
-      deathCertNo: data.certNo,
-      nationalId: data.nationalId,
-      causeOfDeath: data.causeOfDeath,
-      dateOfDeath: data.dateOfDeath,
-      locationType: data.locationType,
-      category: data.category,
-      informantName: data.informantName,
-      registeredAt: now,
-    },
-  })
-  await writeQueue(PENDING_DEATHS_KEY, queued)
 
   return { death, syncedRemote: false }
 }
@@ -420,20 +281,15 @@ export async function getSyncStatus() {
 
 // ── Trigger sync — marks all pending records as synced in DB ─────────────────
 export async function triggerSync(): Promise<SyncResult> {
-  // First retry anything queued from a previous failed direct-save attempt.
-  const { syncedBirths, syncedDeaths } = await flushPendingSync()
-  const pendingLeft =
-    (await readQueue(PENDING_BIRTHS_KEY)).length + (await readQueue(PENDING_DEATHS_KEY)).length
-
   try {
     const json = await apiPost('/officer/sync/trigger', {})
     return {
-      synced: (json.data?.synced ?? 0) + syncedBirths + syncedDeaths,
-      failed: pendingLeft,
+      synced: json.data?.synced ?? 0,
+      failed: 0,
       offline: false,
     }
   } catch {
-    return { synced: syncedBirths + syncedDeaths, failed: pendingLeft, offline: pendingLeft > 0 }
+    return { synced: 0, failed: 0, offline: false }
   }
 }
 

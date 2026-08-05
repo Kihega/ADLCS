@@ -48,7 +48,6 @@ const { Router } = require('express')
 const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const { prisma } = require('../lib/prisma')
-const { findPersonByBid } = require('../lib/personLookup')
 const { getRedis, isRedisReady } = require('../lib/redis')
 const { requireAuth, requireRole } = require('../middleware/auth')
 
@@ -237,31 +236,14 @@ router.get('/citizen-lookup', async (req, res) => {
         currentVillage: { select: { name: true, ward: { select: { name: true, district: { select: { name: true, region: { select: { name: true } } } } } } } },
       },
     })
-    if (citizen) {
-      return res.json({
-        success: true,
-        data: {
-          ...citizen,
-          fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
-        },
-      })
-    }
-    // PATCH-BID-UNIVERSAL-2026: a BID is valid the moment a birth is
-    // registered, before any Citizen/NIN exists — fall back to the Birth
-    // table so a freshly-generated BID can be used immediately here too
-    // (e.g. confirming identity when registering a new officer account).
-    const person = await findPersonByBid(birthId)
-    if (person) {
-      return res.json({
-        success: true,
-        data: {
-          ...person,
-          fullName: [person.firstName, person.middleName, person.surname].filter(Boolean).join(' '),
-          currentVillage: null,
-        },
-      })
-    }
-    return res.status(404).json({ success: false, message: 'No citizen found with this Birth ID.' })
+    if (!citizen) return res.status(404).json({ success: false, message: 'No citizen found with this Birth ID.' })
+    return res.json({
+      success: true,
+      data: {
+        ...citizen,
+        fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
+      },
+    })
   } catch (err) {
     console.error('[admin/citizen-lookup]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })

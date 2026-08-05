@@ -19,11 +19,12 @@ import {
   X,
   CheckCircle2,
   Copy,
-  Cross,
-  AlertTriangle,
   Search,
   User,
   CheckCircle2 as CC,
+  Heart,
+  Shield,
+  Download,
 } from 'lucide-react-native'
 import * as Clipboard from 'expo-clipboard'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -31,8 +32,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
 import { resolveBase } from '../../services/apiResolver'
-
-import { saveDeath, generateDeathCertNo } from '../../services/localDb'
+import { generateMarriagePdf, sharePdf } from '../../services/certificateService'
+import type { LocalMarriage } from '../../services/localDb'
 
 // ── Reusable calendar picker (no external packages) ──────────────────────────
 function CalPicker({
@@ -379,144 +380,138 @@ function ScreenHeader({
   )
 }
 
-type VStack = { VillageHome: undefined; VillageRecordDeath: undefined }
-type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageRecordDeath'> }
+type VStack = { VillageHome: undefined; RegisterMarriage: undefined }
+type Props = { navigation: NativeStackNavigationProp<VStack, 'RegisterMarriage'> }
 
+async function lookupCitizen(nid: string, token: string | null): Promise<any | null> {
+  if (!token || !isOnline()) return null
+  try {
+    const base = await resolveBase()
+    const r = await fetch(`${base}/officer/citizen-lookup?q=${encodeURIComponent(nid)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: (() => {
+        const __c = new AbortController()
+        setTimeout(() => __c.abort(), 5000)
+        return __c.signal
+      })(),
+    })
+    const j = await r.json()
+    return j.success ? j.data : null
+  } catch {
+    return null
+  }
+}
 
-export default function VillageRecordDeathScreen({ navigation }: Props) {
+function genCertNo() {
+  return `TZ-MAR-${Date.now().toString().slice(-8)} M`
+}
+
+export default function RegisterMarriageScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
-  const [lookupId, setLookupId] = useState('')
-  const [lookupLoad, setLookupLoad] = useState(false)
-  const [citizen, setCitizen] = useState<any>(null)
-  const [cause, setCause] = useState('')
-  const [dod, setDod] = useState('')
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
+  const [husbandNid, setHusbandNid] = useState('')
+  const [husbandData, setHusbandData] = useState<any>(null)
+  const [husbandLoading, setHusbandLoading] = useState(false)
+  const [wifeNid, setWifeNid] = useState('')
+  const [wifeData, setWifeData] = useState<any>(null)
+  const [wifeLoading, setWifeLoading] = useState(false)
+  const [marriageDate, setMarriageDate] = useState('')
   const [showCal, setShowCal] = useState(false)
-  const [locationType, setLocType] = useState<'home' | 'public_place' | 'other'>('home')
-  const [category, setCategory] = useState<'infant' | 'child' | 'adult' | 'maternal'>('adult')
-  const [informant, setInformant] = useState('')
+  const [marriageType, setMarriageType] = useState<'civil' | 'religious' | 'customary'>('civil')
+  const [witness1, setWitness1] = useState('')
+  const [witness2, setWitness2] = useState('')
+  const [bridePrice, setBridePrice] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [certNo, setCertNo] = useState('')
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [downloading, setDownloading] = useState(false)
   const [toast, setToast] = useState('')
   const [toastVis, setToastVis] = useState(false)
 
-  const LOC_TYPES = [
-    { val: 'home', label: 'Home' },
-    { val: 'public_place', label: 'Public Place' },
-    { val: 'other', label: 'Other' },
-  ] as const
-  const CATEGORIES = [
-    { val: 'infant', label: 'Infant (<1yr)' },
-    { val: 'child', label: 'Child (1–17)' },
-    { val: 'adult', label: 'Adult (18+)' },
-    { val: 'maternal', label: 'Maternal' },
+  const MTYPES = [
+    { val: 'civil', label: 'Civil Marriage', color: '#0891b2' },
+    { val: 'religious', label: 'Religious Marriage', color: '#7c3aed' },
+    { val: 'customary', label: 'Customary Marriage', color: '#f97316' },
   ] as const
 
-  const searchCitizen = async () => {
-    if (lookupId.trim().length < 3) return
-    setLookupLoad(true)
-    try {
-      const token = await AsyncStorage.getItem('tzcrvs_access_token')
-      if (token && isOnline()) {
-        const base = await resolveBase()
-        const r = await fetch(
-          `${base}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: (() => {
-              const __c = new AbortController()
-              setTimeout(() => __c.abort(), 5000)
-              return __c.signal
-            })(),
-          }
-        )
-        const j = await r.json()
-        if (j.success && j.data) {
-          setCitizen(j.data)
-          setStep(2)
-          setLookupLoad(false)
-          return
-        }
-      }
-    } catch {}
-    Alert.alert('Not Found Online', 'Proceed with manual entry?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Manual Entry',
-        onPress: () => {
-          setCitizen({ fullName: lookupId.trim(), nationalId: lookupId.trim() })
-          setStep(2)
-        },
-      },
-    ])
-    setLookupLoad(false)
+  const searchParty = async (nid: string, party: 'husband' | 'wife') => {
+    const setLoading = party === 'husband' ? setHusbandLoading : setWifeLoading
+    const setData = party === 'husband' ? setHusbandData : setWifeData
+    setLoading(true)
+    const token = await AsyncStorage.getItem('tzcrvs_access_token')
+    const found = await lookupCitizen(nid.trim(), token)
+    if (found) setData(found)
+    else Alert.alert('Not Found', 'Citizen not found. Enter name manually or check NID.')
+    setLoading(false)
   }
 
   const handleSubmit = async () => {
-    if (!cause.trim() || !dod.trim() || !informant.trim()) {
-      Alert.alert('Incomplete', 'Cause of death, date of death, and informant name are required.')
+    if (!marriageDate) {
+      Alert.alert('Required', 'Select the marriage date.')
+      return
+    }
+    if (!witness1.trim()) {
+      Alert.alert('Required', 'Enter at least one witness name.')
       return
     }
     setSubmitting(true)
     try {
-      const cert = generateDeathCertNo()
+      const cert = genCertNo()
       setCertNo(cert)
       const token = await AsyncStorage.getItem('tzcrvs_access_token')
-      let officerName = '',
-        facilityName = ''
-      if (token && isOnline()) {
+      if (isOnline() && token) {
         try {
-          const base = await resolveBase()
-          const r = await fetch(`${base}/officer/dashboard`, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: (() => {
-              const __c = new AbortController()
-              setTimeout(() => __c.abort(), 5000)
-              return __c.signal
-            })(),
-          })
-          const j = await r.json()
-          if (j.success) {
-            officerName = j.data.officerName
-            facilityName = j.data.villageName ?? j.data.facilityName
-          }
-        } catch {}
-      }
-      await saveDeath({
-        certNo: cert,
-        nationalId: citizen?.nationalId ?? lookupId.trim(),
-        deceasedName:
-          (citizen?.fullName ?? citizen?.firstName)
-            ? `${citizen.firstName} ${citizen.surname ?? ''}`.trim()
-            : lookupId.trim(),
-        causeOfDeath: cause.trim(),
-        dateOfDeath: dod.trim(),
-        locationType: locationType as any,
-        category: category as any,
-        informantName: informant.trim(),
-        facilityName: facilityName || 'Village',
-        officerName,
-        rawJson: JSON.stringify({ nationalId: citizen?.nationalId, causeOfDeath: cause.trim() }),
-      })
-      if (token && isOnline()) {
-        try {
-          await apiPost('/village/death', {
-            deceasedName: citizen?.fullName ?? lookupId.trim(),
-            nationalId: citizen?.nationalId ?? lookupId.trim(),
-            causeOfDeath: cause.trim(),
-            dateOfDeath: dod.trim(),
-            category: category,
-            informantName: informant.trim(),
-            deathCertNo: cert,
-            locationType: locationType,
+          await apiPost('/village/marriage', {
+            husbandNid,
+            husbandName: husbandData
+              ? `${husbandData.firstName} ${husbandData.surname}`
+              : husbandNid,
+            wifeNid,
+            wifeName: wifeData ? `${wifeData.firstName} ${wifeData.surname}` : wifeNid,
+            marriageDate,
+            marriageType,
+            witness1: witness1.trim(),
+            witness2: witness2.trim(),
+            bridePrice: bridePrice.trim(),
+            certNo: cert,
           })
         } catch {}
       }
-      setStep(3)
+      setStep(4)
     } catch {
-      Alert.alert('Error', 'Submission failed. Please try again.')
+      Alert.alert('Error', 'Submission failed.')
     }
     setSubmitting(false)
+  }
+
+  // ── Download/print the marriage certificate (mirrors the birth/death flow) ──
+  const handleDownload = async () => {
+    if (!certNo) return
+    setDownloading(true)
+    try {
+      const marriage: LocalMarriage = {
+        id: certNo,
+        certNo,
+        husbandName: husbandData
+          ? `${husbandData.firstName} ${husbandData.surname}`
+          : husbandNid,
+        husbandNid,
+        wifeName: wifeData ? `${wifeData.firstName} ${wifeData.surname}` : wifeNid,
+        wifeNid,
+        marriageDate,
+        marriagePlace: 'Village Registration Office',
+        marriageType,
+        witness1Name: witness1.trim(),
+        witness2Name: witness2.trim(),
+        officerName: 'Village Registration Officer',
+        registeredAt: new Date().toISOString(),
+      }
+      const path = await generateMarriagePdf(marriage)
+      await sharePdf(path)
+    } catch {
+      Alert.alert('Download Failed', 'Could not generate the certificate. Please try again.')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const copy = async (text: string, label: string) => {
@@ -526,46 +521,115 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
     setTimeout(() => setToastVis(false), 2400)
   }
 
+  const NidSearch = ({ label, nid, setNid, data, loading, party, color }: any) => (
+    <View>
+      {/* PATCH-BID-LOOKUP-2026: husband/wife are now looked up by Birth ID (BID) */}
+      <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
+        {label} Birth ID (BID) *
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+        <TextInput
+          style={{
+            flex: 1,
+            borderWidth: 1,
+            borderRadius: 10,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            fontSize: 14,
+            backgroundColor: T.card2,
+            borderColor: T.border,
+            color: T.text,
+          }}
+          value={nid}
+          onChangeText={(raw) => setNid(raw.toUpperCase())}
+          placeholder="BID-XXXXXXXXXX"
+          placeholderTextColor={T.textDim}
+          returnKeyType="search"
+          blurOnSubmit={false}
+        />
+        <TouchableOpacity
+          style={{
+            backgroundColor: color,
+            borderRadius: 10,
+            paddingHorizontal: 14,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: nid.trim().length >= 5 ? 1 : 0.4,
+          }}
+          onPress={() => searchParty(nid, party)}
+          disabled={nid.trim().length < 5 || loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Search size={16} color="#fff" />
+          )}
+        </TouchableOpacity>
+      </View>
+      {data && (
+        <View
+          style={{
+            borderWidth: 1,
+            borderRadius: 10,
+            borderColor: `${color}40`,
+            backgroundColor: `${color}10`,
+            padding: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <User size={14} color={color} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: T.text }}>
+              {data.firstName} {data.middleName ?? ''} {data.surname}
+            </Text>
+            <Text style={{ fontSize: 11, color: T.textSub }}>
+              {data.nationalId} · {data.gender?.toUpperCase()}
+            </Text>
+          </View>
+          <CC size={16} color={TZ.green} />
+        </View>
+      )}
+    </View>
+  )
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScreenHeader
-          title="Record Death"
-          sub="Outside Health Facility"
-          icon={<Cross size={18} color="#dc2626" />}
-          iconBg="#dc262618"
+          title="Register Marriage"
+          sub="Civil Registration Act (Cap 29)"
+          icon={<Heart size={18} color="#e11d48" />}
+          iconBg="#e11d4818"
           onBack={() =>
-            step > 1 && step < 3 ? setStep((s) => (s - 1) as any) : navigation.goBack()
+            step > 1 && step < 4 ? setStep((s) => (s - 1) as any) : navigation.goBack()
           }
         />
 
-        {/* Step dots */}
+        {/* Step indicator */}
         <View
           style={{
             flexDirection: 'row',
             backgroundColor: T.card,
             borderBottomWidth: 1,
             borderBottomColor: T.border,
-            paddingVertical: 10,
-            paddingHorizontal: 20,
-            gap: 8,
-            justifyContent: 'center',
           }}
         >
-          {['Lookup', 'Details', 'Recorded'].map((lbl, i) => (
-            <View key={lbl} style={{ alignItems: 'center', flex: 1 }}>
+          {['Husband', 'Wife', 'Details', 'Certificate'].map((lbl, i) => (
+            <View key={lbl} style={{ flex: 1, alignItems: 'center', paddingVertical: 10 }}>
               <View
                 style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 11,
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
                   alignItems: 'center',
                   justifyContent: 'center',
                   marginBottom: 3,
-                  backgroundColor: step > i + 1 ? TZ.green : step === i + 1 ? '#dc2626' : T.border,
+                  backgroundColor: step > i + 1 ? TZ.green : step === i + 1 ? '#e11d48' : T.border,
                 }}
               >
                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{i + 1}</Text>
@@ -587,155 +651,100 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
           contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Hospital warning */}
-          <View
-            style={{
-              backgroundColor: '#f9731612',
-              borderWidth: 1,
-              borderColor: '#f9731640',
-              borderRadius: 12,
-              padding: 14,
-              marginBottom: 16,
-              flexDirection: 'row',
-              gap: 10,
-            }}
-          >
-            <AlertTriangle size={16} color="#f97316" />
-            <Text style={{ fontSize: 12, color: T.textSub, flex: 1, lineHeight: 18 }}>
-              Record deaths that occurred{' '}
-              <Text style={{ fontWeight: '800', color: '#f97316' }}>OUTSIDE health facilities</Text>
-              . Deaths at hospitals or dispensaries are recorded by the Hospital Officer.
-            </Text>
-          </View>
-
           {step === 1 && (
-            <View style={{ gap: 14 }}>
+            <View style={{ gap: 16 }}>
               <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>
-                Search Deceased Citizen
+                Husband Identification
               </Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TextInput
-                  style={{
-                    flex: 1,
-                    borderWidth: 1,
-                    borderRadius: 10,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                    fontSize: 14,
-                    backgroundColor: T.card2,
-                    borderColor: T.border,
-                    color: T.text,
-                  }}
-                  value={lookupId}
-                  onChangeText={setLookupId}
-                  placeholder="Birth ID (BID) or full name"  /* PATCH-BID-LOOKUP-2026 */
-                  placeholderTextColor={T.textDim}
-                  returnKeyType="search"
-                  blurOnSubmit={false}
-                  onSubmitEditing={searchCitizen}
+              <NidSearch
+                label="Husband"
+                nid={husbandNid}
+                setNid={setHusbandNid}
+                data={husbandData}
+                loading={husbandLoading}
+                party="husband"
+                color="#0891b2"
+              />
+              {!husbandData && (
+                <SField
+                  label="Or enter name manually"
+                  value={husbandNid}
+                  onChange={setHusbandNid}
+                  placeholder="Full name if NID unavailable"
+                  bg={T.card2}
+                  bc={T.border}
+                  tc={T.text}
+                  dc={T.textDim}
                 />
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: '#dc2626',
-                    borderRadius: 10,
-                    paddingHorizontal: 14,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: lookupId.trim().length >= 3 ? 1 : 0.4,
-                  }}
-                  onPress={searchCitizen}
-                  disabled={lookupId.trim().length < 3 || lookupLoad}
-                >
-                  {lookupLoad ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Search size={16} color="#fff" />
-                  )}
-                </TouchableOpacity>
-              </View>
-              {citizen && (
-                <View
-                  style={{
-                    borderWidth: 1,
-                    borderRadius: 12,
-                    borderColor: `${TZ.green}40`,
-                    backgroundColor: `${TZ.green}10`,
-                    padding: 12,
-                    flexDirection: 'row',
-                    gap: 10,
-                  }}
-                >
-                  <User size={15} color={TZ.green} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: T.text }}>
-                      {citizen.fullName ??
-                        `${citizen.firstName ?? ''} ${citizen.surname ?? ''}`.trim()}
-                    </Text>
-                    {citizen.nationalId && (
-                      <Text style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>
-                        {citizen.nationalId}
-                      </Text>
-                    )}
-                  </View>
-                </View>
               )}
               <TouchableOpacity
                 style={{
-                  backgroundColor: '#dc2626',
+                  backgroundColor: '#e11d48',
                   borderRadius: 12,
                   paddingVertical: 14,
                   alignItems: 'center',
-                  opacity: citizen ? 1 : 0.4,
+                  opacity: husbandNid.trim() ? 1 : 0.4,
                 }}
                 onPress={() => setStep(2)}
-                disabled={!citizen}
+                disabled={!husbandNid.trim()}
               >
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
-                  Proceed to Details
-                </Text>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Continue →</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {step === 2 && (
-            <View style={{ gap: 0 }}>
-              {citizen && (
-                <View
-                  style={{
-                    borderWidth: 1,
-                    borderRadius: 12,
-                    borderColor: `${TZ.green}40`,
-                    backgroundColor: `${TZ.green}10`,
-                    padding: 12,
-                    flexDirection: 'row',
-                    gap: 10,
-                    marginBottom: 14,
-                  }}
-                >
-                  <User size={15} color={TZ.green} />
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: T.text, flex: 1 }}>
-                    {citizen.fullName ??
-                      `${citizen.firstName ?? ''} ${citizen.surname ?? ''}`.trim()}
-                  </Text>
-                </View>
-              )}
-              <SField
-                label="Cause of Death"
-                value={cause}
-                onChange={setCause}
-                placeholder="e.g. Malaria, Accident, Cardiac arrest"
-                required
-                multiline
-                bg={T.card2}
-                bc={T.border}
-                tc={T.text}
-                dc={T.textDim}
+            <View style={{ gap: 16 }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>
+                Wife Identification
+              </Text>
+              <NidSearch
+                label="Wife"
+                nid={wifeNid}
+                setNid={setWifeNid}
+                data={wifeData}
+                loading={wifeLoading}
+                party="wife"
+                color="#7c3aed"
               />
-              <View style={{ marginBottom: 14 }}>
+              {!wifeData && (
+                <SField
+                  label="Or enter name manually"
+                  value={wifeNid}
+                  onChange={setWifeNid}
+                  placeholder="Full name if NID unavailable"
+                  bg={T.card2}
+                  bc={T.border}
+                  tc={T.text}
+                  dc={T.textDim}
+                />
+              )}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#e11d48',
+                  borderRadius: 12,
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  opacity: wifeNid.trim() ? 1 : 0.4,
+                }}
+                onPress={() => setStep(3)}
+                disabled={!wifeNid.trim()}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Continue →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 3 && (
+            <View style={{ gap: 14 }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>
+                Marriage Details
+              </Text>
+              <View>
                 <Text
                   style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}
                 >
-                  Date of Death *
+                  Date of Marriage *
                 </Text>
                 <TouchableOpacity
                   style={{
@@ -751,79 +760,95 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                   }}
                   onPress={() => setShowCal(true)}
                 >
-                  <Text style={{ color: dod ? T.text : T.textDim, fontSize: 14 }}>
-                    {dod || 'Select date'}
+                  <Text style={{ color: marriageDate ? T.text : T.textDim, fontSize: 14 }}>
+                    {marriageDate || 'Select date'}
                   </Text>
                   <Calendar size={16} color={T.textDim} />
                 </TouchableOpacity>
               </View>
-              <View style={{ marginBottom: 14 }}>
+              <View>
                 <Text
                   style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 8 }}
                 >
-                  Place of Death
+                  Type of Marriage *
                 </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {LOC_TYPES.map((l) => (
+                <View style={{ gap: 8 }}>
+                  {MTYPES.map((mt) => (
                     <TouchableOpacity
-                      key={l.val}
-                      onPress={() => setLocType(l.val)}
+                      key={mt.val}
+                      onPress={() => setMarriageType(mt.val)}
                       style={{
-                        borderWidth: 1,
-                        borderRadius: 20,
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        borderColor: locationType === l.val ? '#dc2626' : T.border,
-                        backgroundColor: locationType === l.val ? '#dc262618' : T.card,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 12,
+                        borderWidth: 1.5,
+                        borderRadius: 12,
+                        padding: 14,
+                        borderColor: marriageType === mt.val ? mt.color : T.border,
+                        backgroundColor: marriageType === mt.val ? `${mt.color}15` : T.card2,
                       }}
                     >
-                      <Text
+                      <View
                         style={{
-                          fontSize: 11,
-                          color: locationType === l.val ? '#dc2626' : T.textSub,
+                          width: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          borderWidth: 2,
+                          borderColor: mt.color,
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
                       >
-                        {l.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-              <View style={{ marginBottom: 14 }}>
-                <Text
-                  style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 8 }}
-                >
-                  Category
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {CATEGORIES.map((c) => (
-                    <TouchableOpacity
-                      key={c.val}
-                      onPress={() => setCategory(c.val)}
-                      style={{
-                        borderWidth: 1,
-                        borderRadius: 20,
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        borderColor: category === c.val ? '#dc2626' : T.border,
-                        backgroundColor: category === c.val ? '#dc262618' : T.card,
-                      }}
-                    >
+                        {marriageType === mt.val && (
+                          <View
+                            style={{
+                              width: 9,
+                              height: 9,
+                              borderRadius: 4.5,
+                              backgroundColor: mt.color,
+                            }}
+                          />
+                        )}
+                      </View>
                       <Text
-                        style={{ fontSize: 11, color: category === c.val ? '#dc2626' : T.textSub }}
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '600',
+                          color: marriageType === mt.val ? mt.color : T.text,
+                        }}
                       >
-                        {c.label}
+                        {mt.label}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
               <SField
-                label="Informant Name"
-                value={informant}
-                onChange={setInformant}
-                placeholder="Full name of reporting person"
+                label="Witness 1 Full Name"
+                value={witness1}
+                onChange={setWitness1}
+                placeholder="Name of first witness"
                 required
+                bg={T.card2}
+                bc={T.border}
+                tc={T.text}
+                dc={T.textDim}
+              />
+              <SField
+                label="Witness 2 Full Name"
+                value={witness2}
+                onChange={setWitness2}
+                placeholder="Name of second witness (optional)"
+                bg={T.card2}
+                bc={T.border}
+                tc={T.text}
+                dc={T.textDim}
+              />
+              <SField
+                label="Bride Price / Mahari"
+                value={bridePrice}
+                onChange={setBridePrice}
+                placeholder="e.g. 5 cattle, TZS 500,000 (optional)"
                 bg={T.card2}
                 bc={T.border}
                 tc={T.text}
@@ -831,11 +856,10 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
               />
               <TouchableOpacity
                 style={{
-                  backgroundColor: '#dc2626',
+                  backgroundColor: '#e11d48',
                   borderRadius: 12,
                   paddingVertical: 14,
                   alignItems: 'center',
-                  marginTop: 4,
                   opacity: submitting ? 0.7 : 1,
                 }}
                 onPress={handleSubmit}
@@ -845,50 +869,53 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
-                    Submit Death Record
+                    Register Marriage
                   </Text>
                 )}
               </TouchableOpacity>
             </View>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <View style={{ alignItems: 'center', gap: 14 }}>
               <View
                 style={{
                   width: 80,
                   height: 80,
                   borderRadius: 40,
-                  backgroundColor: '#dc262618',
+                  backgroundColor: '#e11d4818',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <CC size={40} color="#dc2626" />
+                <Heart size={40} color="#e11d48" />
               </View>
-              <Text style={{ fontSize: 20, fontWeight: '900', color: T.text }}>Death Recorded</Text>
-              <Text style={{ fontSize: 12, color: T.textSub, textAlign: 'center' }}>
-                Saved locally · will sync to Central Database on reconnection
+              <Text style={{ fontSize: 22, fontWeight: '900', color: T.text }}>
+                Marriage Registered!
+              </Text>
+              <Text style={{ fontSize: 13, color: T.textSub, textAlign: 'center', lineHeight: 20 }}>
+                {husbandData ? `${husbandData.firstName} ${husbandData.surname}` : husbandNid} &{' '}
+                {wifeData ? `${wifeData.firstName} ${wifeData.surname}` : wifeNid}
               </Text>
               <View
                 style={{
                   width: '100%',
                   borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: '#dc262650',
-                  backgroundColor: '#dc262610',
+                  borderColor: '#e11d4850',
+                  backgroundColor: '#e11d4810',
                   padding: 14,
                 }}
               >
                 <Text style={{ fontSize: 11, color: T.textDim, marginBottom: 4 }}>
-                  CERTIFICATE NUMBER
+                  MARRIAGE CERTIFICATE NUMBER
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text
                     style={{
                       fontSize: 16,
                       fontWeight: '900',
-                      color: '#dc2626',
+                      color: '#e11d48',
                       flex: 1,
                       letterSpacing: 1,
                     }}
@@ -899,13 +926,55 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                     onPress={() => copy(certNo, 'Certificate number')}
                     style={{ padding: 4 }}
                   >
-                    <Copy size={15} color="#dc2626" />
+                    <Copy size={15} color="#e11d48" />
                   </TouchableOpacity>
                 </View>
               </View>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  gap: 8,
+                  width: '100%',
+                  backgroundColor: '#0891b212',
+                  borderRadius: 10,
+                  padding: 12,
+                }}
+              >
+                <Shield size={13} color="#0891b2" />
+                <Text style={{ fontSize: 10, color: T.textSub, flex: 1 }}>
+                  This is a copy only. To be valid for official Government use, the certificate
+                  must be signed and stamped by the Registration Insolvency and Trusteeship
+                  Agency (RITA).
+                </Text>
+              </View>
               <TouchableOpacity
                 style={{
-                  backgroundColor: '#dc2626',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: '#e11d4818',
+                  borderWidth: 1,
+                  borderColor: '#e11d4850',
+                  borderRadius: 12,
+                  paddingVertical: 13,
+                  width: '100%',
+                }}
+                onPress={handleDownload}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <ActivityIndicator size="small" color="#e11d48" />
+                ) : (
+                  <Download size={16} color="#e11d48" />
+                )}
+                <Text style={{ color: '#e11d48', fontWeight: '800', fontSize: 14 }}>
+                  {downloading ? 'Generating…' : 'Download Certificate'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#e11d48',
                   borderRadius: 12,
                   paddingVertical: 14,
                   alignItems: 'center',
@@ -922,10 +991,10 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
         </ScrollView>
         <CalPicker
           visible={showCal}
-          title="Date of Death"
+          title="Date of Marriage"
           maxDate={new Date()}
           onSelect={(d) => {
-            setDod(d)
+            setMarriageDate(d)
             setShowCal(false)
           }}
           onClose={() => setShowCal(false)}

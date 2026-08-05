@@ -67,4 +67,35 @@ async function sendWelcomeEmail({ to, fullName, role, defaultPassword }) {
   }
 }
 
-module.exports = { sendWelcomeEmail }
+/**
+ * sendTestEmail — minimal diagnostic send, used by POST /admin/test-email
+ * to verify the Resend integration in isolation (no fake account/password
+ * content, so it can't be mistaken for a real notice if forwarded).
+ * Throws on failure — callers should catch and report the message.
+ */
+async function sendTestEmail(to) {
+  if (!RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not set on this server')
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from:    FROM_ADDRESS,
+      to:      [to],
+      subject: 'TzCRVS — Resend test email',
+      html:    '<p>This is a test email from TzCRVS to confirm the Resend integration is working.</p>'
+        + `<p style="color:#888;font-size:12px;">Sent ${new Date().toISOString()}</p>`,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Resend API error ${res.status}: ${body}`)
+  }
+  return true
+}
+
+module.exports = { sendWelcomeEmail, sendTestEmail }

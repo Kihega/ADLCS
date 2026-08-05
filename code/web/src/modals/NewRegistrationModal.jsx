@@ -393,8 +393,18 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
             <p className="text-gray-500 text-xs">
               Status: <span className="text-[#00ff9d] uppercase">{result.status}</span> — share this default
               password with them directly. They can log in right away with their email and this password,
-              and should change it within 3 days. A confirmation email has also been sent to their address.
+              and should change it within 3 days.
             </p>
+            {/* PATCH-EMAIL-VISIBILITY-2026: show the real outcome instead of an
+                unconditional claim the email went out. */}
+            {result.emailSent ? (
+              <p className="text-[#00ff9d] text-xs">✓ Confirmation email sent to {result.email}.</p>
+            ) : (
+              <p className="text-[#ffb020] text-xs">
+                ⚠ Confirmation email did NOT send{result.emailError ? `: ${result.emailError}` : '.'} Share the
+                password with them directly.
+              </p>
+            )}
             <div
               onClick={copyPassword}
               className="flex items-center gap-2 bg-[#0a1628] border border-[#1a3060] rounded-lg px-3 py-2 cursor-pointer hover:border-[#00d4ff]/40 transition-colors"
