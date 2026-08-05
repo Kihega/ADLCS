@@ -183,6 +183,12 @@ export async function apiChangePassword(currentPassword, newPassword) {
 // already attaches the Bearer token and handles silent refresh on 401,
 // so no manual token handling is needed here at all.
 
+// PATCH-4: Delete all births (super_admin only)
+export async function apiDeleteBirths() {
+  const { data } = await apiClient.delete('/admin/births')
+  return data
+}
+
 // PATCH-4: RITA trends
 export async function apiGetRITA(params = {}) {
   const { data } = await apiClient.get('/admin/rita', { params })

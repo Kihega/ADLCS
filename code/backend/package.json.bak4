@@ -15,8 +15,7 @@
     "prisma:migrate": "npx prisma migrate dev --schema=prisma/schema.prisma",
     "prisma:generate": "npx prisma generate --schema=prisma/schema.prisma",
     "prisma:studio": "npx prisma studio --schema=prisma/schema.prisma",
-    "prisma:seed": "node prisma/seed.js",
-    "prisma:reset-population": "node prisma/reset-population-data.js"
+    "prisma:seed": "node prisma/seed.js"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
