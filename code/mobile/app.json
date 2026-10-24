@@ -39,7 +39,9 @@
           "cameraPermission": "TzCRVS needs camera access so officers can capture the citizen's photo during NIN registration.",
           "photosPermission": "TzCRVS needs photo library access so officers can select a citizen photo if the camera is unavailable."
         }
-      ]
+      ],
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {
