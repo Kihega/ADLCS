@@ -116,7 +116,7 @@ function CalPicker({
             {/* Day */}
             <View style={{ flex: 1 }}>
               <Text
-                style={{ fontSize: 10, color: '#4b6080', textAlign: 'center', marginBottom: 4 }}
+                style={{ fontSize: 10, color: '#8ea4c0', textAlign: 'center', marginBottom: 4 }}
               >
                 Day
               </Text>
@@ -149,7 +149,7 @@ function CalPicker({
             {/* Month */}
             <View style={{ flex: 2 }}>
               <Text
-                style={{ fontSize: 10, color: '#4b6080', textAlign: 'center', marginBottom: 4 }}
+                style={{ fontSize: 10, color: '#8ea4c0', textAlign: 'center', marginBottom: 4 }}
               >
                 Month
               </Text>
@@ -182,7 +182,7 @@ function CalPicker({
             {/* Year */}
             <View style={{ flex: 1.5 }}>
               <Text
-                style={{ fontSize: 10, color: '#4b6080', textAlign: 'center', marginBottom: 4 }}
+                style={{ fontSize: 10, color: '#8ea4c0', textAlign: 'center', marginBottom: 4 }}
               >
                 Year
               </Text>
@@ -962,7 +962,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                       </TouchableOpacity>
                     </View>
                     {!!error && (
-                      <Text style={{ fontSize: 11, color: '#f87171', lineHeight: 17 }}>
+                      <Text style={{ fontSize: 11, color: T.danger, lineHeight: 17 }}>
                         ⚠ {error}
                       </Text>
                     )}
@@ -1021,7 +1021,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                   )}
                   {deathType === 'infant' && (
                     <>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#dc2626' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: T.danger }}>
                         INFANT DEATH
                       </Text>
                       <Text style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>
@@ -1222,7 +1222,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                     style={{
                       fontSize: 14,
                       fontWeight: '900',
-                      color: '#dc2626',
+                      color: T.danger,
                       flex: 1,
                       letterSpacing: 1,
                     }}

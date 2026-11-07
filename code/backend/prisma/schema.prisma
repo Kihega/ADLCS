@@ -211,7 +211,8 @@ model PublicUser {
 
 model Citizen {
   id                  String           @id @default(uuid())
-  nationalId          String           @unique @map("national_id") @db.VarChar(23)
+  // NIN is issued by NIDA, not NBS — optional here (filled only from NIDA data)
+  nationalId          String?          @unique @map("national_id") @db.VarChar(23)
   firstName           String           @map("first_name") @db.VarChar(60)
   middleName          String?          @map("middle_name") @db.VarChar(60)
   surname             String           @db.VarChar(60)
@@ -311,6 +312,12 @@ model Birth {
   registeredAt    DateTime        @default(now()) @map("registered_at")
   birthId         String?         @unique @map("birth_id") @db.VarChar(30)
   originVillageId Int?            @map("origin_village_id")
+  // Parent identifier exactly as entered (BID or NIN) + name, kept even when the
+  // parent has no Citizen row yet (e.g. NIN awaiting NIDA verification).
+  fatherIdentifier String?        @map("father_identifier") @db.VarChar(40)
+  motherIdentifier String?        @map("mother_identifier") @db.VarChar(40)
+  fatherName       String?        @map("father_name") @db.VarChar(150)
+  motherName       String?        @map("mother_name") @db.VarChar(150)
   child           Citizen?        @relation("ChildBirth", fields: [childCitizenId], references: [id], onDelete: Restrict)
   facility        HealthFacility? @relation(fields: [facilityId], references: [id])
   father          Citizen?        @relation("FatherBirth", fields: [fatherCitizenId], references: [id])

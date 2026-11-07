@@ -236,7 +236,7 @@ export default function TrackMigrationScreen({ navigation }: Props) {
                 }}
               >
                 <AlertTriangle size={14} color="#f87171" />
-                <Text style={{ flex: 1, fontSize: 12, color: '#f87171' }}>{notFoundMsg}</Text>
+                <Text style={{ flex: 1, fontSize: 12, color: T.danger }}>{notFoundMsg}</Text>
               </View>
             ) : null}
 

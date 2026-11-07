@@ -4,7 +4,7 @@
  * PATCH-BID-UNIVERSAL-2026:
  * A BID is generated the moment a Hospital Officer registers a birth, but a
  * Citizen row (and NIN) is only created later — at age 18 — when a Village
- * Officer runs the NIN-issuance workflow (see POST /api/village/nin-issue).
+ * Officer registers them (NIN issuance was removed — NIN comes from NIDA).
  *
  * Several screens search "by BID" for an already-registered person (a
  * father/mother during another birth registration, a person being enrolled

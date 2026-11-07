@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -17,6 +17,7 @@
         "backgroundColor": "#1D4ED8"
       },
       "package": "tz.go.nbs.census.model",
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -27,8 +28,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "tz.go.nbs.census.model",
       "infoPlist": {
-        "NSCameraUsageDescription": "TzCRVS needs camera access so officers can capture the citizen's photo during NIN registration.",
-        "NSPhotoLibraryUsageDescription": "TzCRVS needs photo library access so officers can select a citizen photo if the camera is unavailable."
+        "NSCameraUsageDescription": "TzCRVS needs camera access so officers can attach a citizen photo to a record.",
+        "NSPhotoLibraryUsageDescription": "TzCRVS needs photo library access so officers can select a citizen photo."
       }
     },
     "plugins": [
@@ -36,8 +37,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "TzCRVS needs camera access so officers can capture the citizen's photo during NIN registration.",
-          "photosPermission": "TzCRVS needs photo library access so officers can select a citizen photo if the camera is unavailable."
+          "cameraPermission": "TzCRVS needs camera access so officers can attach a citizen photo to a record.",
+          "photosPermission": "TzCRVS needs photo library access so officers can select a citizen photo."
         }
       ],
       "expo-sharing",

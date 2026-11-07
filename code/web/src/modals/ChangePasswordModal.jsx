@@ -34,7 +34,7 @@ export default function ChangePasswordModal({ onClose }) {
   const [done,     setDone]     = useState(false)
 
   const strength = getStrength(next)
-  const inp = 'w-full bg-[#060f1e] border border-[#1e3a5f] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-700 outline-none focus:border-[#00d4ff]/50 transition-colors'
+  const inp = 'w-full bg-[#060f1e] border border-[#3d6ca3] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-400 outline-none focus:border-[#00d4ff]/50 transition-colors'
   const lbl = 'text-[10px] text-gray-400 uppercase tracking-widest mb-1.5 block'
 
   async function handleSubmit() {
@@ -54,13 +54,13 @@ export default function ChangePasswordModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-[#0d1f38] border border-[#1e3a5f] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+      <div className="bg-[#0d1f38] border border-[#3d6ca3] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#1a3060]">
           <div className="flex items-center gap-2">
             <ShieldCheck size={16} className="text-[#00d4ff]" />
             <h3 className="text-white font-bold text-sm">Change Password</h3>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white">
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
             <X size={18} />
           </button>
         </div>
@@ -70,7 +70,7 @@ export default function ChangePasswordModal({ onClose }) {
             <div className="text-center space-y-3 py-4">
               <CheckCircle size={36} className="text-[#00ff9d] mx-auto" />
               <p className="text-white font-bold text-sm">Password updated</p>
-              <p className="text-gray-500 text-xs">Use your new password next time you sign in.</p>
+              <p className="text-gray-400 text-xs">Use your new password next time you sign in.</p>
               <button
                 onClick={onClose}
                 className="w-full py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-[#00d4ff] to-[#0088bb] text-[#060f1e] hover:opacity-90 transition-all"
@@ -83,7 +83,7 @@ export default function ChangePasswordModal({ onClose }) {
               <div>
                 <label className={lbl}>Current Password</label>
                 <div className="relative">
-                  <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                  <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type={showCur ? 'text' : 'password'}
                     value={current}
@@ -91,7 +91,7 @@ export default function ChangePasswordModal({ onClose }) {
                     className={inp.replace('px-4', 'pl-9 pr-10')}
                     placeholder="••••••••"
                   />
-                  <button onClick={() => setShowCur(!showCur)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300">
+                  <button onClick={() => setShowCur(!showCur)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300">
                     {showCur ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
                 </div>
@@ -100,7 +100,7 @@ export default function ChangePasswordModal({ onClose }) {
               <div>
                 <label className={lbl}>New Password</label>
                 <div className="relative">
-                  <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                  <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type={showNew ? 'text' : 'password'}
                     value={next}
@@ -108,7 +108,7 @@ export default function ChangePasswordModal({ onClose }) {
                     className={inp.replace('px-4', 'pl-9 pr-10')}
                     placeholder="Min. 8 characters"
                   />
-                  <button onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300">
+                  <button onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300">
                     {showNew ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
                 </div>

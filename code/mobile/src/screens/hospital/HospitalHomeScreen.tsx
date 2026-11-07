@@ -30,7 +30,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Share,
-  Dimensions,
+  useWindowDimensions,
   InteractionManager,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -75,7 +75,7 @@ import {
   ConnQuality,
 } from '../../services/syncService'
 import { resolveBase } from '../../services/apiResolver'
-import { useTheme, TZ } from '../../context/ThemeContext'
+import { useTheme, TZ, connColor } from '../../context/ThemeContext'
 
 type RootStack = {
   Splash: undefined
@@ -92,12 +92,6 @@ type RootStack = {
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'HospitalHome'> }
 
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
-const W = Dimensions.get('window').width
-const CONN_COLORS: Record<ConnQuality, string> = {
-  Good: '#4ade80',
-  Fair: '#fbbf24',
-  Offline: '#f87171',
-}
 
 // ─── Change Password Modal ─────────────────────────────────────────────────────
 function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -199,7 +193,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
                 justifyContent: 'center',
               }}
             >
-              <Lock size={18} color={H.primaryL} />
+              <Lock size={18} color={T.primaryL} />
             </View>
             <View>
               <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>
@@ -227,7 +221,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
               }}
             >
               <AlertTriangle size={13} color="#f87171" />
-              <Text style={{ fontSize: 11, color: '#f87171', flex: 1 }}>{error}</Text>
+              <Text style={{ fontSize: 11, color: T.danger, flex: 1 }}>{error}</Text>
             </View>
           )}
 
@@ -365,7 +359,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
 
           {/* Strength hint */}
           {newPwd.length > 0 && newPwd.length < 8 && (
-            <Text style={{ fontSize: 10, color: '#f97316', marginTop: 4 }}>
+            <Text style={{ fontSize: 10, color: T.warning, marginTop: 4 }}>
               ⚠ Password too short ({newPwd.length}/8 chars)
             </Text>
           )}
@@ -484,7 +478,7 @@ function OfficerIdCard({
                   <View
                     style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: TZ.green }}
                   />
-                  <Text style={{ fontSize: 8, color: TZ.green, fontWeight: '700' }}>ACTIVE</Text>
+                  <Text style={{ fontSize: 8, color: T.brand, fontWeight: '700' }}>ACTIVE</Text>
                 </View>
               </View>
 
@@ -569,6 +563,9 @@ function Sidebar({
 }) {
   const { theme: T } = useTheme()
   const [mounted, setMounted] = useState(false)
+  // Live width (rotation / iPad split-view / foldables) — drawer capped on tablets.
+  const { width: W } = useWindowDimensions()
+  const drawerW = Math.min(W * 0.78, 340)
   const tx = useRef(new Animated.Value(-W)).current
   const bg = useRef(new Animated.Value(0)).current
 
@@ -615,7 +612,7 @@ function Sidebar({
       section: 'FACILITY',
       items: [
         {
-          icon: <Building2 size={15} color={H.primaryL} />,
+          icon: <Building2 size={15} color={T.primaryL} />,
           label: 'View Facility Details',
           onPress: () =>
             closeAndNavigate(() =>
@@ -631,17 +628,17 @@ function Sidebar({
       section: 'ACCOUNT',
       items: [
         {
-          icon: <IdCard size={15} color={H.primaryL} />,
+          icon: <IdCard size={15} color={T.primaryL} />,
           label: 'View My ID Card',
           onPress: () => closeAndNavigate(() => onShowProfile()),
         },
         {
-          icon: <User size={15} color={H.primaryL} />,
+          icon: <User size={15} color={T.primaryL} />,
           label: 'View Profile',
           onPress: () => closeAndNavigate(() => onShowProfile()),
         },
         {
-          icon: <Lock size={15} color={H.primaryL} />,
+          icon: <Lock size={15} color={T.primaryL} />,
           label: 'Change Password',
           onPress: () => closeAndNavigate(() => onChangePwd()),
         },
@@ -678,7 +675,10 @@ function Sidebar({
       </TouchableWithoutFeedback>
 
       <Animated.View
-        style={[s.drawer, { backgroundColor: T.card, transform: [{ translateX: tx }] }]}
+        style={[
+          s.drawer,
+          { width: drawerW, backgroundColor: T.card, transform: [{ translateX: tx }] },
+        ]}
       >
         {/* Header */}
         <LinearGradient colors={['#02143c', '#083250']} style={s.drawerHeader}>
@@ -701,7 +701,7 @@ function Sidebar({
                   style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: H.primaryL }}
                 />
                 <Text
-                  style={{ fontSize: 8, fontWeight: '700', letterSpacing: 0.6, color: H.primaryL }}
+                  style={{ fontSize: 8, fontWeight: '700', letterSpacing: 0.6, color: T.primaryL }}
                 >
                   HEALTH FACILITY OFFICER
                 </Text>
@@ -740,12 +740,12 @@ function Sidebar({
                   <Text
                     style={[
                       s.drawerItemLabel,
-                      { color: (item as any).danger ? '#f87171' : T.text },
+                      { color: (item as any).danger ? T.danger : T.text },
                     ]}
                   >
                     {item.label}
                   </Text>
-                  <ChevronRight size={14} color={(item as any).danger ? '#f87171' : T.textDim} />
+                  <ChevronRight size={14} color={(item as any).danger ? T.danger : T.textDim} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -1117,23 +1117,23 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
           }}
         >
           <View style={{ alignItems: 'center', width: 56 }}>
-            <View style={s.logoCircle}>
+            <View style={s.coatCircle}>
               <Image
-                source={require('../../../public/assets/longo_nbs.png')}
-                style={{ width: 32, height: 32 }}
+                source={require('../../../public/assets/court_of_arm.png')}
+                style={{ width: 42, height: 42 }}
                 resizeMode="contain"
               />
             </View>
             <Text
               style={{
                 fontSize: 8,
-                fontWeight: '800',
-                color: TZ.yellow,
-                letterSpacing: 1.5,
+                fontWeight: '700',
+                color: 'rgba(255,255,255,0.90)',
+                letterSpacing: 1.2,
                 marginTop: 3,
               }}
             >
-              NBS
+              TANZANIA
             </Text>
           </View>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -1160,7 +1160,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
             <Text
               style={{
                 fontSize: 9,
-                color: 'rgba(255,255,255,0.72)',
+                color: 'rgba(255,255,255,0.92)',
                 letterSpacing: 1.1,
                 textTransform: 'uppercase',
               }}
@@ -1169,23 +1169,23 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
             </Text>
           </View>
           <View style={{ alignItems: 'center', width: 56 }}>
-            <View style={s.coatCircle}>
+            <View style={s.logoCircle}>
               <Image
-                source={require('../../../public/assets/court_of_arm.png')}
-                style={{ width: 42, height: 42 }}
+                source={require('../../../public/assets/longo_nbs.png')}
+                style={{ width: 32, height: 32 }}
                 resizeMode="contain"
               />
             </View>
             <Text
               style={{
-                fontSize: 7,
-                fontWeight: '700',
-                color: 'rgba(255,255,255,0.60)',
-                letterSpacing: 1.2,
+                fontSize: 8,
+                fontWeight: '800',
+                color: TZ.yellow,
+                letterSpacing: 1.5,
                 marginTop: 3,
               }}
             >
-              TANZANIA
+              NBS
             </Text>
           </View>
         </View>
@@ -1211,7 +1211,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
               {officer.facilityName}
             </Text>
             <Text
-              style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}
+              style={{ fontSize: 10, color: 'rgba(255,255,255,0.88)', marginTop: 2 }}
               numberOfLines={1}
             >
               📍 {officer.facilityRegion}, {officer.facilityDistrict}
@@ -1279,14 +1279,14 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
                 },
               ]}
             >
-              <MapPin size={9} color={H.primaryL} />
-              <Text style={[s.zoneTxt, { color: H.primaryL }]}>
+              <MapPin size={9} color={T.primaryL} />
+              <Text style={[s.zoneTxt, { color: T.primaryL }]}>
                 ✓ Active · Online
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <ConnIcon size={10} color={CONN_COLORS[connQuality]} />
-              <Text style={{ fontSize: 10, fontWeight: '700', color: CONN_COLORS[connQuality] }}>
+              <ConnIcon size={10} color={connColor(connQuality, isDark)} />
+              <Text style={{ fontSize: 10, fontWeight: '700', color: connColor(connQuality, isDark) }}>
                 {connQuality} Mode
               </Text>
             </View>
@@ -1334,7 +1334,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}
           >
             <View style={[s.facilityIcon, { backgroundColor: `${H.primary}25` }]}>
-              <Building2 size={22} color={H.primaryL} />
+              <Building2 size={22} color={T.primaryL} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 13, fontWeight: '800', color: T.text, marginBottom: 2 }}>
@@ -1347,7 +1347,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
                 {officer.facilityDistrict}, {officer.facilityRegion}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Shield size={10} color={H.primaryL} />
+                <Shield size={10} color={T.primaryL} />
                 <Text style={{ fontSize: 10, color: T.textDim }}>
                   Authorised RITA reporting facility
                 </Text>
@@ -1428,10 +1428,10 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
         </View>
         <View style={[s.reportCard, { backgroundColor: T.card, borderColor: T.border }]}>
           {[
-            { label: 'Births registered today', value: stats.todayBirths, color: TZ.green },
-            { label: 'Deaths recorded today', value: stats.todayDeaths, color: '#f87171' },
-            { label: 'Total births this month', value: stats.monthBirths, color: TZ.green },
-            { label: 'Total deaths this month', value: stats.monthDeaths, color: '#f87171' },
+            { label: 'Births registered today', value: stats.todayBirths, color: T.brand },
+            { label: 'Deaths recorded today', value: stats.todayDeaths, color: T.danger },
+            { label: 'Total births this month', value: stats.monthBirths, color: T.brand },
+            { label: 'Total deaths this month', value: stats.monthDeaths, color: T.danger },
             { label: 'Records pending sync', value: stats.pendingSync, color: H.orange },
           ].map((row, i, arr) => (
             <View
@@ -1470,7 +1470,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
                     onPress={() => downloadReport(period, 'births')}
                   >
                     <Download size={10} color={TZ.green} />
-                    <Text style={{ fontSize: 9, fontWeight: '700', color: TZ.green }}>Births</Text>
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: T.brand }}>Births</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
@@ -1594,7 +1594,7 @@ const ic = StyleSheet.create({
     gap: 6,
   },
   barcodeArea: { flexDirection: 'row', alignItems: 'center', height: 32 },
-  footerNote: { fontSize: 7, color: 'rgba(255,255,255,0.50)', textAlign: 'center' },
+  footerNote: { fontSize: 8, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
   closeBtn: {
     backgroundColor: '#0891b2',
     borderRadius: 12,
@@ -1611,7 +1611,6 @@ const s = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    width: W * 0.78,
     shadowColor: '#000',
     shadowOffset: { width: 6, height: 0 },
     shadowOpacity: 0.4,
@@ -1631,7 +1630,7 @@ const s = StyleSheet.create({
   },
   drawerAvatarText: { fontSize: 18, fontWeight: '900', color: '#003087' },
   drawerName: { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 3 },
-  drawerFac: { fontSize: 11, color: 'rgba(255,255,255,0.65)' },
+  drawerFac: { fontSize: 11, color: 'rgba(255,255,255,0.88)' },
   drawerSection: { paddingVertical: 8, borderBottomWidth: 1 },
   drawerSectionLabel: {
     fontSize: 9,

@@ -27,6 +27,8 @@ const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { findPersonByBid, calcAge, buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
+const { classifyIdentifier } = require('../lib/parentIdentifier')
+const nida = require('../lib/nidaClient')
 
 const router = Router()
 router.use(requireAuth)
@@ -526,9 +528,16 @@ router.get('/citizen-lookup', async (req, res) => {
   const q = req.query.q?.toString().trim()
   if (!q) return res.status(400).json({ success: false, message: 'Query required' })
   try {
+    // Accepts a Birth ID (BID) or a NIN. BID is fully functional; a NIN that is
+    // not already in the local registry is handed to the NIDA adapter, which is
+    // intentionally a stub until NIDA API access exists (lib/nidaClient.js).
+    const ident = classifyIdentifier(q)
     let citizen = await prisma.citizen.findFirst({ where: { birthId: q }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
     if (!citizen) {
       citizen = await prisma.citizen.findFirst({ where: { nationalId: q }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
+    }
+    if (!citizen && ident.type === 'NIN' && ident.value !== q) {
+      citizen = await prisma.citizen.findFirst({ where: { nationalId: ident.value }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
     }
     if (!citizen) {
       citizen = await prisma.citizen.findFirst({
@@ -561,6 +570,28 @@ router.get('/citizen-lookup', async (req, res) => {
       return res.json({
         success: true,
         data: { ...person, fullName: [person.firstName, person.middleName, person.surname].filter(Boolean).join(' ') },
+      })
+    }
+    if (ident.type === 'NIN') {
+      const ext = await nida.lookupByNin(ident.value)
+      if (ext.available && ext.found) {
+        const p = ext.person
+        return res.json({
+          success: true,
+          data: {
+            nationalId: ident.value, source: 'nida',
+            firstName: p.firstName, middleName: p.middleName ?? '', surname: p.surname,
+            gender: p.gender, dateOfBirth: p.dateOfBirth,
+            fullName: [p.firstName, p.middleName, p.surname].filter(Boolean).join(' '),
+          },
+        })
+      }
+      return res.json({
+        success: false, idType: 'NIN',
+        message: ext.available
+          ? 'NIN not found at NIDA'
+          : 'NIN could not be verified (NIDA connection not available yet). Enter the parent details manually or use the Birth ID.',
+        nidaAvailable: ext.available,
       })
     }
     return res.json({ success: false, message: 'Not found' })

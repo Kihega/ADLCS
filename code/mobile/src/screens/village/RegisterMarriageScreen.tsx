@@ -127,7 +127,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: d === dy ? '#22d3ee' : T.textSub,
+                        color: d === dy ? T.primaryL : T.textSub,
                         fontWeight: d === dy ? '800' : '400',
                       }}
                     >
@@ -159,7 +159,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: i + 1 === mo ? '#22d3ee' : T.textSub,
+                        color: i + 1 === mo ? T.primaryL : T.textSub,
                         fontWeight: i + 1 === mo ? '800' : '400',
                       }}
                     >
@@ -191,7 +191,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: y === yr ? '#22d3ee' : T.textSub,
+                        color: y === yr ? T.primaryL : T.textSub,
                         fontWeight: y === yr ? '800' : '400',
                       }}
                     >
@@ -430,7 +430,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
   const MTYPES = [
     { val: 'civil', label: 'Civil Marriage', color: '#0891b2' },
     { val: 'religious', label: 'Religious Marriage', color: '#7c3aed' },
-    { val: 'customary', label: 'Customary Marriage', color: '#f97316' },
+    { val: 'customary', label: 'Customary Marriage', color: T.warning },
   ] as const
 
   const searchParty = async (nid: string, party: 'husband' | 'wife') => {
@@ -915,7 +915,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
                     style={{
                       fontSize: 16,
                       fontWeight: '900',
-                      color: '#e11d48',
+                      color: T.danger,
                       flex: 1,
                       letterSpacing: 1,
                     }}
@@ -968,7 +968,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
                 ) : (
                   <Download size={16} color="#e11d48" />
                 )}
-                <Text style={{ color: '#e11d48', fontWeight: '800', fontSize: 14 }}>
+                <Text style={{ color: T.danger, fontWeight: '800', fontSize: 14 }}>
                   {downloading ? 'Generating…' : 'Download Certificate'}
                 </Text>
               </TouchableOpacity>

@@ -32,8 +32,7 @@ import {
   Animated,
   Modal,
   TouchableWithoutFeedback,
-  Share,
-  Dimensions,
+  useWindowDimensions,
   InteractionManager,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -52,12 +51,10 @@ import {
   Heart,
   Wifi,
   WifiOff,
-  BarChart3,
   User,
   Lock,
   Menu,
   X,
-  Download,
   WifiLow,
   IdCard,
   Repeat,
@@ -71,7 +68,7 @@ import {
   checkConnQuality,
   ConnQuality,
 } from '../../services/syncService'
-import { useTheme, TZ } from '../../context/ThemeContext'
+import { useTheme, TZ, connColor } from '../../context/ThemeContext'
 
 type VStack = {
   Splash: undefined
@@ -81,7 +78,6 @@ type VStack = {
   RegisterCitizen: undefined
   RegisterMarriage: undefined
   VillageRecordDeath: undefined
-  NINRegistration: undefined
   SyncData: undefined
   MigrationHome: undefined
   TrackMigration: undefined
@@ -90,13 +86,8 @@ type VStack = {
 }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageHome'> }
 
-const G = '#1eb53a' // TZ green accent for village
-const W = Dimensions.get('window').width
-const CONN_COLORS: Record<ConnQuality, string> = {
-  Good: '#4ade80',
-  Fair: '#fbbf24',
-  Offline: '#f87171',
-}
+const G = '#1eb53a' // TZ green accent for village (fills / spinners)
+const G_ID = '#15803d' // darker green for TEXT on the white ID card (≥4.5:1)
 
 // ─── Officer ID Card (same as Hospital but with green accent) ─────────────────
 function OfficerIdCard({
@@ -152,16 +143,16 @@ function OfficerIdCard({
             <View style={ic.body}>
               <View style={ic.photoCol}>
                 <View style={[ic.photo, { borderColor: G }]}>
-                  <Text style={[ic.photoTxt, { color: G }]}>{initials}</Text>
+                  <Text style={[ic.photoTxt, { color: G_ID }]}>{initials}</Text>
                 </View>
                 <View style={ic.activePill}>
                   <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: G }} />
-                  <Text style={[ic.activeText, { color: G }]}>ACTIVE</Text>
+                  <Text style={[ic.activeText, { color: G_ID }]}>ACTIVE</Text>
                 </View>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={ic.name}>{officer.officerName ?? '—'}</Text>
-                <Text style={[ic.roleText, { color: G }]}>Village Executive Officer</Text>
+                <Text style={[ic.roleText, { color: G_ID }]}>Village Executive Officer</Text>
                 <View
                   style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginVertical: 8 }}
                 />
@@ -315,6 +306,9 @@ function Sidebar({
 }) {
   const { theme: T } = useTheme()
   const [mounted, setMounted] = useState(false)
+  // Live width (rotation / iPad split-view / foldables) — drawer capped on tablets.
+  const { width: W } = useWindowDimensions()
+  const drawerW = Math.min(W * 0.78, 340)
   const tx = useRef(new Animated.Value(-W)).current
   const bg = useRef(new Animated.Value(0)).current
 
@@ -360,7 +354,7 @@ function Sidebar({
       section: 'VILLAGE',
       items: [
         {
-          icon: <Building2 size={15} color={G} />,
+          icon: <Building2 size={15} color={T.brand} />,
           label: 'Village Details',
           onPress: () =>
             closeAndDo(() =>
@@ -376,17 +370,17 @@ function Sidebar({
       section: 'ACCOUNT',
       items: [
         {
-          icon: <IdCard size={15} color={G} />,
+          icon: <IdCard size={15} color={T.brand} />,
           label: 'View ID Card',
           onPress: () => closeAndDo(() => onShowProfile()),
         },
         {
-          icon: <User size={15} color={G} />,
+          icon: <User size={15} color={T.brand} />,
           label: 'View Profile',
           onPress: () => closeAndDo(() => onShowProfile()),
         },
         {
-          icon: <Lock size={15} color={G} />,
+          icon: <Lock size={15} color={T.brand} />,
           label: 'Change Password',
           onPress: () =>
             closeAndDo(() => Alert.alert('Change Password', 'Use the NBS web admin panel.')),
@@ -423,7 +417,10 @@ function Sidebar({
         />
       </TouchableWithoutFeedback>
       <Animated.View
-        style={[s.drawer, { backgroundColor: T.card, transform: [{ translateX: tx }] }]}
+        style={[
+          s.drawer,
+          { width: drawerW, backgroundColor: T.card, transform: [{ translateX: tx }] },
+        ]}
       >
         <LinearGradient colors={['#02143c', '#064e2e']} style={{ paddingBottom: 4 }}>
           <View style={{ flexDirection: 'row', height: 4 }}>
@@ -478,12 +475,12 @@ function Sidebar({
                   <Text
                     style={[
                       s.drawerItemLabel,
-                      { color: (item as any).danger ? '#f87171' : T.text },
+                      { color: (item as any).danger ? T.danger : T.text },
                     ]}
                   >
                     {item.label}
                   </Text>
-                  <ChevronRight size={14} color={(item as any).danger ? '#f87171' : T.textDim} />
+                  <ChevronRight size={14} color={(item as any).danger ? T.danger : T.textDim} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -694,22 +691,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     ])
   }, [_navigation])
 
-  const downloadReport = async (period: string) => {
-    const lines = [
-      `TzCRVS — ${period.toUpperCase()} VILLAGE REPORT`,
-      `Village:   ${officer.villageName}`,
-      `Ward:      ${officer.wardName}`,
-      `Officer:   ${officer.officerName}`,
-      `Generated: ${new Date().toLocaleString('en-TZ')}`,
-      `──────────────────────────────`,
-      `Citizens:        ${officer.totalCitizens ?? 0}`,
-      `Births (month):  ${stats.monthBirths}`,
-      `Deaths (month):  ${stats.monthDeaths}`,
-      `Pending sync:    ${stats.pendingSync}`,
-    ].join('\n')
-    await Share.share({ title: `Village ${period} Report`, message: lines })
-  }
-
   const ConnIcon = connQuality === 'Good' ? Wifi : connQuality === 'Fair' ? WifiLow : WifiOff
   const initials = (officer.officerName ?? 'VO')
     .split(' ')
@@ -719,17 +700,12 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     .join('')
     .toUpperCase()
 
-  // PATCH-5: Village Officer has only 3 core actions per notes (NIN, Marriage, Death)
+  // NIN registration was removed from the Village Officer app — NIN issuance is
+  // handled by a separate (NIDA) organisation. Remaining actions: Citizen profile,
+  // Death, Marriage, Migration.
   // All records are posted/retrieved from the database via backend API.
   type AD = { id: string; icon: React.ReactNode; label: string; sub: string; bg: string }
   const ACTIONS: AD[] = [
-    {
-      id: 'nin',
-      icon: <IdCard size={18} color="#fff" />,
-      label: 'NIN',
-      sub: 'Registration',
-      bg: '#0f766e',
-    },
     {
       id: 'citizen',
       icon: <User size={18} color="#fff" />,
@@ -762,7 +738,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
 
   const navigate = (id: string) => {
     const m: Record<string, string> = {
-      nin: 'NINRegistration',
       citizen: 'CitizenProfile',
       death: 'VillageRecordDeath',
       marriage: 'RegisterMarriage',
@@ -835,23 +810,23 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           }}
         >
           <View style={{ alignItems: 'center', width: 56 }}>
-            <View style={s.logoCircle}>
+            <View style={s.coatCircle}>
               <Image
-                source={require('../../../public/assets/longo_nbs.png')}
-                style={{ width: 32, height: 32 }}
+                source={require('../../../public/assets/court_of_arm.png')}
+                style={{ width: 42, height: 42 }}
                 resizeMode="contain"
               />
             </View>
             <Text
               style={{
                 fontSize: 8,
-                fontWeight: '800',
-                color: TZ.yellow,
-                letterSpacing: 1.5,
+                fontWeight: '700',
+                color: 'rgba(255,255,255,0.90)',
+                letterSpacing: 1.2,
                 marginTop: 3,
               }}
             >
-              NBS
+              TANZANIA
             </Text>
           </View>
           <View style={{ flex: 1, alignItems: 'center' }}>
@@ -878,7 +853,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
             <Text
               style={{
                 fontSize: 9,
-                color: 'rgba(255,255,255,0.72)',
+                color: 'rgba(255,255,255,0.92)',
                 letterSpacing: 1.1,
                 textTransform: 'uppercase',
               }}
@@ -887,23 +862,23 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
             </Text>
           </View>
           <View style={{ alignItems: 'center', width: 56 }}>
-            <View style={s.coatCircle}>
+            <View style={s.logoCircle}>
               <Image
-                source={require('../../../public/assets/court_of_arm.png')}
-                style={{ width: 42, height: 42 }}
+                source={require('../../../public/assets/longo_nbs.png')}
+                style={{ width: 32, height: 32 }}
                 resizeMode="contain"
               />
             </View>
             <Text
               style={{
-                fontSize: 7,
-                fontWeight: '700',
-                color: 'rgba(255,255,255,0.60)',
-                letterSpacing: 1.2,
+                fontSize: 8,
+                fontWeight: '800',
+                color: TZ.yellow,
+                letterSpacing: 1.5,
                 marginTop: 3,
               }}
             >
-              TANZANIA
+              NBS
             </Text>
           </View>
         </View>
@@ -930,7 +905,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
               {officer.villageName}
             </Text>
             <Text
-              style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}
+              style={{ fontSize: 10, color: 'rgba(255,255,255,0.88)', marginTop: 2 }}
               numberOfLines={1}
             >
               📍 {officer.wardName} · Village Executive Officer
@@ -1001,8 +976,8 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
               <Text style={[s.zoneTxt, { color: '#4ade80' }]}>{'✓ Active'}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <ConnIcon size={10} color={CONN_COLORS[connQuality]} />
-              <Text style={{ fontSize: 10, fontWeight: '700', color: CONN_COLORS[connQuality] }}>
+              <ConnIcon size={10} color={connColor(connQuality, isDark)} />
+              <Text style={{ fontSize: 10, fontWeight: '700', color: connColor(connQuality, isDark) }}>
                 {connQuality} Mode
               </Text>
             </View>
@@ -1038,7 +1013,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}
           >
             <View style={[s.facilityIcon, { backgroundColor: `${G}25` }]}>
-              <Building2 size={22} color={G} />
+              <Building2 size={22} color={T.brand} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 13, fontWeight: '800', color: T.text, marginBottom: 2 }}>
@@ -1048,8 +1023,8 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
                 Ward: {officer.wardName}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Shield size={10} color={G} />
-                <Text style={{ fontSize: 10, color: T.textDim }}>
+                <Shield size={10} color={T.brand} />
+                <Text style={{ fontSize: 11, color: T.textSub }}>
                   NBS Authorised Village Registration Unit
                 </Text>
               </View>
@@ -1057,13 +1032,13 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           </LinearGradient>
           <View style={[s.facilityStats, { borderTopColor: T.border }]}>
             {[
-              { label: 'Citizens', value: officer.totalCitizens ?? 0, color: TZ.blue },
+              { label: 'Citizens', value: officer.totalCitizens ?? 0, color: T.blue },
               { label: 'Total Deaths', value: stats.totalDeaths, color: T.danger },
-              { label: 'Pending Sync', value: stats.pendingSync, color: '#f97316' },
+              { label: 'Pending Sync', value: stats.pendingSync, color: T.warning },
             ].map((st) => (
               <View key={st.label} style={{ flex: 1, alignItems: 'center' }}>
                 <Text style={{ fontSize: 18, fontWeight: '900', color: st.color }}>{st.value}</Text>
-                <Text style={{ fontSize: 9, color: T.textDim, marginTop: 2 }}>{st.label}</Text>
+                <Text style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>{st.label}</Text>
               </View>
             ))}
           </View>
@@ -1075,7 +1050,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
             <View style={s.sectionHead}>
               <Text style={[s.sectionTitle, { color: T.text }]}>Recent Activity</Text>
               <TouchableOpacity onPress={() => navigate('records')}>
-                <Text style={{ fontSize: 11, color: G }}>All →</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: T.brand }}>All →</Text>
               </TouchableOpacity>
             </View>
             <View style={[s.actCard, { backgroundColor: T.card, borderColor: T.border }]}>
@@ -1113,67 +1088,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           </>
         )}
 
-        {/* Report card */}
-        <View style={s.sectionHead}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <BarChart3 size={14} color={G} />
-            <Text style={[s.sectionTitle, { color: T.text }]}>Monthly Report Card</Text>
-          </View>
-          <Text style={{ fontSize: 11, color: T.textDim }}>
-            {new Date().toLocaleDateString('en-TZ', { month: 'long', year: 'numeric' })}
-          </Text>
-        </View>
-        <View style={[s.reportCard, { backgroundColor: T.card, borderColor: T.border }]}>
-          {[
-            {
-              label: 'Total citizens registered',
-              value: officer.totalCitizens ?? 0,
-              color: TZ.blue,
-            },
-            { label: 'Deaths recorded this month', value: stats.monthDeaths, color: '#f87171' },
-            { label: 'Records pending sync', value: stats.pendingSync, color: '#f97316' },
-          ].map((row, i, arr) => (
-            <View
-              key={row.label}
-              style={[
-                s.reportRow,
-                { borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: T.border },
-              ]}
-            >
-              <Text style={{ fontSize: 12, color: T.textSub }}>{row.label}</Text>
-              <Text style={{ fontSize: 16, fontWeight: '900', color: row.color }}>{row.value}</Text>
-            </View>
-          ))}
-          <View style={[s.downloadSection, { borderTopColor: T.border }]}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: T.textSub, marginBottom: 10 }}>
-              Download Report
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {(['Daily', 'Weekly', 'Monthly', 'Annual'] as const).map((p) => (
-                <TouchableOpacity
-                  key={p}
-                  style={{
-                    flex: 1,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 3,
-                    borderWidth: 1,
-                    borderRadius: 8,
-                    paddingVertical: 6,
-                    backgroundColor: `${G}18`,
-                    borderColor: `${G}40`,
-                  }}
-                  onPress={() => downloadReport(p)}
-                >
-                  <Download size={10} color={G} />
-                  <Text style={{ fontSize: 9, fontWeight: '700', color: G }}>{p}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-
         {/* Footer */}
         <View style={{ alignItems: 'center', paddingTop: 24, gap: 6 }}>
           <View style={{ flexDirection: 'row', width: 80, height: 3, marginBottom: 8 }}>
@@ -1201,7 +1115,6 @@ const s = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    width: W * 0.78,
     shadowColor: '#000',
     shadowOffset: { width: 6, height: 0 },
     shadowOpacity: 0.4,
@@ -1342,6 +1255,7 @@ const s = StyleSheet.create({
   statSub: { fontSize: 8, textAlign: 'center' },
   actionCard: {
     flex: 1,
+    minWidth: 68,
     borderRadius: 12,
     borderWidth: 1,
     padding: 10,
@@ -1355,8 +1269,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionLabel: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
-  actionSub: { fontSize: 8, textAlign: 'center' },
+  actionLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  actionSub: { fontSize: 10, textAlign: 'center' },
   facilityCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   facilityIcon: {
     width: 46,
@@ -1372,13 +1286,4 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
   },
   actCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
-  reportCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
-  reportRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-  },
-  downloadSection: { borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
 })

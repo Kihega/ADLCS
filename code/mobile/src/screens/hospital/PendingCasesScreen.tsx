@@ -111,8 +111,8 @@ export default function PendingCasesScreen({ navigation }: Props) {
               key={r}
               style={[s.reasonRow, { backgroundColor: '#f9731610', borderColor: '#f9731630' }]}
             >
-              <AlertTriangle size={11} color="#f97316" />
-              <Text style={{ fontSize: 11, color: '#f97316', flex: 1 }}>
+              <AlertTriangle size={11} color={T.warning} />
+              <Text style={{ fontSize: 11, color: T.warning, flex: 1 }}>
                 {REASON_LABELS[r] ?? r}
               </Text>
             </View>
@@ -144,7 +144,7 @@ export default function PendingCasesScreen({ navigation }: Props) {
           <Text style={[s.headerSub, { color: T.textSub }]}>{rows.length} require attention</Text>
         </View>
         <View style={[s.backBtn, { backgroundColor: '#f9731618' }]}>
-          <Clock size={18} color="#f97316" />
+          <Clock size={18} color={T.warning} />
         </View>
       </View>
       {loading ? (

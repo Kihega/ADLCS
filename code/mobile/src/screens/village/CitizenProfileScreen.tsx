@@ -182,7 +182,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                 flex: 1,
                 backgroundColor: T.card2,
                 borderWidth: 1,
-                borderColor: error ? '#f87171' : T.border,
+                borderColor: error ? T.danger : T.border,
                 borderRadius: 10,
                 paddingHorizontal: 14,
                 paddingVertical: 12,
@@ -222,7 +222,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
           {!!error && (
-            <Text style={{ fontSize: 11, color: '#f87171', marginTop: 8 }}>{error}</Text>
+            <Text style={{ fontSize: 11, color: T.danger, marginTop: 8 }}>{error}</Text>
           )}
 
           {profile && (
@@ -310,7 +310,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                     { icon: User, label: 'Gender', value: titleCase(profile.gender) },
                     { icon: Heart, label: 'Marital Status', value: titleCase(profile.maritalStatus) },
                     { icon: MapPin, label: 'Street / House No.', value: `${profile.streetName ?? '—'} / ${profile.houseRegNumber ?? '—'}` },
-                    { icon: Calendar, label: 'NIN Registered On', value: fmtDate(profile.registeredAt) },
+                    { icon: Calendar, label: 'Registered On', value: fmtDate(profile.registeredAt) },
                   ].map((row) => (
                     <View key={row.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                       <row.icon size={14} color={T.textDim} />
@@ -333,7 +333,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                     {profile.ninCertificateIssued ? (
                       <ShieldCheck size={16} color={TZ.green} />
                     ) : (
-                      <ShieldAlert size={16} color="#f97316" />
+                      <ShieldAlert size={16} color={T.warning} />
                     )}
                     <Text
                       style={{

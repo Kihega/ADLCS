@@ -51,6 +51,9 @@ export interface Theme {
   accent: string
   danger: string
   success: string
+  warning: string
+  brand: string
+  blue: string
   barStyle: 'light' | 'dark'
   isDark: boolean
 }
@@ -61,13 +64,18 @@ export const DARK: Theme = {
   card2: '#091628',
   text: '#f8fafc',
   textSub: '#94a3b8',
-  textDim: '#4b6080',
-  border: '#1e3a5f',
+  // HI-CONTRAST-2026: textDim was #4b6080 (2.6:1 on card) — now 6.5:1.
+  // border lifted so inputs/cards are visible (≈3:1 non-text contrast).
+  textDim: '#8ea4c0',
+  border: '#3d6ca3',
   primary: '#0891b2',
   primaryL: '#22d3ee',
   accent: '#fcd116',
   danger: '#f87171',
   success: '#4ade80',
+  warning: '#fb923c',
+  brand: '#22c55e',
+  blue: '#38bdf8',
   barStyle: 'light',
   isDark: true,
 }
@@ -77,16 +85,31 @@ export const LIGHT: Theme = {
   card: '#ffffff',
   card2: '#f8fafc',
   text: '#0f1923',
-  textSub: '#4b5563',
-  textDim: '#9ca3af',
-  border: '#e1e8f0',
-  primary: '#0891b2',
+  textSub: '#475569',
+  // HI-CONTRAST-2026: light-mode text/accent colours that were below 4.5:1 on
+  // white (textDim 2.5, accent 2.7, primary 3.7, success 3.3) are darkened.
+  textDim: '#5b6676',
+  border: '#a3b1c2',
+  primary: '#0e7490',
   primaryL: '#0369a1',
-  accent: '#c8962e',
-  danger: '#dc2626',
-  success: '#16a34a',
+  accent: '#8a5a00',
+  danger: '#b91c1c',
+  success: '#15803d',
+  warning: '#c2410c',
+  brand: '#15803d',
+  blue: '#0369a1',
   barStyle: 'dark',
   isDark: false,
+}
+
+/**
+ * Theme-aware colour for the connection-quality indicator (Good/Fair/Offline).
+ * The old fixed #fbbf24 "Fair" yellow was ~1.7:1 on a white card (invisible).
+ */
+export function connColor(q: 'Good' | 'Fair' | 'Offline', dark: boolean): string {
+  if (q === 'Good') return dark ? '#4ade80' : '#15803d'
+  if (q === 'Fair') return dark ? '#fbbf24' : '#b45309'
+  return dark ? '#f87171' : '#b91c1c'
 }
 
 // Fixed default used whenever there is no logged-in officer yet

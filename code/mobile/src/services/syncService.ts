@@ -6,7 +6,7 @@
  * No backend URL is ever hardcoded here — see apiResolver.ts.
  *   • No SQLite, no local DB, no offline queue.
  *   • No NIN generated at birth — only BID (Birth Registration ID) + cert no.
- *   • NIN is issued by Village Officer at age 18 using the BID.
+ *   • NIN is issued by NIDA (external); the BID is this system's primary ID.
  * AbortSignal.timeout() NOT used (Hermes-incompatible); uses makeSignal() instead.
  */
 
@@ -261,8 +261,10 @@ export async function saveAndSyncBirth(
       childSurname: data.childSurname,
       gender: data.gender.toLowerCase(),
       dateOfBirth: data.dateOfBirth,
-      fatherNid: data.fatherNid,
+      fatherNid: data.fatherNid, // Birth ID or NIN, as entered
       motherNid: data.motherNid,
+      fatherName: data.fatherName,
+      motherName: data.motherName,
       originVillageId: data.originVillageId,
       registeredAt: now,
     })
@@ -289,8 +291,10 @@ export async function saveAndSyncBirth(
       childSurname: data.childSurname,
       gender: data.gender.toLowerCase(),
       dateOfBirth: data.dateOfBirth,
-      fatherNid: data.fatherNid,
+      fatherNid: data.fatherNid, // Birth ID or NIN, as entered
       motherNid: data.motherNid,
+      fatherName: data.fatherName,
+      motherName: data.motherName,
       originVillageId: data.originVillageId,
       registeredAt: now,
     },

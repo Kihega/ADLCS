@@ -183,17 +183,17 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
     })
   }
 
-  const inp = 'w-full bg-[#0a1628] border border-[#1a3060] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-[#00d4ff]/50 transition-colors'
+  const inp = 'w-full bg-[#0a1628] border border-[#1a3060] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-400 outline-none focus:border-[#00d4ff]/50 transition-colors'
   const lbl = 'text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-[#0d1f38] border border-[#1e3a5f] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-[#0d1f38] border border-[#3d6ca3] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a3060] sticky top-0 bg-[#0d1f38]">
           <h3 className="text-white font-bold text-sm">
             {result ? 'Account Created' : `Register ${TARGET_LABEL[target]}`}
           </h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18} /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={18} /></button>
         </div>
 
         {!result ? (
@@ -347,7 +347,7 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
                   <div>
                     <label className={lbl}>Facility Name</label>
                     <input className={inp} value={form.facilityName} onChange={e => set('facilityName', e.target.value)} placeholder="e.g. Mufindi District Hospital" />
-                    <p className="text-[10px] text-gray-500 mt-1">Region/District are assigned automatically, matching your own account's district.</p>
+                    <p className="text-[10px] text-gray-400 mt-1">Region/District are assigned automatically, matching your own account's district.</p>
                   </div>
                 )}
 
@@ -385,7 +385,7 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
         ) : (
           <div className="p-5 space-y-3">
             <p className="text-[#00ff9d] text-sm font-bold flex items-center gap-2"><CheckCircle size={16} /> {result.fullName} registered successfully</p>
-            <p className="text-gray-500 text-xs">
+            <p className="text-gray-400 text-xs">
               Status: <span className="text-[#00ff9d] uppercase">{result.status}</span> — share this default
               password with them directly. They can log in right away with their email and this password,
               and should change it within 3 days.
@@ -405,7 +405,7 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
               className="flex items-center gap-2 bg-[#0a1628] border border-[#1a3060] rounded-lg px-3 py-2 cursor-pointer hover:border-[#00d4ff]/40 transition-colors"
             >
               <code className="text-[#00d4ff] text-sm font-mono flex-1 tracking-widest">{result.defaultPassword}</code>
-              <Copy size={13} className="text-gray-500" />
+              <Copy size={13} className="text-gray-400" />
               {copied && <span className="text-[#00ff9d] text-[10px]">Copied</span>}
             </div>
             <button onClick={onClose} className="w-full py-2.5 rounded-lg font-bold text-sm bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff]">

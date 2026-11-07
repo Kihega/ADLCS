@@ -115,7 +115,7 @@ if (_adminType) {
   }
 
   // ── Shared field styles (exactly as designed) ─────────────────────────────────
-  const inp = 'w-full bg-[#060f1e] border border-[#1e3a5f] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-700 outline-none focus:border-[#00d4ff]/50 transition-colors'
+  const inp = 'w-full bg-[#060f1e] border border-[#3d6ca3] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-400 outline-none focus:border-[#00d4ff]/50 transition-colors'
   const lbl = 'text-[10px] text-gray-400 uppercase tracking-widest mb-1.5 block'
 
   const modeTitle = {
@@ -140,17 +140,20 @@ if (_adminType) {
           <p className="text-[10px] font-bold text-yellow-300 tracking-[0.22em] uppercase mb-5">
             The United Republic Government of Tanzania
           </p>
-          <div className="w-36 h-36 rounded-full border-4 border-white/40 bg-white/10 backdrop-blur-sm flex items-center justify-center mb-5 shadow-2xl">
-            <img src="/assets/court_of_arm.png" alt="CoA" className="w-28 h-28 object-contain drop-shadow-xl" />
+          <div className="flex items-center justify-center gap-8 mb-5">
+            {/* Itifaki: Coat of Arms on the LEFT, NBS logo on the RIGHT */}
+            <div className="w-32 h-32 rounded-full border-4 border-white/40 bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-2xl">
+              <img src="/assets/court_of_arm.png" alt="Coat of Arms" className="w-24 h-24 object-contain drop-shadow-xl" />
+            </div>
+            <div className="w-32 h-32 rounded-full border-4 border-white/40 bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-2xl">
+              <img src="/assets/longo_nbs.png" alt="NBS" className="w-20 h-20 object-contain drop-shadow-xl" />
+            </div>
           </div>
           <div className="w-20 h-0.5 bg-yellow-400 mx-auto mb-4" />
           <h1 className="text-2xl font-extrabold tracking-wide drop-shadow mb-8">TZCRVS</h1>
-          <div className="w-20 h-20 rounded-2xl border-2 border-white/30 bg-transparent flex items-center justify-center mb-6">
-            <img src="/assets/longo_nbs.png" alt="NBS" className="w-14 h-14 object-contain drop-shadow-xl" />
-          </div>
-          <p className="text-sm italic text-yellow-200/80">&ldquo;Statistics for Development&rdquo;</p>
+          <p className="text-sm italic text-yellow-100">&ldquo;Statistics for Development&rdquo;</p>
         </div>
-        <p className="relative z-10 text-[10px] text-white/30">
+        <p className="relative z-10 text-[10px] text-white/80">
           © 2026 TzCRVS · All rights reserved
         </p>
       </div>
@@ -159,7 +162,7 @@ if (_adminType) {
       <div className="flex-1 md:w-1/2 flex items-center justify-center bg-[#060f1e] overflow-y-auto py-8">
         <div className="w-full max-w-sm px-6">
 
-          <div className="bg-[#0d1f38] border border-[#1e3a5f] rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-[#0d1f38] border border-[#3d6ca3] rounded-2xl shadow-2xl overflow-hidden">
 
             {/* Header */}
             <div className="text-center px-8 pt-8 pb-5">
@@ -169,7 +172,7 @@ if (_adminType) {
                   : <Shield size={22} className="text-[#00d4ff]" />}
               </div>
               <h2 className="text-white font-bold text-base">{modeTitle[mode]}</h2>
-              <p className="text-gray-500 text-xs mt-1">{modeSub[mode]}</p>
+              <p className="text-gray-400 text-xs mt-1">{modeSub[mode]}</p>
             </div>
 
             <div className="px-8 pb-8 space-y-4">
@@ -179,7 +182,7 @@ if (_adminType) {
                 <div>
                   <label className={lbl}>Email Address</label>
                   <div className="relative">
-                    <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                    <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type="email"
                       value={email}
@@ -192,7 +195,7 @@ if (_adminType) {
                 <div>
                   <label className={lbl}>Password</label>
                   <div className="relative">
-                    <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                    <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type={showPass ? 'text' : 'password'}
                       value={password}
@@ -202,7 +205,7 @@ if (_adminType) {
                     />
                     <button
                       onClick={() => setShowPass(!showPass)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
                     >
                       {showPass ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
@@ -221,7 +224,7 @@ if (_adminType) {
                     ? <RefreshCw size={15} className="animate-spin" />
                     : <><span>Sign In</span><ChevronRight size={15} /></>}
                 </button>
-                <p className="text-center text-[10px] text-gray-600">
+                <p className="text-center text-[10px] text-gray-400">
                   New accounts are set up by your administrator — you'll be given a default password to sign in with.
                 </p>
               </>)}
@@ -259,7 +262,7 @@ if (_adminType) {
                 </button>
                 <button
                   onClick={() => { setMode('login'); setError('') }}
-                  className="w-full text-center text-[11px] text-gray-500 hover:text-white"
+                  className="w-full text-center text-[11px] text-gray-400 hover:text-white"
                 >
                   ← Back
                 </button>
@@ -269,11 +272,11 @@ if (_adminType) {
           </div>
 
           <div className="text-center mt-5 space-y-1">
-            <div className="flex items-center justify-center gap-1.5 text-gray-600">
+            <div className="flex items-center justify-center gap-1.5 text-gray-400">
               <MapPin size={11} />
               <span className="text-[10px]">NBS Head Office · Dodoma, Tanzania</span>
             </div>
-            <p className="text-[9px] text-gray-700">Unauthorized access is prohibited and monitored</p>
+            <p className="text-[9px] text-gray-400">Unauthorized access is prohibited and monitored</p>
           </div>
         </div>
       </div>
