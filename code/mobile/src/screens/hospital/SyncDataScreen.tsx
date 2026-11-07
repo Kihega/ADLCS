@@ -36,19 +36,18 @@ import {
   checkConnQuality,
   ConnQuality,
 } from '../../services/syncService'
-import { useTheme, TZ } from '../../context/ThemeContext'
+import { useTheme, TZ, connColor } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; SyncData: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'SyncData'> }
 
-const CONN_COLORS: Record<ConnQuality, string> = {
-  Good: '#4ade80',
-  Fair: '#fbbf24',
-  Offline: '#f87171',
-}
-
 export default function SyncDataScreen({ navigation }: Props) {
-  const { theme: T } = useTheme()
+  const { theme: T, isDark } = useTheme()
+  const CONN_COLORS: Record<ConnQuality, string> = {
+    Good: connColor('Good', isDark),
+    Fair: connColor('Fair', isDark),
+    Offline: connColor('Offline', isDark),
+  }
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [quality, setQuality] = useState<ConnQuality>('Offline')

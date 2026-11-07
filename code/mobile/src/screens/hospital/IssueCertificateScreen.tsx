@@ -294,9 +294,9 @@ export default function IssueCertificateScreen({ navigation }: Props) {
                 {item.synced ? (
                   <CheckCircle2 size={9} color={TZ.green} />
                 ) : (
-                  <Clock size={9} color="#f97316" />
+                  <Clock size={9} color={T.warning} />
                 )}
-                <Text style={[s.tagText, { color: item.synced ? TZ.green : '#f97316' }]}>
+                <Text style={[s.tagText, { color: item.synced ? T.brand : T.warning }]}>
                   {item.synced ? 'Synced' : 'Pending sync'}
                 </Text>
               </View>

@@ -30,7 +30,7 @@ type Props = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const { width: W, height: H } = Dimensions.get('window')
-const CIRCLE_SIZE = W * 0.6 // 60 % of screen width — matches PoPtz large circle
+const CIRCLE_SIZE = Math.min(W * 0.6, 340) // 60 % of screen width — matches PoPtz large circle
 
 const C = {
   bg1: '#050d1a' as const,

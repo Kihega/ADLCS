@@ -5,10 +5,10 @@
  *
  * On Submit:
  *  1. Generate Birth Registration ID (BID) + cert number
- *     ⚠️  NO NIN is generated at birth — NIN is issued at age 18 by Village Officer
+ *     (No NIN is generated — NIN belongs to NIDA; parents are given as NIN or BID)
  *  2. POST directly to backend → Supabase (no local SQLite)
  *  3. Generate PDF certificate (expo-print)
- *  4. Show success modal with BID + cert no + age-18 instructions
+ *  4. Show success modal with BID + cert no
  *
  * DATA FLOW: Mobile → Render (Express/Node) → Supabase (PostgreSQL)
  */
@@ -25,7 +25,6 @@ import {
   Alert,
   ActivityIndicator,
   Animated,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Image,
@@ -71,17 +70,25 @@ type RootStack = { HospitalHome: undefined; RegisterBirth: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'> }
 
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
-const { width: W } = Dimensions.get('window')
 
-// PATCH-BID-LOOKUP-2026: father/mother are now looked up by their Birth ID
-// (BID) instead of NIN — a citizen only ever has a NIN because they already
-// had a BID, so BID alone is enough. Names kept as formatNIN/isNINComplete to
-// avoid touching every call site below; they now format/validate a BID.
+// Parents are identified by EITHER a Birth ID (BID, fully supported) OR a NIN.
+// NINs are issued by NIDA (external). Verifying a NIN against NIDA is not
+// connected yet — the backend reports that and the officer enters the parent's
+// name manually (recorded as "NIN unverified"). Names kept as
+// formatNIN/isNINComplete to avoid touching every call site below.
+type ParentIdKind = 'BID' | 'NIN' | null
+function classifyParentId(raw: string): ParentIdKind {
+  const v = raw.trim().toUpperCase()
+  if (/^BID-[A-Z0-9]{6,12}$/.test(v)) return 'BID'
+  if (/^NIDA-[A-Z0-9]{12}-\d{2}$/.test(v)) return 'NIN' // legacy NBS-generated
+  if (/^[\d-]+$/.test(v) && v.replace(/-/g, '').length === 20) return 'NIN'
+  return null
+}
 function formatNIN(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9-]/g, '')
 }
 function isNINComplete(nin: string) {
-  return /^BID-[A-Z0-9]{6,12}$/.test(nin.trim())
+  return classifyParentId(nin) !== null
 }
 
 // ─── Test citizens ─────────────────────────────────────────────────────────────
@@ -175,7 +182,7 @@ function CalPicker({
             }}
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <Calendar size={15} color={H.primaryL} />
+            <Calendar size={15} color={T.primaryL} />
             <Text style={{ flex: 1, fontSize: 15, fontWeight: '800', color: T.text }}>{title}</Text>
             <TouchableOpacity onPress={onClose}>
               <X size={17} color={T.textSub} />
@@ -204,7 +211,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: d === day ? H.primaryL : T.textSub,
+                        color: d === day ? T.primaryL : T.textSub,
                         fontWeight: d === day ? '800' : '400',
                       }}
                     >
@@ -236,7 +243,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: i + 1 === mo ? H.primaryL : T.textSub,
+                        color: i + 1 === mo ? T.primaryL : T.textSub,
                         fontWeight: i + 1 === mo ? '800' : '400',
                       }}
                     >
@@ -268,7 +275,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: y === yr ? H.primaryL : T.textSub,
+                        color: y === yr ? T.primaryL : T.textSub,
                         fontWeight: y === yr ? '800' : '400',
                       }}
                     >
@@ -487,7 +494,7 @@ function SuccessModal({
                   style={{
                     fontSize: 13,
                     fontWeight: '900',
-                    color: H.primaryL,
+                    color: T.primaryL,
                     flex: 1,
                     letterSpacing: 0.5,
                   }}
@@ -498,12 +505,11 @@ function SuccessModal({
                   onPress={() => copy(birth.birthId, 'Birth Registration ID')}
                   style={{ padding: 4 }}
                 >
-                  <Copy size={15} color={H.primaryL} />
+                  <Copy size={15} color={T.primaryL} />
                 </TouchableOpacity>
               </View>
               <Text style={{ fontSize: 10, color: T.textDim, fontStyle: 'italic' }}>
-                Keep this ID safe — required at age 18 when the child registers with a Village
-                Officer to obtain their National ID (NIN)
+                Keep this ID safe — it is the child's Birth ID and the key used to find this record anywhere in the NBS system.
               </Text>
             </View>
 
@@ -535,7 +541,7 @@ function SuccessModal({
                   style={{
                     fontSize: 15,
                     fontWeight: '900',
-                    color: TZ.green,
+                    color: T.brand,
                     flex: 1,
                     letterSpacing: 1,
                   }}
@@ -562,7 +568,7 @@ function SuccessModal({
                 padding: 10,
               }}
             >
-              <Shield size={13} color={H.primaryL} />
+              <Shield size={13} color={T.primaryL} />
               <Text style={{ fontSize: 10, color: T.textSub, flex: 1 }}>
                 Certificate synced to internal registry · QR signed by Govt PKI
               </Text>
@@ -657,7 +663,9 @@ function CitizenCard({ c, role }: { c: any; role: 'Father' | 'Mother' }) {
           <Text style={{ fontSize: 14, fontWeight: '800', color: T.text }}>
             {c.firstName} {c.middleName} {c.surname}
           </Text>
-          <Text style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>{c.nationalId}</Text>
+          <Text style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>
+            {c.nationalId || c.birthId}
+          </Text>
           <View
             style={{
               flexDirection: 'row',
@@ -674,8 +682,8 @@ function CitizenCard({ c, role }: { c: any; role: 'Father' | 'Mother' }) {
             }}
           >
             <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: TZ.green }} />
-            <Text style={{ fontSize: 8, fontWeight: '700', color: TZ.green }}>
-              ALIVE · VERIFIED
+            <Text style={{ fontSize: 9, fontWeight: '700', color: T.brand }}>
+              {c.unverified ? 'NIN UNVERIFIED' : 'ALIVE · VERIFIED'}
             </Text>
           </View>
         </View>
@@ -733,6 +741,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const [motherData, setMotherData] = useState<any>(null)
   const [motherLoading, setMotherLoading] = useState(false)
   const [motherError, setMotherError] = useState('')
+  // Manual parent details — only offered for a NIN that NIDA could not verify.
+  type ManualParent = { on: boolean; first: string; middle: string; surname: string }
+  const EMPTY_MANUAL: ManualParent = { on: false, first: '', middle: '', surname: '' }
+  const [fatherManual, setFatherManual] = useState<ManualParent>(EMPTY_MANUAL)
+  const [motherManual, setMotherManual] = useState<ManualParent>(EMPTY_MANUAL)
   const [childFirst, setChildFirst] = useState('')
   const [childMiddle, setChildMiddle] = useState('')
   const [childSurname, setChildSurname] = useState('')
@@ -782,18 +795,25 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         )
         clearTimeout(_bt)
         const json = await res.json()
+        if (!json.success && json.idType === 'NIN') {
+          // NIN not in the local registry and NIDA verification unavailable/not found
+          ;(isFather ? setFatherManual : setMotherManual)((m) => ({ ...m, on: true }))
+          setError(json.message || 'NIN could not be verified. Enter the parent details manually.')
+          setLoading(false)
+          return
+        }
         if (json.success && json.data) {
           const foundGender = json.data.gender?.toUpperCase()
           if (isFather && foundGender !== 'MALE') {
             setError(
-              'This Birth ID belongs to a FEMALE citizen and cannot be used for the Father.'
+              'This ID belongs to a FEMALE citizen and cannot be used for the Father.'
             )
             setLoading(false)
             return
           }
           if (!isFather && foundGender !== 'FEMALE') {
             setError(
-              'This Birth ID belongs to a MALE citizen and cannot be used for the Mother.'
+              'This ID belongs to a MALE citizen and cannot be used for the Mother.'
             )
             setLoading(false)
             return
@@ -820,11 +840,18 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       /* fall through to mock */
     }
 
-    // 2. Fall back to test data
+    // 2. Offline / backend unreachable: a NIN cannot be verified here either —
+    //    let the officer enter the details manually (flagged as unverified).
+    if (classifyParentId(nid) === 'NIN' && !MOCK_CITIZENS[nid.trim()]) {
+      ;(isFather ? setFatherManual : setMotherManual)((m) => ({ ...m, on: true }))
+      setError('NIN could not be verified right now. Enter the parent details manually.')
+      setLoading(false)
+      return
+    }
     await new Promise<void>((r) => setTimeout(r, 600))
     const found = MOCK_CITIZENS[nid.trim()]
     if (!found) {
-      setError('Birth ID not found in NBS Central Database.') // PATCH-BID-LOOKUP-2026
+      setError('ID not found in NBS Central Database.')
       setLoading(false)
       return
     }
@@ -844,8 +871,18 @@ export default function RegisterBirthScreen({ navigation }: Props) {
 
   const handleNINInput = (raw: string, role: 'father' | 'mother') => {
     const f = formatNIN(raw)
-    if (role === 'father') setFatherNid(f)
-    else setMotherNid(f)
+    // Editing the ID invalidates any earlier lookup / manual entry.
+    if (role === 'father') {
+      setFatherNid(f)
+      setFatherData(null)
+      setFatherError('')
+      setFatherManual(EMPTY_MANUAL)
+    } else {
+      setMotherNid(f)
+      setMotherData(null)
+      setMotherError('')
+      setMotherManual(EMPTY_MANUAL)
+    }
   }
 
   const handleSubmit = useCallback(async () => {
@@ -872,7 +909,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         : null
 
       const certNo = generateBirthCertNo()
-      // Birth ID — NIN is NOT issued at birth; Village Officer handles this at age 18
+      // Birth ID — NIN is never generated here (issued by NIDA)
       const birthId = generateBirthId(childDOB)
       const fatherName = fatherData
         ? `${fatherData.firstName} ${fatherData.middleName ?? ''} ${fatherData.surname}`
@@ -886,7 +923,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         : ''
 
       // Data flow: save directly to backend (Render) → Supabase.
-      // No local SQLite. No NIN generated here — NIN issued by Village Officer at age 18.
+      // No local SQLite. No NIN generated here — NIN is issued by NIDA.
       const { birth, syncedRemote } = await saveAndSyncBirth({
         certNo,
         birthId,
@@ -999,12 +1036,12 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           {label} Identification
         </Text>
         <Text style={{ fontSize: 12, color: T.textSub, lineHeight: 18 }}>
-          Enter the {label.toLowerCase()}'s Birth ID (BID). The system validates the record in the NBS
-          Central Database.
+          Enter the {label.toLowerCase()}'s Birth ID (BID) or National ID (NIN). A Birth ID is
+          validated in the NBS Central Database. NIN verification with NIDA is not connected yet.
         </Text>
         <View>
           <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
-            Birth ID (BID) *
+            Birth ID (BID) or NIN *
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
@@ -1022,10 +1059,12 @@ export default function RegisterBirthScreen({ navigation }: Props) {
               }}
               value={nid}
               onChangeText={(raw) => handleNINInput(raw, role)}
-              placeholder="BID-XXXXXXXXXX"
+              placeholder="BID-XXXXXXXXXX or NIN"
               placeholderTextColor={T.textDim}
               keyboardType="default"
-              maxLength={14}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={24}
               returnKeyType="search"
               blurOnSubmit={false}
             />
@@ -1075,7 +1114,88 @@ export default function RegisterBirthScreen({ navigation }: Props) {
             }}
           >
             <AlertCircle size={14} color="#f87171" />
-            <Text style={{ fontSize: 12, color: '#f87171', flex: 1, lineHeight: 17 }}>{error}</Text>
+            <Text style={{ fontSize: 12, color: T.danger, flex: 1, lineHeight: 17 }}>{error}</Text>
+          </View>
+        )}
+        {(isFather ? fatherManual : motherManual).on && !data && (
+          <View
+            style={{
+              gap: 10,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: T.border,
+              backgroundColor: T.card,
+              padding: 12,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: T.text }}>
+              Enter {label.toLowerCase()}'s details (NIN unverified)
+            </Text>
+            {(
+              [
+                ['first', 'First name *'],
+                ['middle', 'Middle name (optional)'],
+                ['surname', 'Surname *'],
+              ] as const
+            ).map(([key, ph]) => (
+              <TextInput
+                key={key}
+                style={{
+                  backgroundColor: T.card2,
+                  borderWidth: 1,
+                  borderColor: T.border,
+                  borderRadius: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 11,
+                  color: T.text,
+                  fontSize: 14,
+                }}
+                value={(isFather ? fatherManual : motherManual)[key]}
+                onChangeText={(t) =>
+                  (isFather ? setFatherManual : setMotherManual)((m) => ({ ...m, [key]: t }))
+                }
+                placeholder={ph}
+                placeholderTextColor={T.textDim}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            ))}
+            <TouchableOpacity
+              style={{
+                borderRadius: 10,
+                paddingVertical: 12,
+                alignItems: 'center',
+                backgroundColor: accent,
+                opacity:
+                  (isFather ? fatherManual : motherManual).first.trim() &&
+                  (isFather ? fatherManual : motherManual).surname.trim()
+                    ? 1
+                    : 0.4,
+              }}
+              disabled={
+                !(isFather ? fatherManual : motherManual).first.trim() ||
+                !(isFather ? fatherManual : motherManual).surname.trim()
+              }
+              onPress={() => {
+                const m = isFather ? fatherManual : motherManual
+                const setD = isFather ? setFatherData : setMotherData
+                setD({
+                  firstName: m.first.trim(),
+                  middleName: m.middle.trim(),
+                  surname: m.surname.trim(),
+                  gender: isFather ? 'MALE' : 'FEMALE',
+                  nationalId: nid.trim(),
+                  dateOfBirth: null,
+                  age: null,
+                  vitalStatus: 'ALIVE',
+                  unverified: true,
+                })
+                ;(isFather ? setFatherError : setMotherError)('')
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Use these details</Text>
+            </TouchableOpacity>
           </View>
         )}
         {data && <CitizenCard c={data} role={label as any} />}
@@ -1173,7 +1293,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
                   borderWidth: 1.5,
                   backgroundColor:
                     n < step ? TZ.green : n === step ? H.primary : 'rgba(255,255,255,0.12)',
-                  borderColor: n === step ? H.primaryL : 'transparent',
+                  borderColor: n === step ? T.primaryL : 'transparent',
                 }}
               >
                 {n < step ? (
@@ -1216,8 +1336,8 @@ export default function RegisterBirthScreen({ navigation }: Props) {
               key={l}
               style={{
                 fontSize: 9,
-                color: i + 1 === step ? H.primaryL : 'rgba(255,255,255,0.45)',
-                width: (W - 32) / 4,
+                color: i + 1 === step ? T.primaryL : 'rgba(255,255,255,0.45)',
+                flex: 1,
                 textAlign: 'center',
               }}
             >
@@ -1318,7 +1438,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
                         borderWidth: 1.5,
                         paddingVertical: 12,
                         borderColor:
-                          childGender === g ? (g === 'MALE' ? H.primaryL : '#a78bfa') : T.border,
+                          childGender === g ? (g === 'MALE' ? T.primaryL : '#a78bfa') : T.border,
                         backgroundColor:
                           childGender === g
                             ? g === 'MALE'
@@ -1334,7 +1454,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
                           fontSize: 13,
                           fontWeight: '600',
                           color:
-                            childGender === g ? (g === 'MALE' ? H.primaryL : '#c4b5fd') : T.textSub,
+                            childGender === g ? (g === 'MALE' ? T.primaryL : '#c4b5fd') : T.textSub,
                         }}
                       >
                         {g}
@@ -1402,11 +1522,9 @@ export default function RegisterBirthScreen({ navigation }: Props) {
                   borderColor: `${H.primary}30`,
                 }}
               >
-                <AlertCircle size={13} color={H.primaryL} />
+                <AlertCircle size={13} color={T.primaryL} />
                 <Text style={{ fontSize: 11, color: T.textSub, flex: 1, lineHeight: 17 }}>
-                  A Birth Registration ID (BID) will be generated and recorded. No National ID is
-                  issued at birth — the child will present this Birth ID to a Village Officer at age
-                  18 to obtain their NIN.
+                  A Birth Registration ID (BID) will be generated and recorded. No National ID (NIN) is created by this system — NIN is issued separately by NIDA.
                 </Text>
               </View>
             </View>
@@ -1431,7 +1549,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
                   }}
                 >
                   <Text
-                    style={{ fontSize: 12, fontWeight: '800', color: H.primaryL, marginBottom: 8 }}
+                    style={{ fontSize: 12, fontWeight: '800', color: T.primaryL, marginBottom: 8 }}
                   >
                     FATHER
                   </Text>
@@ -1501,7 +1619,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
                   padding: 14,
                 }}
               >
-                <Text style={{ fontSize: 12, fontWeight: '800', color: TZ.green, marginBottom: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: T.brand, marginBottom: 8 }}>
                   NEWBORN
                 </Text>
                 {[

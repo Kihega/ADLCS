@@ -226,7 +226,7 @@ function SelectSheet({
                   }}
                 >
                   <Plus size={14} color={TZ.green} />
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: TZ.green }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: T.brand }}>
                     {manualLabel ?? "Can't find it? Add new"}
                   </Text>
                 </TouchableOpacity>

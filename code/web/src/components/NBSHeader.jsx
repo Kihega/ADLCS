@@ -52,7 +52,7 @@ export default function NBSHeader({ activeSection = '' }) {
             <p className="text-white font-extrabold text-[15px] leading-tight tracking-wide">
               National Bureau of Statistics
             </p>
-            <p className="text-[8.5px] text-white/45 font-mono mt-0.5 uppercase tracking-widest">
+            <p className="text-[8.5px] text-white/80 font-mono mt-0.5 uppercase tracking-widest">
               TZCRVS
             </p>
           </div>
@@ -65,7 +65,7 @@ export default function NBSHeader({ activeSection = '' }) {
             <img src="/assets/longo_nbs.png" alt="NBS"
                  className="w-9 h-9 object-contain" />
           </div>
-          <div className="flex items-center gap-1 text-white/45">
+          <div className="flex items-center gap-1 text-white/80">
             <MapPin size={9}/>
             <span className="text-[9px]">NBS HQ · Dodoma, Tanzania</span>
           </div>

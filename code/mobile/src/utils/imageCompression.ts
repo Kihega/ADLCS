@@ -5,7 +5,7 @@
  * WHY THIS EXISTS:
  * On some devices, photos straight off the camera (especially newer phones
  * with 12–108MP sensors) can be several MB to tens of MB as raw JPEGs. The
- * NIN registration flow keeps the photo as a base64 data URI in React state
+ * citizen photo flows keep the photo as a base64 data URI in React state
  * (for the live ID card preview) and later uploads it to the backend. A
  * multi-MB base64 string (~33% larger than the binary) held in memory next
  * to everything else on the screen is enough to trigger an OOM kill of the

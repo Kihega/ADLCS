@@ -126,7 +126,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: d === dy ? '#22d3ee' : T.textSub,
+                        color: d === dy ? T.primaryL : T.textSub,
                         fontWeight: d === dy ? '800' : '400',
                       }}
                     >
@@ -158,7 +158,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: i + 1 === mo ? '#22d3ee' : T.textSub,
+                        color: i + 1 === mo ? T.primaryL : T.textSub,
                         fontWeight: i + 1 === mo ? '800' : '400',
                       }}
                     >
@@ -190,7 +190,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: y === yr ? '#22d3ee' : T.textSub,
+                        color: y === yr ? T.primaryL : T.textSub,
                         fontWeight: y === yr ? '800' : '400',
                       }}
                     >
@@ -600,10 +600,10 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
               gap: 10,
             }}
           >
-            <AlertTriangle size={16} color="#f97316" />
+            <AlertTriangle size={16} color={T.warning} />
             <Text style={{ fontSize: 12, color: T.textSub, flex: 1, lineHeight: 18 }}>
               Record deaths that occurred{' '}
-              <Text style={{ fontWeight: '800', color: '#f97316' }}>OUTSIDE health facilities</Text>
+              <Text style={{ fontWeight: '800', color: T.warning }}>OUTSIDE health facilities</Text>
               . Deaths at hospitals or dispensaries are recorded by the Hospital Officer.
             </Text>
           </View>
@@ -888,7 +888,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                     style={{
                       fontSize: 16,
                       fontWeight: '900',
-                      color: '#dc2626',
+                      color: T.danger,
                       flex: 1,
                       letterSpacing: 1,
                     }}

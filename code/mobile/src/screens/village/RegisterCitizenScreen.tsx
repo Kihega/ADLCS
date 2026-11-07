@@ -20,7 +20,7 @@ import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
 
 import { User, Shield, AlertTriangle, CheckCircle2 as CC } from 'lucide-react-native'
-import { generateNationalId, generateBirthId } from '../../services/localDb' // PATCH-BID-LOOKUP-2026
+import { generateBirthId } from '../../services/localDb' // PATCH-BID-LOOKUP-2026
 
 // ── Reusable calendar picker (no external packages) ──────────────────────────
 function CalPicker({
@@ -114,7 +114,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: d === dy ? '#22d3ee' : T.textSub,
+                        color: d === dy ? T.primaryL : T.textSub,
                         fontWeight: d === dy ? '800' : '400',
                       }}
                     >
@@ -146,7 +146,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: i + 1 === mo ? '#22d3ee' : T.textSub,
+                        color: i + 1 === mo ? T.primaryL : T.textSub,
                         fontWeight: i + 1 === mo ? '800' : '400',
                       }}
                     >
@@ -178,7 +178,7 @@ function CalPicker({
                     <Text
                       style={{
                         fontSize: 13,
-                        color: y === yr ? '#22d3ee' : T.textSub,
+                        color: y === yr ? T.primaryL : T.textSub,
                         fontWeight: y === yr ? '800' : '400',
                       }}
                     >
@@ -394,7 +394,6 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
   const [phone, setPhone] = useState('')
   const [occupation, setOccupation] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [genNid, setGenNid] = useState('')
   const [genBid, setGenBid] = useState('') // PATCH-BID-LOOKUP-2026
   const [toast, setToast] = useState('')
   const [toastVis, setToastVis] = useState(false)
@@ -424,12 +423,10 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
     }
     setSubmitting(true)
     try {
-      const nid = generateNationalId(dob)
       const bid = generateBirthId() // PATCH-BID-LOOKUP-2026: this citizen has no
       // prior birth record, so give them a Birth ID here — it becomes their
       // canonical lookup key everywhere else in the system, same as anyone
-      // who came through the Birth → NIN-issuance flow.
-      setGenNid(nid)
+      // who came through the birth-registration flow.
       setGenBid(bid)
       if (isOnline()) {
         try {
@@ -439,7 +436,6 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
             surname: surname.trim(),
             gender,
             dateOfBirth: dob,
-            nationalId: nid,
             birthId: bid,
             bloodGroup,
             phone: phone.trim(),
@@ -561,7 +557,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}
                 >
                   <AlertTriangle size={16} color="#dc2626" />
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#dc2626' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: T.danger }}>
                     Age Restriction
                   </Text>
                 </View>
@@ -618,7 +614,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
               }}
             >
               <CC size={14} color={TZ.green} />
-              <Text style={{ fontSize: 12, color: TZ.green, fontWeight: '600' }}>
+              <Text style={{ fontSize: 12, color: T.brand, fontWeight: '600' }}>
                 Age verified: {calcAge(dob)} years old · DOB: {dob}
               </Text>
             </View>
@@ -794,46 +790,6 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
             </Text>
 
             <View style={{ width: '100%', gap: 10 }}>
-              <Text
-                style={{
-                  fontSize: 11,
-                  color: T.textDim,
-                  fontWeight: '600',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                }}
-              >
-                Generated National ID (NIN)
-              </Text>
-              <View
-                style={{
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: `${TZ.blue}50`,
-                  backgroundColor: `${TZ.blue}10`,
-                  padding: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: '900',
-                    color: TZ.blue,
-                    flex: 1,
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  {genNid}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => copy(genNid, 'National ID')}
-                  style={{ padding: 4 }}
-                >
-                  <Copy size={15} color={TZ.blue} />
-                </TouchableOpacity>
-              </View>
               {/* PATCH-BID-LOOKUP-2026: this is the citizen's lookup key everywhere
                   else in the system (marriage, migration, death, profile search) */}
               <Text
@@ -863,7 +819,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
                   style={{
                     fontSize: 13,
                     fontWeight: '900',
-                    color: TZ.green,
+                    color: T.brand,
                     flex: 1,
                     letterSpacing: 0.5,
                   }}

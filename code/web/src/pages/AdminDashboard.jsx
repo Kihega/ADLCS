@@ -66,7 +66,7 @@ function StatCard({ Icon, label, value, sub, accent = 'text-[#00d4ff]' }) {
       <div className="min-w-0">
         <p className="text-gray-400 text-xs truncate">{label}</p>
         <p className={`font-bold text-xl ${accent}`}>{value}</p>
-        {sub && <p className="text-gray-600 text-[10px] truncate">{sub}</p>}
+        {sub && <p className="text-gray-400 text-[10px] truncate">{sub}</p>}
       </div>
     </Card>
   )
@@ -101,7 +101,7 @@ function SeverityPill({ severity }) {
 }
 
 function Th({ children }) {
-  return <th className="text-left text-[10px] text-gray-500 uppercase tracking-wider font-semibold px-3 py-2">{children}</th>
+  return <th className="text-left text-[10px] text-gray-400 uppercase tracking-wider font-semibold px-3 py-2">{children}</th>
 }
 function Td({ children, className = '' }) {
   return <td className={`px-3 py-2 text-xs text-gray-300 ${className}`}>{children}</td>
@@ -109,12 +109,12 @@ function Td({ children, className = '' }) {
 
 function EmptyState({ colSpan, text = 'No records found' }) {
   return (
-    <tr><td colSpan={colSpan} className="text-center text-gray-600 text-xs py-8">{text}</td></tr>
+    <tr><td colSpan={colSpan} className="text-center text-gray-400 text-xs py-8">{text}</td></tr>
   )
 }
 function LoadingState({ colSpan }) {
   return (
-    <tr><td colSpan={colSpan} className="text-center text-gray-500 text-xs py-8">
+    <tr><td colSpan={colSpan} className="text-center text-gray-400 text-xs py-8">
       <RefreshCw size={14} className="inline animate-spin mr-2" />Loading…
     </td></tr>
   )
@@ -123,7 +123,7 @@ function LoadingState({ colSpan }) {
 function PagerFooter({ page, total, limit, onPage }) {
   const pages = Math.max(Math.ceil((total || 0) / limit), 1)
   return (
-    <div className="flex items-center justify-between px-3 py-2 border-t border-[#1a3060] text-[11px] text-gray-500">
+    <div className="flex items-center justify-between px-3 py-2 border-t border-[#1a3060] text-[11px] text-gray-400">
       <span>{total ?? 0} total</span>
       <div className="flex items-center gap-2">
         <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="p-1 rounded hover:bg-white/5 disabled:opacity-30">
@@ -141,12 +141,12 @@ function PagerFooter({ page, total, limit, onPage }) {
 function SearchBox({ value, onChange, placeholder = 'Search…' }) {
   return (
     <div className="relative">
-      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="bg-[#0a1628] border border-[#1a3060] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-[#00d4ff]/50 transition-colors"
+        className="bg-[#0a1628] border border-[#1a3060] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-400 outline-none focus:border-[#00d4ff]/50 transition-colors"
       />
     </div>
   )
@@ -214,7 +214,7 @@ function DashboardSection({ role }) {
   useEffect(() => { load() }, [load])
 
   if (loading && !overview) {
-    return <div className="text-gray-500 text-sm flex items-center gap-2"><RefreshCw size={14} className="animate-spin" />Loading dashboard…</div>
+    return <div className="text-gray-400 text-sm flex items-center gap-2"><RefreshCw size={14} className="animate-spin" />Loading dashboard…</div>
   }
 
   return (
@@ -241,7 +241,7 @@ function DashboardSection({ role }) {
               accent={perf?.databaseOk ? 'text-[#00ff9d]' : 'text-red-400'} />
             <StatCard Icon={Server} label="Redis (Upstash)" value={perf?.redisOk ? 'Online' : 'Offline'}
               sub={perf?.redisLatencyMs != null ? `${perf.redisLatencyMs} ms` : ''}
-              accent={perf?.redisOk ? 'text-[#00ff9d]' : 'text-gray-500'} />
+              accent={perf?.redisOk ? 'text-[#00ff9d]' : 'text-gray-400'} />
             <StatCard Icon={Cpu} label="Backend Uptime" value={perf ? `${Math.floor((perf.uptimeSeconds||0)/3600)}h ${Math.floor(((perf.uptimeSeconds||0)%3600)/60)}m` : '—'} accent="text-[#00d4ff]" />
             <StatCard Icon={Globe} label="Node Runtime" value={perf?.nodeVersion || '—'} accent="text-purple-400" />
           </>
@@ -301,7 +301,7 @@ function DemographicsSection({ role }) {
         <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Age Distribution by Gender</p>
         <div style={{ width: '100%', height: 420 }}>
           {loading ? (
-            <div className="flex items-center justify-center h-full text-gray-500 text-xs"><RefreshCw size={14} className="animate-spin mr-2" />Loading…</div>
+            <div className="flex items-center justify-center h-full text-gray-400 text-xs"><RefreshCw size={14} className="animate-spin mr-2" />Loading…</div>
           ) : (
             <ResponsiveContainer>
               <BarChart data={population?.pyramid || []} layout="vertical" margin={{ left: 20 }}>
@@ -357,7 +357,7 @@ function DemographicsSection({ role }) {
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <p className="text-gray-600 text-xs py-8 text-center">No pyramid data — select a filter or wait for population data to load.</p>
+          <p className="text-gray-400 text-xs py-8 text-center">No pyramid data — select a filter or wait for population data to load.</p>
         )}
       </Card>
     </div>
@@ -638,7 +638,7 @@ function ManageUsersSection({ currentUserId, onRegister }) {
               key={r.key}
               onClick={() => setTab(r.key)}
               className={`text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-colors ${
-                tab === r.key ? 'bg-[#00d4ff]/10 border-[#00d4ff]/40 text-[#00d4ff]' : 'border-[#1a3060] text-gray-500 hover:border-[#2a4060]'
+                tab === r.key ? 'bg-[#00d4ff]/10 border-[#00d4ff]/40 text-[#00d4ff]' : 'border-[#1a3060] text-gray-400 hover:border-[#2a4060]'
               }`}
             >
               {r.label} {Array.isArray(data[r.key]) ? `(${data[r.key].length})` : ''}
@@ -652,7 +652,7 @@ function ManageUsersSection({ currentUserId, onRegister }) {
             to sit. */}
         <div className="flex items-center gap-2">
           {tab === 'super_admin' && (
-            <span className="text-[10px] text-gray-500">{superAdminMeta.total}/{3} admins</span>
+            <span className="text-[10px] text-gray-400">{superAdminMeta.total}/{3} admins</span>
           )}
           <button
             onClick={() => onRegister && onRegister()}
@@ -804,7 +804,7 @@ function SystemPerformanceSection() {
   useEffect(() => { load() }, [load])
 
   if (loading && !perf) {
-    return <div className="text-gray-500 text-sm flex items-center gap-2"><RefreshCw size={14} className="animate-spin" />Checking system health…</div>
+    return <div className="text-gray-400 text-sm flex items-center gap-2"><RefreshCw size={14} className="animate-spin" />Checking system health…</div>
   }
 
   return (
@@ -813,7 +813,7 @@ function SystemPerformanceSection() {
         <StatCard Icon={Database} label="PostgreSQL (Supabase)" value={perf?.databaseOk ? 'Online' : 'Offline'}
           sub={perf?.dbLatencyMs != null ? `${perf.dbLatencyMs} ms` : ''} accent={perf?.databaseOk ? 'text-[#00ff9d]' : 'text-red-400'} />
         <StatCard Icon={Server} label="Redis (Upstash)" value={perf?.redisOk ? 'Online' : 'Offline'}
-          sub={perf?.redisLatencyMs != null ? `${perf.redisLatencyMs} ms` : ''} accent={perf?.redisOk ? 'text-[#00ff9d]' : 'text-gray-500'} />
+          sub={perf?.redisLatencyMs != null ? `${perf.redisLatencyMs} ms` : ''} accent={perf?.redisOk ? 'text-[#00ff9d]' : 'text-gray-400'} />
         <StatCard Icon={Cpu} label="Backend Uptime" value={`${Math.floor((perf?.uptimeSeconds || 0) / 3600)}h ${Math.floor(((perf?.uptimeSeconds || 0) % 3600) / 60)}m`} accent="text-[#00d4ff]" />
         <StatCard Icon={Globe} label="Node Runtime" value={perf?.nodeVersion || '—'} accent="text-purple-400" />
       </div>
@@ -859,7 +859,7 @@ function MarriagesSection() {
         <Heart size={14} className="text-pink-400" />
         <StatusSelect value={status} options={['all', 'active', 'dissolved', 'pending_dissolution', 'unregistered']} onChange={v => { setPage(1); setStatus(v) }} />
         {statusCounts.map(s => (
-          <span key={s.status} className="text-[10px] text-gray-500 border border-[#1a3060] rounded-full px-2 py-0.5">
+          <span key={s.status} className="text-[10px] text-gray-400 border border-[#1a3060] rounded-full px-2 py-0.5">
             {s.status}: {s._count._all}
           </span>
         ))}
@@ -935,7 +935,7 @@ function RITASection({ role }) {
       <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
 
       {loading ? (
-        <Card><p className="text-gray-500 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading RITA data…</p></Card>
+        <Card><p className="text-gray-400 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading RITA data…</p></Card>
       ) : (
         <>
           {/* Totals */}
@@ -992,64 +992,6 @@ function RITASection({ role }) {
   )
 }
 
-// ── PATCH-4: Section: NIDA — NIN Issuance trends ─────────────────────────────
-function NIDASection({ role }) {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({})
-  const [period, setPeriod] = useState(() => {
-    const now = new Date()
-    return { year: now.getFullYear(), month: now.getMonth() + 1 }
-  })
-
-  // LINTFIX-2-v2: same load()-useCallback pattern as every other section
-  // in this file (see RITASection above for the full explanation of why
-  // the v1 inline-fetch attempt was wrong).
-  const load = useCallback((f = filters) => {
-    setLoading(true)
-    api.apiGetNIDA(f)
-      .then(r => setData(r.data))
-      .catch(e => console.error('[NIDA]', e))
-      .finally(() => setLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load({ ...filters, ...period }) }, [filters, period, load])
-
-  return (
-    <div className="space-y-4">
-      <h2 className="text-white font-bold text-lg">NIDA — NIN Issuance Trends</h2>
-      <YearMonthFilter onChange={p => setPeriod(p)} />
-      <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
-
-      {loading ? (
-        <Card><p className="text-gray-500 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading NIDA data…</p></Card>
-      ) : (
-        <>
-          <StatCard Icon={UserCheck} label="Total NIDs Issued" value={(data?.total ?? 0).toLocaleString()} accent="text-[#00d4ff]" />
-          <Card>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">NIN Issuances — Weekly Trend ({MONTH_NAMES[period.month - 1]} {period.year})</p>
-            {data?.ninIssuances?.length ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={data.ninIssuances}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
-                  <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
-                  <Bar dataKey="count" fill="#00d4ff" name="NIDs Issued" radius={[3,3,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-gray-600 text-xs py-8 text-center">No NIN issuance data found. Issue some NIDs via the Village Officer app first.</p>
-            )}
-          </Card>
-        </>
-      )}
-    </div>
-  )
-}
-
 // PATCH-MIGTRENDS-2026: Migration Trends re-added for both roles. Uses the
 // same GeoFilterBar contract as RITA/NIDA: super_admin gets the full
 // Region -> District -> Ward -> Village/Street cascade; district_admin
@@ -1085,7 +1027,7 @@ function MigrationsSection({ role }) {
       <GeoFilterBar onChange={f => setFilters(f)} scoped={role === 'district_admin'} />
 
       {loading ? (
-        <Card><p className="text-gray-500 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading migration data…</p></Card>
+        <Card><p className="text-gray-400 text-xs py-8 text-center"><RefreshCw size={14} className="inline animate-spin mr-2" />Loading migration data…</p></Card>
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1107,7 +1049,7 @@ function MigrationsSection({ role }) {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-gray-600 text-xs py-8 text-center">No migration requests found for this scope yet.</p>
+              <p className="text-gray-400 text-xs py-8 text-center">No migration requests found for this scope yet.</p>
             )}
           </Card>
         </>
@@ -1155,7 +1097,6 @@ const NAV = [
   { key: 'security_alerts',     label: 'Security Alerts',      Icon: ShieldAlert,     roles: ['super_admin'] },
   { key: 'system_performance',  label: 'System Performance',   Icon: Cpu,             roles: ['super_admin'] },
   { key: 'rita',               label: 'RITA',                 Icon: FileText,        roles: ['super_admin', 'district_admin'] },
-  { key: 'nida',               label: 'NIDA',                 Icon: Shield,          roles: ['super_admin', 'district_admin'] },
 ]
 
 const SECTION_TITLE = {
@@ -1199,7 +1140,6 @@ export default function AdminDashboard({ role }) {
       case 'security_alerts':     return <AuditLogsSection securityOnly />
       case 'system_performance':  return <SystemPerformanceSection />
       case 'rita':               return <RITASection role={role} />
-      case 'nida':               return <NIDASection role={role} />
       case 'migrations':         return <MigrationsSection role={role} />
       default:                    return null
     }
@@ -1220,7 +1160,7 @@ export default function AdminDashboard({ role }) {
         >
           <div className="flex items-center justify-between p-3 border-b border-[#1a3060]">
             {sidebarOpen && <span className="text-white text-xs font-bold truncate">{roleLabel}</span>}
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-[#00d4ff] shrink-0">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-[#00d4ff] shrink-0">
               {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
             </button>
           </div>
@@ -1265,7 +1205,7 @@ export default function AdminDashboard({ role }) {
           <div className="flex items-center justify-between mb-4">{/* HOTFIX-LINT-4 */}
             <div>
               <h1 className="text-white font-bold text-lg">{SECTION_TITLE[activeNav]}</h1>
-              <p className="text-gray-500 text-xs">
+              <p className="text-gray-400 text-xs">
                 {user?.fullName || user?.email} · {roleLabel}
               </p>
             </div>

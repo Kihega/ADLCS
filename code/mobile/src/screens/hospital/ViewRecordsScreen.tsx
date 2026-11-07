@@ -209,9 +209,9 @@ export default function ViewRecordsScreen({ navigation }: Props) {
                 {item.synced ? (
                   <CheckCircle2 size={9} color={TZ.green} />
                 ) : (
-                  <Clock size={9} color="#f97316" />
+                  <Clock size={9} color={T.warning} />
                 )}
-                <Text style={[s.tagTxt, { color: item.synced ? TZ.green : '#f97316' }]}>
+                <Text style={[s.tagTxt, { color: item.synced ? T.brand : T.warning }]}>
                   {item.synced ? 'Synced' : 'Pending'}
                 </Text>
               </View>
@@ -253,8 +253,8 @@ export default function ViewRecordsScreen({ navigation }: Props) {
             { backgroundColor: '#f9731618', borderBottomColor: '#f9731640' },
           ]}
         >
-          <WifiOff size={13} color="#f97316" />
-          <Text style={{ fontSize: 11, color: '#f97316', flex: 1 }}>
+          <WifiOff size={13} color={T.warning} />
+          <Text style={{ fontSize: 11, color: T.warning, flex: 1 }}>
             Offline — showing locally stored records. Connect to sync.
           </Text>
         </View>

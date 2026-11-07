@@ -133,18 +133,8 @@ export function generateDeathCertNo(): string {
 }
 
 // generateNewbornNationalId() REMOVED — NIN is NOT issued at birth.
-// Village Officer issues NIN at age 18 via the NIN issuance workflow.
 
-// National ID (NIN) — format: NIDA-XXXXXXXXXXXX-CC
-export function generateNationalId(
-  _dob?: string,
-  _regionCode?: string,
-  _districtCode?: string,
-  _wardCode?: string
-): string {
-  const cc = String(Math.floor(Math.random() * 90) + 10)
-  return `NIDA-${randomIdBlock(12)}-${cc}`
-}
+// NOTE: NINs are issued by NIDA — this app never generates them.
 
 // ─── No-op stubs (satisfy imports, no SQLite operations) ──────────────────────
 export async function getDb(): Promise<any> {

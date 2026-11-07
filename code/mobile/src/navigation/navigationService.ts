@@ -28,7 +28,6 @@ export type RootStack = {
   VillageViewRecords: undefined
   RegisterMarriage: undefined
   VillageRecordDeath: undefined
-  NINRegistration: undefined
 }
 
 export const navigationRef = createNavigationContainerRef<RootStack>()

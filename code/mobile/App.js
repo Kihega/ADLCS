@@ -3,7 +3,7 @@
  *
  * Changes:
  *  - GeofenceProvider removed (no geofencing)
- *  - Village screens trimmed to: NINRegistration, RegisterCitizen,
+ *  - Village screens trimmed to: RegisterCitizen,
  *    VillageRecordDeath, RegisterMarriage
  *  - No `animation` keys anywhere (crashes native-stack v7 + rn-screens 4.x)
  *  - No JSX comments inside Stack.Navigator (crash in @react-navigation/core)
@@ -11,6 +11,7 @@
  *  - Background via NavigationContainer theme (not contentStyle)
  */
 import React from 'react'
+import { View, useWindowDimensions } from 'react-native'
 import { NavigationContainer, DarkTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -36,7 +37,6 @@ import CitizenProfileScreen from './src/screens/village/CitizenProfileScreen'
 import VillageViewRecordsScreen from './src/screens/village/VillageViewRecordsScreen'
 import RegisterMarriageScreen from './src/screens/village/RegisterMarriageScreen'
 import VillageRecordDeathScreen from './src/screens/village/VillageRecordDeathScreen'
-import NINRegistrationScreen from './src/screens/village/NINRegistrationScreen'
 import MigrationHomeScreen from './src/screens/village/MigrationHomeScreen'
 import TrackMigrationScreen from './src/screens/village/TrackMigrationScreen'
 import ConfirmIncomingMigrationScreen from './src/screens/village/ConfirmIncomingMigrationScreen'
@@ -49,11 +49,28 @@ const NAV_THEME = {
   colors: { ...DarkTheme.colors, background: '#050d1a', card: '#050d1a' },
 }
 
+/**
+ * AppFrame — keeps every screen at a comfortable reading width on tablets /
+ * foldables / landscape (iPad, Android tablets) while phones fill the screen.
+ * Safe-area insets are still handled per screen by SafeAreaProvider.
+ */
+function AppFrame({ children }) {
+  const { width } = useWindowDimensions()
+  return (
+    <View style={{ flex: 1, backgroundColor: '#050d1a', alignItems: 'center' }}>
+      <View style={{ flex: 1, width: '100%', maxWidth: width > 720 ? 720 : undefined }}>
+        {children}
+      </View>
+    </View>
+  )
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
         <ThemeProvider>
+          <AppFrame>
           <NavigationContainer ref={navigationRef} theme={NAV_THEME}>
             <Stack.Navigator initialRouteName="Splash" screenOptions={() => ({ headerShown: false })}>
               <Stack.Screen name="Splash" component={SplashScreen} />
@@ -75,13 +92,13 @@ export default function App() {
               <Stack.Screen name="VillageViewRecords" component={VillageViewRecordsScreen} />
               <Stack.Screen name="RegisterMarriage" component={RegisterMarriageScreen} />
               <Stack.Screen name="VillageRecordDeath" component={VillageRecordDeathScreen} />
-              <Stack.Screen name="NINRegistration" component={NINRegistrationScreen} />
               <Stack.Screen name="MigrationHome" component={MigrationHomeScreen} />
               <Stack.Screen name="TrackMigration" component={TrackMigrationScreen} />
               <Stack.Screen name="ConfirmIncomingMigration" component={ConfirmIncomingMigrationScreen} />
               <Stack.Screen name="MigrationRequests" component={MigrationRequestsScreen} />
             </Stack.Navigator>
           </NavigationContainer>
+          </AppFrame>
         </ThemeProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

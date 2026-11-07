@@ -31,7 +31,7 @@ export default function YearMonthFilter({ onChange }) {
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3">
       <Calendar size={14} className="text-[#00d4ff] shrink-0" />
-      <span className="text-xs text-gray-500 shrink-0">Period</span>
+      <span className="text-xs text-gray-400 shrink-0">Period</span>
       <select className={sel} value={year} onChange={e => setYear(Number(e.target.value))}>
         {years.map(y => <option key={y} value={y}>{y}</option>)}
       </select>

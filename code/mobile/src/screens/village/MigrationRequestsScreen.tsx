@@ -219,7 +219,7 @@ export default function MigrationRequestsScreen({ navigation }: Props) {
                   }}
                 >
                   <XCircle size={14} color="#f87171" />
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#f87171' }}>Reject</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: T.danger }}>Reject</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   disabled={busyId === row.id}

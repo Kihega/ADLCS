@@ -25,7 +25,7 @@ import {
   Platform,
   Animated,
   Alert,
-  Dimensions,
+  useWindowDimensions,
   ImageBackground,
   Image,
 } from 'react-native'
@@ -48,18 +48,17 @@ type LoginScreenProps = {
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const { height: SCREEN_H } = Dimensions.get('window')
 
 // ─── Tanzania colours ─────────────────────────────────────────────────────────
 const C = {
   pageBg: '#060f1e',
   cardBg: '#0d1f38',
-  border: '#1e3a5f',
+  border: '#3d6ca3', // was #1e3a5f — input outlines were almost invisible
   inputBg: '#060f1e',
   green: '#1eb53a',
   text: '#ffffff',
   textSub: '#94a3b8',
-  textDim: '#4b6080',
+  textDim: '#8ea4c0', // was #4b6080 (≈3:1 on the input bg → unreadable placeholders)
   red: '#f87171',
   yellow: '#fcd116',
   tzGreen: '#1eb53a',
@@ -159,21 +158,6 @@ function TopBrand() {
       </View>
       {/* Brand row */}
       <View style={s.topRow}>
-        <View style={s.nbsBox}>
-          <Image
-            source={require('../../../public/assets/longo_nbs.png')}
-            style={{ width: 36, height: 36 }}
-            resizeMode="contain"
-            onError={() => {}}
-          />
-          <Text style={s.nbsLabel}>NBS</Text>
-        </View>
-        <View style={s.topCenter}>
-          <Text style={s.topGov}>THE UNITED REPUBLIC OF TANZANIA</Text>
-          <Text style={s.topTitle}>NBS-CRVS</Text>
-          <View style={s.topDivider} />
-          <Text style={s.topSub}>Census for Development</Text>
-        </View>
         <View style={s.coaBox}>
           <Image
             source={require('../../../public/assets/court_of_arm.png')}
@@ -183,6 +167,21 @@ function TopBrand() {
           />
           <Text style={s.coaLabel}>GoT</Text>
         </View>
+        <View style={s.topCenter}>
+          <Text style={s.topGov}>THE UNITED REPUBLIC OF TANZANIA</Text>
+          <Text style={s.topTitle}>NBS-CRVS</Text>
+          <View style={s.topDivider} />
+          <Text style={s.topSub}>Census for Development</Text>
+        </View>
+        <View style={s.nbsBox}>
+          <Image
+            source={require('../../../public/assets/longo_nbs.png')}
+            style={{ width: 36, height: 36 }}
+            resizeMode="contain"
+            onError={() => {}}
+          />
+          <Text style={s.nbsLabel}>NBS</Text>
+        </View>
       </View>
       <Text style={s.tagline}>&ldquo;Hali ya Watanzania kwa Takwimu&rdquo;</Text>
     </ImageBackground>
@@ -191,6 +190,10 @@ function TopBrand() {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function LoginScreen({ navigation }: LoginScreenProps) {
+  const { height: SCREEN_H } = useWindowDimensions()
+  // Banner is ~27% of the screen but clamped so it is neither cramped on short
+  // phones nor huge on tablets / landscape.
+  const bannerH = Math.min(Math.max(SCREEN_H * 0.27, 190), 280)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -341,7 +344,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       >
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Top brand */}
-          <View style={{ height: SCREEN_H * 0.27 }}>
+          <View style={{ height: bannerH }}>
             <TopBrand />
           </View>
 
@@ -488,7 +491,7 @@ const s = StyleSheet.create({
   nbsBox: { width: 52, alignItems: 'center', gap: 3 },
   nbsLabel: { fontSize: 8, fontWeight: '800', color: C.yellow, letterSpacing: 1.2 },
   coaBox: { width: 52, alignItems: 'center', gap: 3 },
-  coaLabel: { fontSize: 8, fontWeight: '700', color: 'rgba(255,255,255,0.5)', letterSpacing: 1 },
+  coaLabel: { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.9)', letterSpacing: 1 },
   topCenter: { flex: 1, alignItems: 'center' },
   topGov: {
     fontSize: 7,
@@ -507,15 +510,15 @@ const s = StyleSheet.create({
     marginVertical: 4,
   },
   topSub: {
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.92)',
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   tagline: {
-    fontSize: 9,
+    fontSize: 10,
     fontStyle: 'italic',
-    color: 'rgba(252,209,22,0.7)',
+    color: '#fcd116',
     textAlign: 'center',
     paddingVertical: 6,
   },
@@ -555,7 +558,7 @@ const s = StyleSheet.create({
   },
 
   lbl: {
-    fontSize: 10,
+    fontSize: 11,
     color: C.textSub,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
@@ -577,10 +580,10 @@ const s = StyleSheet.create({
   infoTxt: { fontSize: 11.5, lineHeight: 18 },
 
   btn: { borderRadius: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
-  btnTxt: { color: C.white, fontWeight: '800', fontSize: 14 },
+  btnTxt: { color: '#02143c', fontWeight: '800', fontSize: 15 }, // navy on sky-blue/green ≥6:1 (white was 2.8:1)
   btnOff: { opacity: 0.45 },
   linkBtn: { alignItems: 'center', marginTop: 14 },
-  linkTxt: { fontSize: 11.5, color: `${C.tzBlue}cc` },
+  linkTxt: { fontSize: 12.5, color: '#38bdf8' },
 
   errRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
   errTxt: { fontSize: 10.5, color: C.red, flex: 1 },
@@ -593,5 +596,5 @@ const s = StyleSheet.create({
     marginTop: 20,
   },
   footerTxt: { fontSize: 10, color: C.textDim },
-  footerTxt2: { fontSize: 9, color: C.border, textAlign: 'center', marginTop: 3 },
+  footerTxt2: { fontSize: 10, color: C.textDim, textAlign: 'center', marginTop: 3 },
 })

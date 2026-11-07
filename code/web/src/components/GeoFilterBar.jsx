@@ -84,7 +84,7 @@ export default function GeoFilterBar({ onChange, scoped = false }) {
     return (
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <MapPin size={14} className="text-[#00d4ff] shrink-0" />
-        <span className="text-xs text-gray-500 shrink-0">Your district</span>
+        <span className="text-xs text-gray-400 shrink-0">Your district</span>
         <select className={sel} value={wardId} onChange={e => setWardId(e.target.value)}>
           <option value="">All Wards</option>
           {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -96,7 +96,7 @@ export default function GeoFilterBar({ onChange, scoped = false }) {
           ))}
         </select>
         {(wardId || villageId) && (
-          <button onClick={reset} className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-red-300">
+          <button onClick={reset} className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-300">
             <X size={12} /> Clear
           </button>
         )}
@@ -124,7 +124,7 @@ export default function GeoFilterBar({ onChange, scoped = false }) {
         {villages.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
       </select>
       {(regionId || districtId || wardId || villageId) && (
-        <button onClick={reset} className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-red-300">
+        <button onClick={reset} className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-300">
           <X size={12} /> Clear
         </button>
       )}

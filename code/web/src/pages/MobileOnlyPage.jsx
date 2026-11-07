@@ -71,7 +71,7 @@ export default function MobileOnlyPage() {
         </p>
 
         {/* App info card */}
-        <div className="bg-[#0d1f38] border border-[#1e3a5f] rounded-2xl p-5 mb-6 text-left space-y-3">
+        <div className="bg-[#0d1f38] border border-[#3d6ca3] rounded-2xl p-5 mb-6 text-left space-y-3">
           <p className="text-[#00d4ff] text-xs font-semibold uppercase tracking-widest">
             How to access your dashboard
           </p>
@@ -91,7 +91,7 @@ export default function MobileOnlyPage() {
         </div>
 
         {/* Download note */}
-        <p className="text-gray-600 text-xs mb-6">
+        <p className="text-gray-400 text-xs mb-6">
           Don&apos;t have the app? Contact your District Administrator to receive
           the installation link and activation token.
         </p>
@@ -99,7 +99,7 @@ export default function MobileOnlyPage() {
         <button
           onClick={handleLogout}
           className="w-full py-3 rounded-xl font-bold text-sm bg-[#0d1f38]
-                     border border-[#1e3a5f] text-gray-400 hover:border-[#00d4ff]/40
+                     border border-[#3d6ca3] text-gray-400 hover:border-[#00d4ff]/40
                      hover:text-white transition-all"
         >
           ← Back to Login

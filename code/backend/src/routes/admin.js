@@ -1480,49 +1480,7 @@ router.get('/rita', async (req, res) => {
   }
 })
 
-// ── PATCH-4: GET /nida — NIN issuance trends for NIDA sidebar ─────────────────
-router.get('/nida', async (req, res) => {
-  try {
-    // PATCH-WEEKLYTRENDS-2026: floored to a single selected month/year.
-    const { start, end, year, month } = monthRange(req.query)
-    const dateFilter = { gte: start, lt: end }
-
-    // BUGFIX-NIDA-2026: `nin` and `createdAt` do not exist on Citizen — the
-    // real fields are `nationalId` and `idCardIssued` (the actual NIN
-    // *issuance* event/date; `registeredAt` is when the citizen record was
-    // created, which can predate NIN issuance). Every call was throwing a
-    // Prisma validation error, which is why this card always came back
-    // empty even with real issuances in the database. Geo scoping now
-    // reuses buildCitizenGeoWhere() — the same helper every other
-    // citizen-scoped query in this file already uses — so district_admin
-    // is floored to their own district and can narrow by ward/village.
-    const geoWhere = await buildCitizenGeoWhere(req)
-    const where = {
-      ...geoWhere,
-      idCardIssued: Object.keys(dateFilter).length ? { ...dateFilter, not: null } : { not: null },
-    }
-
-    const ninRows = await prisma.citizen.groupBy({
-      by: ['idCardIssued'],
-      _count: { id: true },
-      where,
-      orderBy: { idCardIssued: 'asc' },
-    })
-
-    const trend = groupByWeek(ninRows, 'idCardIssued')
-
-    return res.json({
-      success: true,
-      data: {
-        ninIssuances: trend,
-        total: ninRows.reduce((s, r) => s + r._count.id, 0),
-        year, month,
-      },
-    })
-  } catch (err) {
-    console.error('[admin/nida]', err)
-    return res.status(500).json({ success: false, message: 'Failed to fetch NIDA trends' })
-  }
-})
+// NOTE: GET /nida (NIN issuance trends) was removed — NIN issuance is handled
+// by a separate organisation, so there is nothing to chart here.
 
 module.exports = router
