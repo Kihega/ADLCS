@@ -13,14 +13,14 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Modal,
-  KeyboardAvoidingView,
   Platform,
   Animated,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
+import { isValidId, classifyId } from '../../services/identityLookup'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Clipboard from 'expo-clipboard'
@@ -120,7 +120,7 @@ function CalPicker({
               >
                 Day
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {Array.from({ length: daysIn }, (_, i) => i + 1).map((d) => (
                   <TouchableOpacity
                     key={d}
@@ -144,7 +144,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             {/* Month */}
             <View style={{ flex: 2 }}>
@@ -153,7 +153,7 @@ function CalPicker({
               >
                 Month
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {MONTHS.map((name, i) => (
                   <TouchableOpacity
                     key={name}
@@ -177,7 +177,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             {/* Year */}
             <View style={{ flex: 1.5 }}>
@@ -186,7 +186,7 @@ function CalPicker({
               >
                 Year
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {Array.from({ length: 120 }, (_, i) => curY - i).map((y) => (
                   <TouchableOpacity
                     key={y}
@@ -210,7 +210,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
@@ -410,15 +410,20 @@ export default function RecordDeathScreen({ navigation }: Props) {
   // NIN. Names kept as formatNIN/isNINComplete to avoid touching every call
   // site below; they now format/validate a BID.
   const formatNIN = (raw: string) => raw.toUpperCase().replace(/[^A-Z0-9-]/g, '')
-  const isNINComplete = (nin: string) => /^BID-[A-Z0-9]{6,12}$/.test(nin.trim())
+  const isNINComplete = (nin: string) => classifyId(nin) !== null
 
   // ── ADULT: Citizen lookup ─────────────────────────────────────────────────
   const lookupCitizen = useCallback(async () => {
-    if (!lookupId.trim()) {
-      Alert.alert('Error', 'Enter a National ID or name.')
+    if (!isValidId(lookupId)) {
+      Alert.alert(
+        'Invalid ID',
+        "Enter the deceased person's Birth ID (BID-XXXXXXXXXX) or 20-digit NIN. Searching by name is not allowed."
+      )
       return
     }
     setLookupLoad(true)
+    let failMsg =
+      'Cannot reach the NBS server. The deceased can only be fetched online by Birth ID or NIN.'
     try {
       const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (token) {
@@ -432,23 +437,23 @@ export default function RecordDeathScreen({ navigation }: Props) {
         clearTimeout(_t1)
         const json = await res.json()
         if (json.success && json.data) {
-          setCitizen(json.data)
-          setLookupLoad(false)
-          return
+          if (String(json.data.vitalStatus ?? '').toLowerCase() === 'deceased') {
+            failMsg = 'This person is already recorded as deceased.'
+          } else {
+            setCitizen(json.data)
+            setLookupLoad(false)
+            return
+          }
+        } else {
+          failMsg = json.message || 'No record found for this Birth ID / NIN.'
         }
       }
     } catch {
-      /* offline fallback */
+      /* offline — handled by the alert below */
     }
-    Alert.alert('Not Found in DB', 'No record found online. Proceed with manual name entry?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Manual Entry',
-        onPress: () => {
-          setCitizen({ fullName: lookupId.trim(), nationalId: lookupId.trim() })
-        },
-      },
-    ])
+    // PATCH-STRICT-ID-2026: no manual name entry — the deceased must be fetched.
+    setCitizen(null)
+    Alert.alert('Not found', failMsg)
     setLookupLoad(false)
   }, [lookupId])
 
@@ -489,11 +494,14 @@ export default function RecordDeathScreen({ navigation }: Props) {
           setLoad(false)
           return
         }
+        setErr(json.message || 'Birth ID / NIN not found in the NBS Central Database.')
+        setLoad(false)
+        return
       }
     } catch {
       /* fall through */
     }
-    setErr('National ID not found in NBS Central Database (device may be offline).')
+    setErr('Cannot reach the NBS server. Parents can only be fetched online by Birth ID or NIN.')
     setLoad(false)
   }, [])
 
@@ -557,7 +565,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
         }`.toUpperCase()
       } else {
         // Spec §2.8 Case B — ADULT: fetch citizen, mark DECEASED
-        nationalId = citizen?.nationalId ?? lookupId.trim()
+        nationalId = citizen?.nationalId ?? citizen?.birthId ?? lookupId.trim()
         deceasedName =
           citizen?.fullName ??
           (citizen?.firstName
@@ -668,7 +676,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -718,7 +726,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
           ))}
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
@@ -818,14 +826,14 @@ export default function RecordDeathScreen({ navigation }: Props) {
             <View style={{ gap: 14 }}>
               <Text style={[s.stepTitle, { color: T.text }]}>Search Deceased Citizen</Text>
               <Text style={{ fontSize: 12, color: T.textSub, lineHeight: 18 }}>
-                Enter the National ID or full name. Vital status will be updated to DECEASED upon
-                submission.
+                Enter the deceased's Birth ID (BID) — or their NIN if they have no Birth ID. Names
+                cannot be used. Vital status will be updated to DECEASED upon submission.
               </Text>
               <View>
                 <Text
                   style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}
                 >
-                  Birth ID (BID) / Full Name *
+                  Birth ID (BID) or NIN *
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <TextInput
@@ -834,17 +842,22 @@ export default function RecordDeathScreen({ navigation }: Props) {
                       { flex: 1, backgroundColor: T.card2, borderColor: T.border, color: T.text },
                     ]}
                     value={lookupId}
-                    onChangeText={(t) => setLookupId(t.toUpperCase())}
-                    placeholder="Birth ID (BID) or full name"
+                    onChangeText={(t) => {
+                      setLookupId(t.toUpperCase())
+                      setCitizen(null)
+                    }}
+                    placeholder="BID-XXXXXXXXXX or NIN"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
                     placeholderTextColor={T.textDim}
                     returnKeyType="search"
                     blurOnSubmit={false}
                     onSubmitEditing={lookupCitizen}
                   />
                   <TouchableOpacity
-                    style={[s.searchBtn, { opacity: lookupId.trim().length >= 3 ? 1 : 0.45 }]}
+                    style={[s.searchBtn, { opacity: isValidId(lookupId) ? 1 : 0.45 }]}
                     onPress={lookupCitizen}
-                    disabled={lookupId.trim().length < 3 || lookupLoad}
+                    disabled={!isValidId(lookupId) || lookupLoad}
                   >
                     {lookupLoad ? (
                       <ActivityIndicator color="#fff" size="small" />
@@ -936,10 +949,12 @@ export default function RecordDeathScreen({ navigation }: Props) {
                         ]}
                         value={nid}
                         onChangeText={(raw) => setNid(formatNIN(raw))}
-                        placeholder="BID-XXXXXXXXXX"
+                        placeholder="BID-XXXXXXXXXX or NIN"
                         placeholderTextColor={T.textDim}
                         keyboardType="default"
-                        maxLength={14}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        maxLength={24}
                       />
                       <TouchableOpacity
                         style={[
@@ -1306,7 +1321,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <CalPicker
           visible={showCal}
@@ -1317,7 +1332,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
           }}
           onClose={() => setShowCal(false)}
         />
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
       <Toast message={toast} visible={toastVis} />
     </SafeAreaView>
   )

@@ -29,6 +29,7 @@ const { requireAuth } = require('../middleware/auth')
 const { findPersonByBid, calcAge, buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
 const nida = require('../lib/nidaClient')
+const { lookupIdentity, resolveDeceasedRef } = require('../lib/identityLookup')
 
 const router = Router()
 router.use(requireAuth)
@@ -388,13 +389,16 @@ router.post('/death', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing required fields' })
   }
   try {
+    // PATCH-STRICT-ID-2026: the deceased must resolve to a real person (BID / NIN).
+    const deceased = await resolveDeceasedRef(nationalId, { category, citizenId })
+    if (!deceased.ok) return res.status(deceased.status || 422).json({ success: false, message: deceased.message })
     const officer = await prisma.hospitalOfficer.findUnique({ where: { id }, select: { facilityId: true } })
     const certNo  = `TZ-DEATH-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`
     const death   = await prisma.death.create({
       data: {
         deathCertNo:       certNo,
-        citizenId:         citizenId  || undefined,
-        nationalId:        nationalId || undefined,
+        citizenId:         deceased.citizenId,
+        nationalId:        deceased.nationalId,
         dateOfDeath:       new Date(dateOfDeath),
         causeOfDeath,
         locationType,
@@ -525,76 +529,23 @@ const OFFICER_CITIZEN_LOOKUP_SELECT = {
   currentVillage: { select: VILLAGE_GEO_SELECT },
 }
 router.get('/citizen-lookup', async (req, res) => {
-  const q = req.query.q?.toString().trim()
-  if (!q) return res.status(400).json({ success: false, message: 'Query required' })
+  // PATCH-STRICT-ID-2026: a person can ONLY be fetched by Birth ID (main way)
+  // or NIN. No name / partial search — nobody can be "found" by typing a name
+  // and used to register a false birth, death or migration. A NIN that is not
+  // in the local registry is resolved through the NIDA adapter
+  // (lib/nidaClient.js, configured with NIDA_API_URL in backend/.env).
+  const q = String(req.query.birthId || req.query.nin || req.query.q || '').trim()
+  if (!q) return res.status(400).json({ success: false, message: 'Birth ID or NIN required' })
   try {
-    // Accepts a Birth ID (BID) or a NIN. BID is fully functional; a NIN that is
-    // not already in the local registry is handed to the NIDA adapter, which is
-    // intentionally a stub until NIDA API access exists (lib/nidaClient.js).
-    const ident = classifyIdentifier(q)
-    let citizen = await prisma.citizen.findFirst({ where: { birthId: q }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
-    if (!citizen) {
-      citizen = await prisma.citizen.findFirst({ where: { nationalId: q }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
-    }
-    if (!citizen && ident.type === 'NIN' && ident.value !== q) {
-      citizen = await prisma.citizen.findFirst({ where: { nationalId: ident.value }, select: OFFICER_CITIZEN_LOOKUP_SELECT })
-    }
-    if (!citizen) {
-      citizen = await prisma.citizen.findFirst({
-        where: { OR: [
-          { birthId:    { contains: q, mode: 'insensitive' } },
-          { nationalId: { contains: q, mode: 'insensitive' } },
-          { firstName:  { contains: q, mode: 'insensitive' } },
-          { surname:    { contains: q, mode: 'insensitive' } },
-        ]},
-        select: OFFICER_CITIZEN_LOOKUP_SELECT,
-      })
-    }
-    if (citizen) {
-      return res.json({
-        success: true,
-        data: {
-          ...citizen,
-          age: citizen.age ?? calcAge(citizen.dateOfBirth),
-          ...buildGeo(citizen.currentVillage),
-          fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
-        },
-      })
-    }
-    // PATCH-BID-UNIVERSAL-2026: a BID is valid the moment a birth is
-    // registered, before any Citizen/NIN exists — fall back to the Birth
-    // table so a freshly-generated BID can immediately be used here too
-    // (e.g. as a father/mother during another birth registration).
-    const person = await findPersonByBid(q)
-    if (person) {
-      return res.json({
-        success: true,
-        data: { ...person, fullName: [person.firstName, person.middleName, person.surname].filter(Boolean).join(' ') },
-      })
-    }
-    if (ident.type === 'NIN') {
-      const ext = await nida.lookupByNin(ident.value)
-      if (ext.available && ext.found) {
-        const p = ext.person
-        return res.json({
-          success: true,
-          data: {
-            nationalId: ident.value, source: 'nida',
-            firstName: p.firstName, middleName: p.middleName ?? '', surname: p.surname,
-            gender: p.gender, dateOfBirth: p.dateOfBirth,
-            fullName: [p.firstName, p.middleName, p.surname].filter(Boolean).join(' '),
-          },
-        })
-      }
-      return res.json({
-        success: false, idType: 'NIN',
-        message: ext.available
-          ? 'NIN not found at NIDA'
-          : 'NIN could not be verified (NIDA connection not available yet). Enter the parent details manually or use the Birth ID.',
-        nidaAvailable: ext.available,
-      })
-    }
-    return res.json({ success: false, message: 'Not found' })
+    const r = await lookupIdentity(q)
+    if (r.found) return res.json({ success: true, data: r.person })
+    return res.json({
+      success: false,
+      idType: r.idType ?? null,
+      code: r.code,
+      message: r.message,
+      nidaAvailable: r.nidaAvailable,
+    })
   } catch (err) {
     console.error('[citizen-lookup]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })

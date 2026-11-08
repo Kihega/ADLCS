@@ -4,14 +4,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Modal,
-  KeyboardAvoidingView,
   Platform,
   Animated,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -111,7 +110,7 @@ function CalPicker({
               >
                 Day
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {Array.from({ length: daysIn }, (_, i) => i + 1).map((d) => (
                   <TouchableOpacity
                     key={d}
@@ -135,7 +134,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 2 }}>
               <Text
@@ -143,7 +142,7 @@ function CalPicker({
               >
                 Month
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {MONTHS.map((name, i) => (
                   <TouchableOpacity
                     key={name}
@@ -167,7 +166,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 1.5 }}>
               <Text
@@ -175,7 +174,7 @@ function CalPicker({
               >
                 Year
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {years.map((y) => (
                   <TouchableOpacity
                     key={y}
@@ -199,7 +198,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
@@ -596,7 +595,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -647,7 +646,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
           ))}
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
           contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
@@ -988,7 +987,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
         <CalPicker
           visible={showCal}
           title="Date of Marriage"
@@ -999,7 +998,7 @@ export default function RegisterMarriageScreen({ navigation }: Props) {
           }}
           onClose={() => setShowCal(false)}
         />
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
       <Toast msg={toast} vis={toastVis} />
     </SafeAreaView>
   )

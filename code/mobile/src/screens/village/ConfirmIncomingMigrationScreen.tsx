@@ -21,12 +21,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Repeat, CheckCircle2, User, Search } from 'lucide-react-native' // PATCH-BID-LOOKUP-2026
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -90,8 +89,8 @@ export default function ConfirmIncomingMigrationScreen({ navigation }: Props) {
         <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>Incoming Migration</Text>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
+      <KeyboardSafeView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAwareScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
           <Text style={{ fontSize: 12, color: T.textSub }}>
             Ask the citizen for their Birth ID (BID) and the migration token given to them by their
             previous village officer, then confirm below. This is only valid within one week of the
@@ -176,8 +175,8 @@ export default function ConfirmIncomingMigrationScreen({ navigation }: Props) {
               </>
             )}
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      </KeyboardSafeView>
     </SafeAreaView>
   )
 }

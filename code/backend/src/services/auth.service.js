@@ -93,7 +93,13 @@ async function validateRefreshToken(role, userId, refreshToken) {
 /** Delete the refresh token from Redis (used on logout) */
 async function deleteRefreshToken(role, userId) {
   const redis = getRedis()
-  await redis.del(refreshKey(role, userId))
+  if (!redis) return // Redis disabled (dev) — nothing stored, nothing to revoke
+  try {
+    await redis.del(refreshKey(role, userId))
+  } catch (err) {
+    // Never turn a sign-out into an error for the officer.
+    console.error('[logout] could not revoke refresh token:', err.message)
+  }
 }
 
 /** Stamp lastLogin on the user record after successful authentication */

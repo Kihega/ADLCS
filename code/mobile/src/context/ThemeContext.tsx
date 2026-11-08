@@ -25,9 +25,19 @@
  * device sees the fixed default rather than the previous officer's choice.
  */
 
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react'
 import { StatusBar } from 'expo-status-bar'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { subscribeSession, notifySessionChanged } from '../services/session'
 
 // ─── Design Tokens (shared) ───────────────────────────────────────────────────
 export const TZ = {
@@ -162,72 +172,68 @@ const ThemeContext = createContext<ThemeContextValue>({
   toggleTheme: () => {},
 })
 
-// Module-level refresh signal so screens outside the React tree (e.g. the
-// login handler, before navigation has settled) can request that the
-// provider re-read the current officer's saved preference.
-type RefreshListener = () => void
-const refreshListeners = new Set<RefreshListener>()
-
-/**
- * Call this immediately after writing tzcrvs_employee_id at login so the
- * home screen the officer lands on reflects THEIR saved theme right away,
- * instead of momentarily showing the previous session's value.
- */
+// Session changes (login / sign-out) come from services/session.ts. The theme
+// is keyed by the signed-in officer, so it can never leak to the Login screen
+// or to whoever signs in next on the same device.
+//
+// Kept for backward compatibility — both simply announce a session change.
 export function refreshThemeForCurrentSession(): void {
-  refreshListeners.forEach((fn) => fn())
+  notifySessionChanged('start')
 }
-
-/**
- * Call this on sign-out (after clearing tzcrvs_* keys) so the next person
- * to use this device sees the fixed default at the Login screen, not
- * whatever the previous officer had chosen.
- */
 export function resetThemeToDefault(): void {
-  refreshListeners.forEach((fn) => fn())
+  notifySessionChanged('end')
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState(DEFAULT_IS_DARK)
+  const isDarkRef = useRef(DEFAULT_IS_DARK)
   const employeeIdRef = useRef<string | null>(null)
+  const reloadSeq = useRef(0)
 
-  const reload = async () => {
+  // Re-read the current officer's saved preference. A newer request always
+  // wins, so a slow read for a previous user can never overwrite the theme.
+  const reload = useCallback(async () => {
+    const seq = ++reloadSeq.current
     const employeeId = await getCurrentEmployeeId()
+    const dark = employeeId ? await loadThemeForEmployee(employeeId) : DEFAULT_IS_DARK
+    if (seq !== reloadSeq.current) return
     employeeIdRef.current = employeeId
-    if (employeeId) {
-      setIsDark(await loadThemeForEmployee(employeeId))
-    } else {
-      // No one is logged in (Splash / Login / just signed out) — always
-      // the fixed default, regardless of any officer's saved choice.
-      setIsDark(DEFAULT_IS_DARK)
-    }
-  }
+    isDarkRef.current = dark
+    setIsDark(dark)
+  }, [])
 
   useEffect(() => {
     reload()
-    refreshListeners.add(reload)
-    return () => {
-      refreshListeners.delete(reload)
-    }
+    return subscribeSession((event) => {
+      if (event === 'end') {
+        // Immediately detach from the officer who just signed out so that
+        // nothing toggled from here on is saved against their id.
+        reloadSeq.current++
+        employeeIdRef.current = null
+        isDarkRef.current = DEFAULT_IS_DARK
+        setIsDark(DEFAULT_IS_DARK)
+        return
+      }
+      reload()
+    })
+  }, [reload])
+
+  const toggleTheme = useCallback(() => {
+    const next = !isDarkRef.current
+    isDarkRef.current = next
+    setIsDark(next)
+    // Persist ONLY for the officer who is signed in. With nobody signed in
+    // (Splash / Login) it just changes the in-memory value.
+    const id = employeeIdRef.current
+    if (id) saveThemeForEmployee(id, next)
   }, [])
 
-  const toggleTheme = () => {
-    setIsDark((prev) => {
-      const next = !prev
-      // Persist against whichever officer is currently logged in. If no
-      // one is logged in, this only changes the in-memory value for the
-      // current screen session and is never written to a per-officer key.
-      if (employeeIdRef.current) {
-        saveThemeForEmployee(employeeIdRef.current, next)
-      }
-      return next
-    })
-  }
-
   const theme = isDark ? DARK : LIGHT
+  const value = useMemo(() => ({ isDark, theme, toggleTheme }), [isDark, theme, toggleTheme])
 
   return (
-    <ThemeContext.Provider value={{ isDark, theme, toggleTheme }}>
+    <ThemeContext.Provider value={value}>
       <StatusBar style={theme.barStyle} />
       {children}
     </ThemeContext.Provider>

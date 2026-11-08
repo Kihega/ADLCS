@@ -19,9 +19,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   Animated,
   Alert,
@@ -29,12 +27,12 @@ import {
   ImageBackground,
   Image,
 } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Eye, EyeOff, Shield, MapPin, Smartphone, AlertCircle } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { resolveBase } from '../../services/apiResolver'
-import { refreshThemeForCurrentSession } from '../../context/ThemeContext'
+import { startSession } from '../../services/session'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type RootStack = {
@@ -245,7 +243,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         tempToken?: string
         accessToken?: string
         refreshToken?: string
-        profile?: { role: string; full_name?: string; employee_id?: string }
+        profile?: { id?: string | number; role: string; full_name?: string; employee_id?: string }
       }
       if (!res.ok) {
         setError(data.message ?? 'Login failed')
@@ -255,13 +253,14 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         setTempToken(data.tempToken ?? '')
         setLoginMode('mfa_verify')
       } else {
-        await AsyncStorage.multiSet([
-          ['tzcrvs_access_token', data.accessToken ?? ''],
-          ['tzcrvs_refresh_token', data.refreshToken ?? ''],
-          ['tzcrvs_role', data.profile?.role ?? ''],
-          ['tzcrvs_officer_name', data.profile?.full_name ?? 'Officer'],
-          ['tzcrvs_employee_id', data.profile?.employee_id ?? 'EMP-000'],
-        ])
+        await startSession({
+          accessToken: data.accessToken ?? '',
+          refreshToken: data.refreshToken ?? '',
+          role: data.profile?.role ?? '',
+          fullName: data.profile?.full_name ?? 'Officer',
+          // unique per officer — never a shared fallback, so themes can't collide
+          employeeId: String(data.profile?.employee_id ?? data.profile?.id ?? 'EMP-000'),
+        })
         goHome(data.profile?.role ?? '')
       }
     } catch (err: unknown) {
@@ -301,20 +300,21 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         message?: string
         accessToken?: string
         refreshToken?: string
-        profile?: { role: string; full_name?: string; employee_id?: string }
+        profile?: { id?: string | number; role: string; full_name?: string; employee_id?: string }
       }
       if (!res.ok) {
         setError(data.message ?? 'Invalid MFA code')
         setMfaCode('')
         return
       }
-      await AsyncStorage.multiSet([
-        ['tzcrvs_access_token', data.accessToken ?? ''],
-        ['tzcrvs_refresh_token', data.refreshToken ?? ''],
-        ['tzcrvs_role', data.profile?.role ?? ''],
-        ['tzcrvs_officer_name', data.profile?.full_name ?? 'Officer'],
-        ['tzcrvs_employee_id', data.profile?.employee_id ?? 'EMP-000'],
-      ])
+      await startSession({
+          accessToken: data.accessToken ?? '',
+          refreshToken: data.refreshToken ?? '',
+          role: data.profile?.role ?? '',
+          fullName: data.profile?.full_name ?? 'Officer',
+          // unique per officer — never a shared fallback, so themes can't collide
+          employeeId: String(data.profile?.employee_id ?? data.profile?.id ?? 'EMP-000'),
+        })
       goHome(data.profile?.role ?? '')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
@@ -329,7 +329,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   }
 
   const goHome = (role: string) => {
-    refreshThemeForCurrentSession()
+    // startSession() already announced the new user to the theme.
     if (role === 'village_officer') navigation.replace('VillageHome')
     else if (role === 'hospital_officer') navigation.replace('HospitalHome')
     else Alert.alert('Access Denied', 'This app is for field officers only. Use the web portal.')
@@ -338,11 +338,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <View style={s.screen}>
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Top brand */}
           <View style={{ height: bannerH }}>
             <TopBrand />
@@ -467,8 +467,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               <Text style={s.footerTxt2}>© 2026 National Bureau of Statistics · TzCRVS</Text>
             </Animated.View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      </KeyboardSafeView>
     </View>
   )
 }

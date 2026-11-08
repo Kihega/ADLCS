@@ -4,14 +4,14 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Modal,
-  KeyboardAvoidingView,
   Platform,
   Animated,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
+import { isValidId } from '../../services/identityLookup'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -110,7 +110,7 @@ function CalPicker({
               >
                 Day
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {Array.from({ length: daysIn }, (_, i) => i + 1).map((d) => (
                   <TouchableOpacity
                     key={d}
@@ -134,7 +134,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 2 }}>
               <Text
@@ -142,7 +142,7 @@ function CalPicker({
               >
                 Month
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {MONTHS.map((name, i) => (
                   <TouchableOpacity
                     key={name}
@@ -166,7 +166,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 1.5 }}>
               <Text
@@ -174,7 +174,7 @@ function CalPicker({
               >
                 Year
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {years.map((y) => (
                   <TouchableOpacity
                     key={y}
@@ -198,7 +198,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
@@ -413,8 +413,12 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
   ] as const
 
   const searchCitizen = async () => {
-    if (lookupId.trim().length < 3) return
+    // PATCH-STRICT-ID-2026: Birth ID (main way) or NIN only — no name search,
+    // no "continue with manual entry".
+    if (!isValidId(lookupId)) return
     setLookupLoad(true)
+    let failMsg =
+      'Cannot reach the NBS server. The deceased can only be fetched online by Birth ID or NIN.'
     try {
       const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (token && isOnline()) {
@@ -432,23 +436,21 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
         )
         const j = await r.json()
         if (j.success && j.data) {
-          setCitizen(j.data)
-          setStep(2)
-          setLookupLoad(false)
-          return
+          if (String(j.data.vitalStatus ?? '').toLowerCase() === 'deceased') {
+            failMsg = 'This person is already recorded as deceased.'
+          } else {
+            setCitizen(j.data)
+            setStep(2)
+            setLookupLoad(false)
+            return
+          }
+        } else {
+          failMsg = j.message || 'No record found for this Birth ID / NIN.'
         }
       }
     } catch {}
-    Alert.alert('Not Found Online', 'Proceed with manual entry?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Manual Entry',
-        onPress: () => {
-          setCitizen({ fullName: lookupId.trim(), nationalId: lookupId.trim() })
-          setStep(2)
-        },
-      },
-    ])
+    setCitizen(null)
+    Alert.alert('Not found', failMsg)
     setLookupLoad(false)
   }
 
@@ -484,7 +486,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
       }
       await saveDeath({
         certNo: cert,
-        nationalId: citizen?.nationalId ?? lookupId.trim(),
+        nationalId: citizen?.nationalId ?? citizen?.birthId ?? lookupId.trim(),
         deceasedName:
           (citizen?.fullName ?? citizen?.firstName)
             ? `${citizen.firstName} ${citizen.surname ?? ''}`.trim()
@@ -502,7 +504,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
         try {
           await apiPost('/village/death', {
             deceasedName: citizen?.fullName ?? lookupId.trim(),
-            nationalId: citizen?.nationalId ?? lookupId.trim(),
+            nationalId: citizen?.nationalId ?? citizen?.birthId ?? lookupId.trim(),
             causeOfDeath: cause.trim(),
             dateOfDeath: dod.trim(),
             category: category,
@@ -528,7 +530,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -583,7 +585,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
           ))}
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
           contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
         >
@@ -627,8 +629,13 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                     color: T.text,
                   }}
                   value={lookupId}
-                  onChangeText={setLookupId}
-                  placeholder="Birth ID (BID) or full name"  /* PATCH-BID-LOOKUP-2026 */
+                  onChangeText={(t) => {
+                    setLookupId(t.toUpperCase())
+                    setCitizen(null)
+                  }}
+                  placeholder="BID-XXXXXXXXXX or NIN"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
                   placeholderTextColor={T.textDim}
                   returnKeyType="search"
                   blurOnSubmit={false}
@@ -641,10 +648,10 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                     paddingHorizontal: 14,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    opacity: lookupId.trim().length >= 3 ? 1 : 0.4,
+                    opacity: isValidId(lookupId) ? 1 : 0.4,
                   }}
                   onPress={searchCitizen}
-                  disabled={lookupId.trim().length < 3 || lookupLoad}
+                  disabled={!isValidId(lookupId) || lookupLoad}
                 >
                   {lookupLoad ? (
                     <ActivityIndicator color="#fff" size="small" />
@@ -919,7 +926,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
         <CalPicker
           visible={showCal}
           title="Date of Death"
@@ -930,7 +937,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
           }}
           onClose={() => setShowCal(false)}
         />
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
       <Toast msg={toast} vis={toastVis} />
     </SafeAreaView>
   )

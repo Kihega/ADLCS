@@ -20,7 +20,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Image,
@@ -29,11 +28,12 @@ import {
   Animated,
   Modal,
   TouchableWithoutFeedback,
-  Share,
   useWindowDimensions,
   InteractionManager,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { endSession, goToLogin } from '../../services/session'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
@@ -52,12 +52,10 @@ import {
   Building2,
   Wifi,
   WifiOff,
-  BarChart3,
   User,
   Lock,
   Menu,
   X,
-  Download,
   WifiLow,
   Stethoscope,
   IdCard,
@@ -159,6 +157,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <KeyboardSafeView pad style={{ flex: 1 }}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }}>
         <View
           style={{
@@ -402,6 +401,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
           </View>
         </View>
       </View>
+    </KeyboardSafeView>
     </Modal>
   )
 }
@@ -714,7 +714,7 @@ function Sidebar({
         </LinearGradient>
 
         {/* Menu */}
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <KeyboardAwareScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           {MENU.map((section) => (
             <View key={section.section} style={[s.drawerSection, { borderBottomColor: T.border }]}>
               <Text style={[s.drawerSectionLabel, { color: T.textDim }]}>{section.section}</Text>
@@ -750,7 +750,7 @@ function Sidebar({
               ))}
             </View>
           ))}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={[s.drawerFooter, { borderTopColor: T.border }]}>
           <Text style={[s.drawerFooterText, { color: T.textDim }]}>
@@ -860,7 +860,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
   const loadData = useCallback(async (silent = false) => {
     const token = await AsyncStorage.getItem('tzcrvs_access_token')
     if (!token) {
-      ;(_navigation as any).replace('Login')
+      goToLogin() // idempotent — never a second REPLACE while signing out
       return
     }
 
@@ -947,42 +947,22 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
     }
   }, [loadData])
 
+  // SESSION-2026: sign-out is owned by services/session.ts — it revokes the
+  // refresh token, wipes every per-user key, resets the theme to the default
+  // and resets navigation to Login exactly once (no duplicate REPLACE).
   const handleLogout = useCallback(() => {
     Alert.alert('Confirm Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: async () => {
+        onPress: () => {
           setLoggingOut(true)
-          await AsyncStorage.multiRemove([
-            'tzcrvs_access_token',
-            'tzcrvs_refresh_token',
-            'tzcrvs_role',
-            'tzcrvs_device_activated',
-          ])
-          _navigation.replace('Login')
+          endSession().catch(() => setLoggingOut(false))
         },
       },
     ])
-  }, [_navigation])
-
-  const downloadReport = async (period: string, type: string) => {
-    const lines = [
-      `NBS-CRVS — ${period.toUpperCase()} ${type.toUpperCase()} REPORT`,
-      `Facility: ${officer.facilityName}`,
-      `Location: ${officer.facilityRegion}, ${officer.facilityDistrict}`,
-      `Officer:  ${officer.officerName}`,
-      `Generated:${new Date().toLocaleString('en-TZ')}`,
-      `──────────────────────────────`,
-      `Births today:  ${stats.todayBirths}`,
-      `Deaths today:  ${stats.todayDeaths}`,
-      `Month births:  ${stats.monthBirths}`,
-      `Month deaths:  ${stats.monthDeaths}`,
-      `Pending sync:  ${stats.pendingSync}`,
-    ].join('\n')
-    await Share.share({ title: `NBS-CRVS ${period} ${type}`, message: lines })
-  }
+  }, [])
 
   const ConnIcon = connQuality === 'Good' ? Wifi : connQuality === 'Fair' ? WifiLow : WifiOff
   const initials =
@@ -1237,7 +1217,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
       </ImageBackground>
 
       {/* Body */}
-      <ScrollView
+      <KeyboardAwareScrollView
         showsVerticalScrollIndicator={false}
         style={{ backgroundColor: T.bg }}
         contentContainerStyle={{ paddingBottom: 36 }}
@@ -1412,85 +1392,6 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
           </>
         )}
 
-        {/* Report Card */}
-        <View style={s.sectionHead}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <BarChart3 size={14} color={T.primaryL} />
-            <Text style={[s.sectionTitle, { color: T.text }]}>Daily Report Card</Text>
-          </View>
-          <Text style={{ fontSize: 11, color: T.textDim }}>
-            {new Date().toLocaleDateString('en-TZ', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </Text>
-        </View>
-        <View style={[s.reportCard, { backgroundColor: T.card, borderColor: T.border }]}>
-          {[
-            { label: 'Births registered today', value: stats.todayBirths, color: T.brand },
-            { label: 'Deaths recorded today', value: stats.todayDeaths, color: T.danger },
-            { label: 'Total births this month', value: stats.monthBirths, color: T.brand },
-            { label: 'Total deaths this month', value: stats.monthDeaths, color: T.danger },
-            { label: 'Records pending sync', value: stats.pendingSync, color: H.orange },
-          ].map((row, i, arr) => (
-            <View
-              key={row.label}
-              style={[
-                s.reportRow,
-                { borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: T.border },
-              ]}
-            >
-              <Text style={{ fontSize: 12, color: T.textSub }}>{row.label}</Text>
-              <Text style={{ fontSize: 16, fontWeight: '900', color: row.color }}>{row.value}</Text>
-            </View>
-          ))}
-          <View style={[s.downloadSection, { borderTopColor: T.border }]}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: T.textSub, marginBottom: 12 }}>
-              Download Report
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {(['Daily', 'Weekly', 'Monthly', 'Annual'] as const).map((period) => (
-                <View key={period} style={{ flex: 1, gap: 4 }}>
-                  <Text
-                    style={{
-                      fontSize: 9,
-                      fontWeight: '600',
-                      color: T.textDim,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {period}
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      s.dlBtn,
-                      { backgroundColor: `${TZ.green}18`, borderColor: `${TZ.green}40` },
-                    ]}
-                    onPress={() => downloadReport(period, 'births')}
-                  >
-                    <Download size={10} color={TZ.green} />
-                    <Text style={{ fontSize: 9, fontWeight: '700', color: T.brand }}>Births</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      s.dlBtn,
-                      {
-                        backgroundColor: 'rgba(220,38,38,0.22)',
-                        borderColor: 'rgba(220,38,38,0.50)',
-                      },
-                    ]}
-                    onPress={() => downloadReport(period, 'deaths')}
-                  >
-                    <Download size={10} color="#f87171" />
-                    <Text style={{ fontSize: 9, fontWeight: '700', color: '#ef4444' }}>Deaths</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-
         {/* Footer */}
         <View style={{ alignItems: 'center', paddingTop: 24, gap: 6 }}>
           <View style={{ flexDirection: 'row', width: 80, height: 3, marginBottom: 8 }}>
@@ -1507,7 +1408,7 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
             © {new Date().getFullYear()} The United Republic of Tanzania
           </Text>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   )
 }
@@ -1785,22 +1686,4 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
   },
   actCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
-  reportCard: { marginHorizontal: 14, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
-  reportRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-  },
-  downloadSection: { borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
-  dlBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 6,
-  },
 })
