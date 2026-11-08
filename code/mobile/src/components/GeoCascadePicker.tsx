@@ -38,6 +38,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native'
+import { KeyboardSafeView } from './KeyboardAware'
 import { ChevronDown, X, Search, MapPin, Plus } from 'lucide-react-native'
 import { useTheme, TZ } from '../context/ThemeContext'
 import { apiGet, apiPost } from '../services/syncService'
@@ -119,6 +120,7 @@ function SelectSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardSafeView pad style={{ flex: 1 }}>
       <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }}>
         <View
           style={{
@@ -283,6 +285,7 @@ function SelectSheet({
           )}
         </View>
       </View>
+    </KeyboardSafeView>
     </Modal>
   )
 }

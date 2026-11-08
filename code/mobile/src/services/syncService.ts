@@ -29,6 +29,17 @@ import { resolveBase, resetResolver } from './apiResolver'
 const PENDING_BIRTHS_KEY = 'tzcrvs_pending_births'
 const PENDING_DEATHS_KEY = 'tzcrvs_pending_deaths'
 
+// SESSION-2026: the offline outbox is keyed per officer, so one officer's
+// unsynced records can never be pushed under another officer's account.
+async function pendingKey(base: string): Promise<string> {
+  try {
+    const id = await AsyncStorage.getItem('tzcrvs_employee_id')
+    return id ? `${base}_${id}` : base
+  } catch {
+    return base
+  }
+}
+
 async function readQueue(key: string): Promise<any[]> {
   try {
     const raw = await AsyncStorage.getItem(key)
@@ -48,12 +59,12 @@ async function writeQueue(key: string, items: any[]): Promise<void> {
 
 /** Pending birth registrations waiting to reach the central database. */
 export async function getPendingBirths(): Promise<any[]> {
-  return readQueue(PENDING_BIRTHS_KEY)
+  return readQueue(await pendingKey(PENDING_BIRTHS_KEY))
 }
 
 /** Pending death registrations waiting to reach the central database. */
 export async function getPendingDeaths(): Promise<any[]> {
-  return readQueue(PENDING_DEATHS_KEY)
+  return readQueue(await pendingKey(PENDING_DEATHS_KEY))
 }
 
 /**
@@ -65,7 +76,7 @@ export async function flushPendingSync(): Promise<{ syncedBirths: number; synced
   let syncedBirths = 0
   let syncedDeaths = 0
 
-  const births = await readQueue(PENDING_BIRTHS_KEY)
+  const births = await readQueue(await pendingKey(PENDING_BIRTHS_KEY))
   if (births.length) {
     const remaining: any[] = []
     for (const item of births) {
@@ -77,10 +88,10 @@ export async function flushPendingSync(): Promise<{ syncedBirths: number; synced
         remaining.push(item)
       }
     }
-    await writeQueue(PENDING_BIRTHS_KEY, remaining)
+    await writeQueue(await pendingKey(PENDING_BIRTHS_KEY), remaining)
   }
 
-  const deaths = await readQueue(PENDING_DEATHS_KEY)
+  const deaths = await readQueue(await pendingKey(PENDING_DEATHS_KEY))
   if (deaths.length) {
     const remaining: any[] = []
     for (const item of deaths) {
@@ -92,7 +103,7 @@ export async function flushPendingSync(): Promise<{ syncedBirths: number; synced
         remaining.push(item)
       }
     }
-    await writeQueue(PENDING_DEATHS_KEY, remaining)
+    await writeQueue(await pendingKey(PENDING_DEATHS_KEY), remaining)
   }
 
   if (syncedBirths || syncedDeaths) {
@@ -278,7 +289,7 @@ export async function saveAndSyncBirth(
 
   // Direct save failed (offline / backend unreachable) — queue for retry
   // instead of losing the registration.
-  const queued = await readQueue(PENDING_BIRTHS_KEY)
+  const queued = await readQueue(await pendingKey(PENDING_BIRTHS_KEY))
   queued.push({
     localId: id,
     queuedAt: now,
@@ -299,7 +310,7 @@ export async function saveAndSyncBirth(
       registeredAt: now,
     },
   })
-  await writeQueue(PENDING_BIRTHS_KEY, queued)
+  await writeQueue(await pendingKey(PENDING_BIRTHS_KEY), queued)
 
   return { birth, syncedRemote: false }
 }
@@ -334,7 +345,7 @@ export async function saveAndSyncDeath(
 
   // Direct save failed (offline / backend unreachable) — queue for retry
   // instead of losing the registration.
-  const queued = await readQueue(PENDING_DEATHS_KEY)
+  const queued = await readQueue(await pendingKey(PENDING_DEATHS_KEY))
   queued.push({
     localId: id,
     queuedAt: now,
@@ -350,7 +361,7 @@ export async function saveAndSyncDeath(
       registeredAt: now,
     },
   })
-  await writeQueue(PENDING_DEATHS_KEY, queued)
+  await writeQueue(await pendingKey(PENDING_DEATHS_KEY), queued)
 
   return { death, syncedRemote: false }
 }
@@ -427,7 +438,7 @@ export async function triggerSync(): Promise<SyncResult> {
   // First retry anything queued from a previous failed direct-save attempt.
   const { syncedBirths, syncedDeaths } = await flushPendingSync()
   const pendingLeft =
-    (await readQueue(PENDING_BIRTHS_KEY)).length + (await readQueue(PENDING_DEATHS_KEY)).length
+    (await readQueue(await pendingKey(PENDING_BIRTHS_KEY))).length + (await readQueue(await pendingKey(PENDING_DEATHS_KEY))).length
 
   try {
     const json = await apiPost('/officer/sync/trigger', {})

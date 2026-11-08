@@ -19,6 +19,7 @@ const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { resolveParentCitizen } = require('../lib/parentIdentifier')
 const nida = require('../lib/nidaClient')
+const { resolveDeceasedRef } = require('../lib/identityLookup')
 
 const router = Router()
 router.use(requireAuth)
@@ -130,17 +131,16 @@ router.post('/death/sync', async (req, res) => {
       select: { facilityId: true },
     })
 
-    let citizenId
-    if (nationalId) {
-      const citizen = await prisma.citizen.findFirst({ where: { nationalId }, select: { id: true } })
-      citizenId = citizen?.id
-    }
+    // PATCH-STRICT-ID-2026: verify the deceased (BID / NIN) on the server.
+    const deceased = await resolveDeceasedRef(nationalId, { category })
+    if (!deceased.ok) return res.status(deceased.status || 422).json({ success: false, message: deceased.message })
+    const citizenId = deceased.citizenId
 
     const death = await prisma.death.create({
       data: {
         deathCertNo,
         citizenId:         citizenId || undefined,
-        nationalId:        nationalId || undefined,
+        nationalId:        deceased.nationalId,
         causeOfDeath,
         dateOfDeath:       dateOfDeath ? new Date(dateOfDeath.replace(/(\d{2})\/(\d{2})\/(\d{4})/,'$3-$2-$1')) : new Date(),
         locationType:      ({'hospital':'hospital','outside':'outside','health_facility':'hospital','home':'outside','public_place':'outside','other':'outside'}[locationType] ?? 'outside'),

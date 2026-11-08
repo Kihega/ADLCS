@@ -20,16 +20,15 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Modal,
   Alert,
   ActivityIndicator,
   Animated,
-  KeyboardAvoidingView,
   Platform,
   Image,
   ImageBackground,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Clipboard from 'expo-clipboard'
@@ -71,11 +70,11 @@ type Props = { navigation: NativeStackNavigationProp<RootStack, 'RegisterBirth'>
 
 const H = { primary: '#0891b2', primaryL: '#22d3ee', orange: '#f97316' }
 
-// Parents are identified by EITHER a Birth ID (BID, fully supported) OR a NIN.
-// NINs are issued by NIDA (external). Verifying a NIN against NIDA is not
-// connected yet — the backend reports that and the officer enters the parent's
-// name manually (recorded as "NIN unverified"). Names kept as
-// formatNIN/isNINComplete to avoid touching every call site below.
+// Parents are identified by Birth ID (BID — the main way) or, if they have none,
+// by NIN. Their details are ALWAYS fetched from the NBS database (BID) or from
+// NIDA (NIN) — they can never be typed in by hand, so nobody can register a
+// birth against an invented parent. Names formatNIN/isNINComplete are kept to
+// avoid touching every call site below.
 type ParentIdKind = 'BID' | 'NIN' | null
 function classifyParentId(raw: string): ParentIdKind {
   const v = raw.trim().toUpperCase()
@@ -89,41 +88,6 @@ function formatNIN(raw: string): string {
 }
 function isNINComplete(nin: string) {
   return classifyParentId(nin) !== null
-}
-
-// ─── Test citizens ─────────────────────────────────────────────────────────────
-// PATCH-BID-LOOKUP-2026: keyed by test Birth ID now (matches seed.js)
-const MOCK_CITIZENS: Record<string, any> = {
-  'BID-FATHER0001': {
-    birthId: 'BID-FATHER0001',
-    nationalId: '19850315-07031-00001-24',
-    firstName: 'John',
-    middleName: 'Michael',
-    surname: 'Makonde',
-    gender: 'MALE',
-    dateOfBirth: '15 March 1985',
-    age: 41,
-    vitalStatus: 'ALIVE',
-    region: 'Dar es Salaam',
-    district: 'Kinondoni',
-    village: 'Mikocheni',
-    occupation: 'Civil Engineer',
-  },
-  'BID-MOTHER0001': {
-    birthId: 'BID-MOTHER0001',
-    nationalId: '19880622-07031-00002-13',
-    firstName: 'Grace',
-    middleName: 'Rose',
-    surname: 'Mwamba',
-    gender: 'FEMALE',
-    dateOfBirth: '22 June 1988',
-    age: 37,
-    vitalStatus: 'ALIVE',
-    region: 'Dar es Salaam',
-    district: 'Kinondoni',
-    village: 'Mikocheni',
-    occupation: 'Registered Nurse',
-  },
 }
 
 // ─── Calendar picker ──────────────────────────────────────────────────────────
@@ -195,7 +159,7 @@ function CalPicker({
               >
                 Day
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {Array.from({ length: daysIn }, (_, i) => i + 1).map((d) => (
                   <TouchableOpacity
                     key={d}
@@ -219,7 +183,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 2 }}>
               <Text
@@ -227,7 +191,7 @@ function CalPicker({
               >
                 Month
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {MONTHS.map((name, i) => (
                   <TouchableOpacity
                     key={name}
@@ -251,7 +215,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 1.5 }}>
               <Text
@@ -259,7 +223,7 @@ function CalPicker({
               >
                 Year
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {Array.from({ length: curY - 1999 + 1 }, (_, i) => curY - i).map((y) => (
                   <TouchableOpacity
                     key={y}
@@ -283,7 +247,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
@@ -741,11 +705,6 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const [motherData, setMotherData] = useState<any>(null)
   const [motherLoading, setMotherLoading] = useState(false)
   const [motherError, setMotherError] = useState('')
-  // Manual parent details — only offered for a NIN that NIDA could not verify.
-  type ManualParent = { on: boolean; first: string; middle: string; surname: string }
-  const EMPTY_MANUAL: ManualParent = { on: false, first: '', middle: '', surname: '' }
-  const [fatherManual, setFatherManual] = useState<ManualParent>(EMPTY_MANUAL)
-  const [motherManual, setMotherManual] = useState<ManualParent>(EMPTY_MANUAL)
   const [childFirst, setChildFirst] = useState('')
   const [childMiddle, setChildMiddle] = useState('')
   const [childSurname, setChildSurname] = useState('')
@@ -795,10 +754,9 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         )
         clearTimeout(_bt)
         const json = await res.json()
-        if (!json.success && json.idType === 'NIN') {
-          // NIN not in the local registry and NIDA verification unavailable/not found
-          ;(isFather ? setFatherManual : setMotherManual)((m) => ({ ...m, on: true }))
-          setError(json.message || 'NIN could not be verified. Enter the parent details manually.')
+        if (!json.success || !json.data) {
+          // Strict lookup: not found / NIDA not connected → explain, never type-in.
+          setError(json.message || 'ID not found in NBS Central Database.')
           setLoading(false)
           return
         }
@@ -840,48 +798,23 @@ export default function RegisterBirthScreen({ navigation }: Props) {
       /* fall through to mock */
     }
 
-    // 2. Offline / backend unreachable: a NIN cannot be verified here either —
-    //    let the officer enter the details manually (flagged as unverified).
-    if (classifyParentId(nid) === 'NIN' && !MOCK_CITIZENS[nid.trim()]) {
-      ;(isFather ? setFatherManual : setMotherManual)((m) => ({ ...m, on: true }))
-      setError('NIN could not be verified right now. Enter the parent details manually.')
-      setLoading(false)
-      return
-    }
-    await new Promise<void>((r) => setTimeout(r, 600))
-    const found = MOCK_CITIZENS[nid.trim()]
-    if (!found) {
-      setError('ID not found in NBS Central Database.')
-      setLoading(false)
-      return
-    }
-    if (isFather && found.gender !== 'MALE') {
-      setError('This NID belongs to a female citizen.')
-      setLoading(false)
-      return
-    }
-    if (!isFather && found.gender !== 'FEMALE') {
-      setError('This NID belongs to a male citizen.')
-      setLoading(false)
-      return
-    }
-    setData(found)
+    // 2. No session / server unreachable: parents can only be fetched online —
+    //    by Birth ID from the NBS database, or by NIN through NIDA.
+    setError('Cannot reach the NBS server. Parent details can only be fetched online by Birth ID or NIN.')
     setLoading(false)
   }, [])
 
   const handleNINInput = (raw: string, role: 'father' | 'mother') => {
     const f = formatNIN(raw)
-    // Editing the ID invalidates any earlier lookup / manual entry.
+    // Editing the ID invalidates any earlier lookup.
     if (role === 'father') {
       setFatherNid(f)
       setFatherData(null)
       setFatherError('')
-      setFatherManual(EMPTY_MANUAL)
     } else {
       setMotherNid(f)
       setMotherData(null)
       setMotherError('')
-      setMotherManual(EMPTY_MANUAL)
     }
   }
 
@@ -1036,8 +969,8 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           {label} Identification
         </Text>
         <Text style={{ fontSize: 12, color: T.textSub, lineHeight: 18 }}>
-          Enter the {label.toLowerCase()}'s Birth ID (BID) or National ID (NIN). A Birth ID is
-          validated in the NBS Central Database. NIN verification with NIDA is not connected yet.
+          Enter the {label.toLowerCase()}'s Birth ID (BID) — or their NIN if they have no Birth ID.
+          Details are fetched automatically and cannot be typed in.
         </Text>
         <View>
           <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
@@ -1115,87 +1048,6 @@ export default function RegisterBirthScreen({ navigation }: Props) {
           >
             <AlertCircle size={14} color="#f87171" />
             <Text style={{ fontSize: 12, color: T.danger, flex: 1, lineHeight: 17 }}>{error}</Text>
-          </View>
-        )}
-        {(isFather ? fatherManual : motherManual).on && !data && (
-          <View
-            style={{
-              gap: 10,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: T.border,
-              backgroundColor: T.card,
-              padding: 12,
-            }}
-          >
-            <Text style={{ fontSize: 12, fontWeight: '700', color: T.text }}>
-              Enter {label.toLowerCase()}'s details (NIN unverified)
-            </Text>
-            {(
-              [
-                ['first', 'First name *'],
-                ['middle', 'Middle name (optional)'],
-                ['surname', 'Surname *'],
-              ] as const
-            ).map(([key, ph]) => (
-              <TextInput
-                key={key}
-                style={{
-                  backgroundColor: T.card2,
-                  borderWidth: 1,
-                  borderColor: T.border,
-                  borderRadius: 10,
-                  paddingHorizontal: 14,
-                  paddingVertical: 11,
-                  color: T.text,
-                  fontSize: 14,
-                }}
-                value={(isFather ? fatherManual : motherManual)[key]}
-                onChangeText={(t) =>
-                  (isFather ? setFatherManual : setMotherManual)((m) => ({ ...m, [key]: t }))
-                }
-                placeholder={ph}
-                placeholderTextColor={T.textDim}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-            ))}
-            <TouchableOpacity
-              style={{
-                borderRadius: 10,
-                paddingVertical: 12,
-                alignItems: 'center',
-                backgroundColor: accent,
-                opacity:
-                  (isFather ? fatherManual : motherManual).first.trim() &&
-                  (isFather ? fatherManual : motherManual).surname.trim()
-                    ? 1
-                    : 0.4,
-              }}
-              disabled={
-                !(isFather ? fatherManual : motherManual).first.trim() ||
-                !(isFather ? fatherManual : motherManual).surname.trim()
-              }
-              onPress={() => {
-                const m = isFather ? fatherManual : motherManual
-                const setD = isFather ? setFatherData : setMotherData
-                setD({
-                  firstName: m.first.trim(),
-                  middleName: m.middle.trim(),
-                  surname: m.surname.trim(),
-                  gender: isFather ? 'MALE' : 'FEMALE',
-                  nationalId: nid.trim(),
-                  dateOfBirth: null,
-                  age: null,
-                  vitalStatus: 'ALIVE',
-                  unverified: true,
-                })
-                ;(isFather ? setFatherError : setMotherError)('')
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Use these details</Text>
-            </TouchableOpacity>
           </View>
         )}
         {data && <CitizenCard c={data} role={label as any} />}
@@ -1347,11 +1199,11 @@ export default function RegisterBirthScreen({ navigation }: Props) {
         </View>
       </ImageBackground>
 
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
+        <KeyboardAwareScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
@@ -1668,7 +1520,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
               </View>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {/* Nav footer */}
         <View
@@ -1764,7 +1616,7 @@ export default function RegisterBirthScreen({ navigation }: Props) {
             )}
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
 
       <CalPicker
         visible={showCal}

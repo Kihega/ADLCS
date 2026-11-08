@@ -23,6 +23,7 @@ const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
+const { lookupResidentInVillage, resolveDeceasedRef } = require('../lib/identityLookup')
 const { buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 
 const router = Router()
@@ -161,6 +162,10 @@ router.post('/death', async (req, res) => {
       : null
     if (existing) return res.json({ success:true, duplicate:true, serverId:existing.id })
 
+    // PATCH-STRICT-ID-2026: the deceased must resolve to a real person (BID / NIN).
+    const deceased = await resolveDeceasedRef(nationalId, { category })
+    if (!deceased.ok) return res.status(deceased.status || 422).json({ success:false, message: deceased.message })
+
     // Map mobile enum values to schema enums
     // DeathLocationType: hospital | outside
     // DeathCategory:     infant   | adult
@@ -170,7 +175,8 @@ router.post('/death', async (req, res) => {
     const death = await prisma.death.create({
       data:{
         deathCertNo:      deathCertNo ?? `VD-${Date.now()}`,
-        nationalId:       nationalId  ?? undefined,
+        citizenId:        deceased.citizenId,
+        nationalId:       deceased.nationalId,
         causeOfDeath,
         dateOfDeath:      parseDDMMYYYY(dateOfDeath),
         locationType:     locMap[locationType]  ?? 'outside',
@@ -340,7 +346,7 @@ router.post('/migration', async (req, res) => {
           : null
 
     if (!citizen) {
-      return res.status(422).json({ success: false, message: 'Citizen not found in your village. Look them up first using their NIN, Birth ID, or full name.' })
+      return res.status(422).json({ success: false, message: 'Citizen not found in your village. Look them up first using their Birth ID (or NIN).' })
     }
 
     const toVid = Number(toVillageId)
@@ -658,16 +664,13 @@ const CITIZEN_LOOKUP_SELECT = {
 
 router.get('/citizen-lookup', async (req, res) => {
   const { id: officerId } = req.user
-  // PATCH-BID-LOOKUP-2026: birthId is now the primary strict-match key
-  // (CitizenProfileScreen). `nationalId` kept only as a legacy fallback for
-  // any older client still sending it. `q` is the generic lookup used by the
-  // migration flow — matches Birth ID, birth cert no, or a partial full name.
-  const birthId = typeof req.query.birthId === 'string' ? req.query.birthId.trim() : ''
-  const legacyNationalId = typeof req.query.nationalId === 'string' ? req.query.nationalId.trim() : ''
-  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-  const term = birthId || legacyNationalId || q
+  // PATCH-STRICT-ID-2026: Birth ID (main way) or NIN only — never a name.
+  // `birthId` / `nin` / legacy `nationalId` / generic `q` are all accepted as
+  // the *identifier*, but whatever is sent must be a valid BID or NIN.
+  const pick = (v) => (typeof v === 'string' ? v.trim() : '')
+  const term = pick(req.query.birthId) || pick(req.query.nin) || pick(req.query.nationalId) || pick(req.query.q)
   if (!term) {
-    return res.status(400).json({ success: false, message: 'birthId or q query param required' })
+    return res.status(400).json({ success: false, message: 'Birth ID or NIN required' })
   }
   try {
     const officer = await prisma.villageOfficer.findUnique({
@@ -676,41 +679,11 @@ router.get('/citizen-lookup', async (req, res) => {
     })
     if (!officer) return res.status(404).json({ success: false, message: 'Officer not found' })
 
-    const vid = officer.villageId ?? -1
-
-    let citizen = await prisma.citizen.findFirst({
-      where: { birthId: term, currentVillageId: vid },
-      select: CITIZEN_LOOKUP_SELECT,
-    })
-
-    if (!citizen && legacyNationalId) {
-      citizen = await prisma.citizen.findFirst({
-        where: { nationalId: legacyNationalId, currentVillageId: vid },
-        select: CITIZEN_LOOKUP_SELECT,
-      })
+    const r = await lookupResidentInVillage(term, officer.villageId ?? -1, CITIZEN_LOOKUP_SELECT)
+    if (!r.found) {
+      return res.status(r.code === 'INVALID_ID' ? 400 : 404).json({ success: false, code: r.code, message: r.message })
     }
-
-    if (!citizen && q) {
-      citizen = await prisma.citizen.findFirst({
-        where: {
-          currentVillageId: vid,
-          OR: [
-            { birthId: term },
-            { birthRecord: { birthCertNo: term } },
-            { firstName: { contains: term, mode: 'insensitive' } },
-            { surname: { contains: term, mode: 'insensitive' } },
-          ],
-        },
-        select: CITIZEN_LOOKUP_SELECT,
-      })
-    }
-
-    if (!citizen) {
-      return res.status(404).json({
-        success: false,
-        message: 'No citizen matching this Birth ID or name was found registered in your village.',
-      })
-    }
+    const citizen = r.citizen
 
     return res.json({
       success: true,

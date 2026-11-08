@@ -19,12 +19,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
+import { isValidId, ID_HELP } from '../../services/identityLookup'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Search, User, Repeat, CheckCircle2, AlertTriangle } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -63,8 +63,14 @@ export default function TrackMigrationScreen({ navigation }: Props) {
   const [submitting, setSubmitting] = useState(false)
 
   const handleSearch = async () => {
-    const term = query.trim()
+    const term = query.trim().toUpperCase()
     if (!term) return
+    if (!isValidId(term)) {
+      // PATCH-STRICT-ID-2026: Birth ID (main way) or NIN only — never a name.
+      setCitizen(null)
+      setNotFoundMsg(ID_HELP)
+      return
+    }
     setSearching(true)
     setNotFoundMsg('')
     setCitizen(null)
@@ -80,7 +86,7 @@ export default function TrackMigrationScreen({ navigation }: Props) {
           currentVillageId: json.data.currentVillageId,
         })
       } else {
-        setNotFoundMsg(json.message || 'No citizen found in your village matching that NIN, Birth ID, or name.')
+        setNotFoundMsg(json.message || 'No citizen with this Birth ID / NIN is registered in your village.')
       }
     } catch (err: any) {
       setNotFoundMsg(err?.message || 'Lookup failed. Please try again.')
@@ -166,16 +172,16 @@ export default function TrackMigrationScreen({ navigation }: Props) {
         <Text style={{ fontSize: 16, fontWeight: '800', color: T.text }}>Outgoing Migration</Text>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
+      <KeyboardSafeView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAwareScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
           {/* ── Step 1: find the citizen ─────────────────────────────────── */}
           <View style={{ gap: 8 }}>
             <Text style={{ fontSize: 13, fontWeight: '800', color: T.text }}>
               Step 1 — Find the Citizen
             </Text>
             <Text style={{ fontSize: 11, color: T.textSub }}>
-              Enter NIN, Birth ID (BID), or full name. Results are limited to citizens registered
-              in your village.
+              Enter the citizen's Birth ID (BID) — or their NIN if they have no Birth ID. Names cannot
+              be used. Results are limited to citizens registered in your village.
             </Text>
             <View
               style={{
@@ -198,9 +204,10 @@ export default function TrackMigrationScreen({ navigation }: Props) {
                   setCitizen(null)
                   setNotFoundMsg('')
                 }}
-                placeholder="NIN, Birth ID, or full name"
+                placeholder="BID-XXXXXXXXXX or NIN"
                 placeholderTextColor={T.textDim}
-                autoCapitalize="none"
+                autoCapitalize="characters"
+                autoCorrect={false}
                 onSubmitEditing={handleSearch}
                 editable={!citizen}
               />
@@ -346,8 +353,8 @@ export default function TrackMigrationScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
           ) : null}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      </KeyboardSafeView>
     </SafeAreaView>
   )
 }

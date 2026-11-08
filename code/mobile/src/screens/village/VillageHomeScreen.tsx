@@ -36,6 +36,7 @@ import {
   InteractionManager,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { endSession, goToLogin } from '../../services/session'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
@@ -593,7 +594,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     async (silent = false) => {
       const token = await AsyncStorage.getItem('tzcrvs_access_token')
       if (!token) {
-        _navigation.replace('Login')
+        goToLogin() // idempotent — never a second REPLACE while signing out
         return
       }
 
@@ -671,25 +672,22 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     }
   }, [loadData])
 
+  // SESSION-2026: sign-out is owned by services/session.ts — it revokes the
+  // refresh token, wipes every per-user key, resets the theme to the default
+  // and resets navigation to Login exactly once (no duplicate REPLACE).
   const handleLogout = useCallback(() => {
     Alert.alert('Confirm Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: async () => {
+        onPress: () => {
           setLoggingOut(true)
-          await AsyncStorage.multiRemove([
-            'tzcrvs_access_token',
-            'tzcrvs_refresh_token',
-            'tzcrvs_role',
-            'tzcrvs_device_activated',
-          ])
-          _navigation.replace('Login')
+          endSession().catch(() => setLoggingOut(false))
         },
       },
     ])
-  }, [_navigation])
+  }, [])
 
   const ConnIcon = connQuality === 'Good' ? Wifi : connQuality === 'Fair' ? WifiLow : WifiOff
   const initials = (officer.officerName ?? 'VO')

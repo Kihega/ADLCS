@@ -4,14 +4,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Modal,
-  KeyboardAvoidingView,
   Platform,
   Animated,
 } from 'react-native'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Calendar, X, CheckCircle2, Copy } from 'lucide-react-native'
 import * as Clipboard from 'expo-clipboard'
@@ -98,7 +97,7 @@ function CalPicker({
               >
                 Day
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {Array.from({ length: daysIn }, (_, i) => i + 1).map((d) => (
                   <TouchableOpacity
                     key={d}
@@ -122,7 +121,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 2 }}>
               <Text
@@ -130,7 +129,7 @@ function CalPicker({
               >
                 Month
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {MONTHS.map((name, i) => (
                   <TouchableOpacity
                     key={name}
@@ -154,7 +153,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
             <View style={{ flex: 1.5 }}>
               <Text
@@ -162,7 +161,7 @@ function CalPicker({
               >
                 Year
               </Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <KeyboardAwareScrollView showsVerticalScrollIndicator={false}>
                 {years.map((y) => (
                   <TouchableOpacity
                     key={y}
@@ -186,7 +185,7 @@ function CalPicker({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </KeyboardAwareScrollView>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
@@ -459,7 +458,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
-      <KeyboardAvoidingView
+      <KeyboardSafeView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
@@ -473,7 +472,7 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
 
         {/* Step 1 — Age verification */}
         {step === 1 && (
-          <ScrollView
+          <KeyboardAwareScrollView
             contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
           >
@@ -591,12 +590,12 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
               }}
               onClose={() => setShowCal(false)}
             />
-          </ScrollView>
+          </KeyboardAwareScrollView>
         )}
 
         {/* Step 2 — Full profile */}
         {step === 2 && (
-          <ScrollView
+          <KeyboardAwareScrollView
             contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
           >
@@ -758,12 +757,12 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
                 </Text>
               )}
             </TouchableOpacity>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         )}
 
         {/* Step 3 — Success */}
         {step === 3 && (
-          <ScrollView
+          <KeyboardAwareScrollView
             contentContainerStyle={{ padding: 20, paddingBottom: 40, alignItems: 'center' }}
           >
             <View
@@ -877,9 +876,9 @@ export default function RegisterCitizenScreen({ navigation }: Props) {
                 Back to Dashboard
               </Text>
             </TouchableOpacity>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         )}
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
       <Toast msg={toast} vis={toastVis} />
     </SafeAreaView>
   )
