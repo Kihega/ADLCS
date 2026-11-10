@@ -39,6 +39,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { fetchRemoteRecords, isOnline, getPendingBirths, getPendingDeaths } from '../../services/syncService'
 import { useTheme, TZ } from '../../context/ThemeContext'
+import BidCopy from '../../components/BidCopy'
 
 type RootStack = { HospitalHome: undefined; ViewRecords: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'ViewRecords'> }
@@ -52,6 +53,7 @@ interface DisplayRecord {
   date: string
   synced: boolean
   certIssued: boolean
+  birthId?: string | null
   source: 'local' | 'remote'
 }
 
@@ -83,6 +85,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
           id: `local-birth-${b.localId}`,
           type: 'birth' as const,
           certNo: b.payload.birthCertNo,
+          birthId: b.payload.birthId ?? null,
           name: [b.payload.childFirstName, b.payload.childMiddleName, b.payload.childSurname]
             .filter(Boolean)
             .join(' ')
@@ -100,6 +103,9 @@ export default function ViewRecordsScreen({ navigation }: Props) {
           id: `local-death-${d.localId}`,
           type: 'death' as const,
           certNo: d.payload.deathCertNo,
+          birthId: String(d.payload.nationalId ?? '').toUpperCase().startsWith('BID-')
+            ? d.payload.nationalId
+            : null,
           name: d.payload.informantName || d.payload.nationalId || '—',
           date: new Date(d.queuedAt).toLocaleDateString('en-TZ', {
             day: '2-digit',
@@ -121,6 +127,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
             id: `remote-${r.id}`,
             type: r.type,
             certNo: r.certNo,
+            birthId: r.birthId ?? null,
             name: r.name,
             date: r.date,
             synced: true,
@@ -224,6 +231,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <Text style={[s.cardDate, { color: T.textDim }]}>{item.date}</Text>
+            <BidCopy bid={item.birthId} />
             <ChevronRight size={13} color={T.textDim} />
           </View>
         </View>
@@ -364,6 +372,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
                   ['Type', selected.type.toUpperCase()],
                   ['Certificate No', selected.certNo],
                   ['Name', selected.name],
+                  ['Birth ID', selected.birthId || '—'],
                   ['Date', selected.date],
                   ['Sync Status', selected.synced ? 'Synced to Central DB ✓' : 'Pending sync'],
                   ['Source', selected.source === 'remote' ? 'Central Database' : 'Local Device'],

@@ -3,6 +3,13 @@ const router = express.Router()
 const { prisma } = require('../lib/prisma')
 const { getRedis } = require('../lib/redis')
 
+// PATCH-V3-2026-11: cheap liveness probe used by the mobile app. It never touches
+// the database or Redis, so it answers 200 the moment the server is awake -
+// the full check below returns 503 whenever Redis/DB is "degraded".
+router.get('/live', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
 router.get('/', async (req, res) => {
   const health = {
     status: 'ok',

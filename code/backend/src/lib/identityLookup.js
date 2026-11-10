@@ -273,8 +273,55 @@ function finishDeceased(person) {
   }
 }
 
+// -- PATCH-V3-2026-11 --------------------------------------------------------
+// For record lists: the deceased's real name and Birth ID for a batch of deaths
+// (`deaths` = [{ id, citizenId, nationalId }]). Returns Map(deathId -> {name, birthId}).
+async function resolveDeceasedDisplay(deaths) {
+  const out = new Map()
+  const rows = Array.isArray(deaths) ? deaths : []
+  if (!rows.length) return out
+  const up = (v) => String(v || '').trim().toUpperCase()
+  const citizenIds = [...new Set(rows.map((d) => d.citizenId).filter(Boolean))]
+  const bids = [...new Set(rows.map((d) => up(d.nationalId)).filter((v) => v.startsWith('BID-')))]
+  const nins = [...new Set(rows.map((d) => String(d.nationalId || '').trim())
+    .filter((v) => v && !/^(BID-|INFANT-)/i.test(v)))]
+  const or = []
+  if (citizenIds.length) or.push({ id: { in: citizenIds } })
+  if (bids.length) or.push({ birthId: { in: bids } })
+  if (nins.length) or.push({ nationalId: { in: nins } })
+  const [citizens, births] = await Promise.all([
+    or.length
+      ? prisma.citizen.findMany({
+          where: { OR: or },
+          select: { id: true, birthId: true, nationalId: true, firstName: true, middleName: true, surname: true },
+        })
+      : [],
+    bids.length
+      ? prisma.birth.findMany({
+          where: { birthId: { in: bids } },
+          select: { birthId: true, childFirstName: true, childMiddleName: true, childSurname: true },
+        })
+      : [],
+  ])
+  const byId = new Map(citizens.map((c) => [c.id, c]))
+  const byBid = new Map(citizens.filter((c) => c.birthId).map((c) => [c.birthId, c]))
+  const byNin = new Map(citizens.filter((c) => c.nationalId).map((c) => [c.nationalId, c]))
+  const birthByBid = new Map(births.map((b) => [b.birthId, b]))
+  const join = (...p) => p.filter(Boolean).join(' ')
+  for (const d of rows) {
+    const nid = up(d.nationalId)
+    const c = (d.citizenId && byId.get(d.citizenId)) || byBid.get(nid) || byNin.get(String(d.nationalId || '').trim())
+    const b = birthByBid.get(nid)
+    const name = c ? join(c.firstName, c.middleName, c.surname)
+      : b ? join(b.childFirstName, b.childMiddleName, b.childSurname) : null
+    out.set(d.id, { name, birthId: c?.birthId || (nid.startsWith('BID-') ? nid : null) })
+  }
+  return out
+}
+
 module.exports = {
   lookupIdentity,
+  resolveDeceasedDisplay,
   lookupResidentInVillage,
   findBirthResidentInVillage,
   materializeCitizenFromBirth,

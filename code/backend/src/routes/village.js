@@ -22,7 +22,7 @@ const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
-const { lookupResidentInVillage, materializeCitizenFromBirth, resolveDeceasedRef } = require('../lib/identityLookup')
+const { lookupResidentInVillage, materializeCitizenFromBirth, resolveDeceasedRef, resolveDeceasedDisplay } = require('../lib/identityLookup')
 const { buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 
 const router = Router()
@@ -640,6 +640,8 @@ router.get('/citizen-lookup', async (req, res) => {
         fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
         ninCertificateIssued: !!citizen.idCardIssued,
         source: r.source ?? 'citizen',
+        hasBirthRecord: r.source === 'birth'
+          || (citizen.birthId ? (await prisma.birth.count({ where: { birthId: citizen.birthId } })) > 0 : false),
         villageName: officer.village?.name ?? null,
       },
     })
@@ -658,11 +660,13 @@ router.get('/records', async (req, res) => {
     const deaths = await prisma.death.findMany({
       where:{ villageOfficerId:officerId },
       orderBy:{ registeredAt:'desc' }, take:30,
-      select:{ id:true, deathCertNo:true, nationalId:true, causeOfDeath:true, registeredAt:true },
+      select:{ id:true, deathCertNo:true, citizenId:true, nationalId:true, causeOfDeath:true, registeredAt:true },
     }).catch(()=>[])
+    const deathInfo = await resolveDeceasedDisplay(deaths).catch(()=>new Map())
     for (const d of deaths) {
       out.push({ id:`d-${d.id}`, type:'deaths', icon:'✝', color:'#dc2626',
-        label: d.nationalId || 'Unknown', sub:`Cert: ${d.deathCertNo}`,
+        birthId: deathInfo.get(d.id)?.birthId ?? null,
+        label: deathInfo.get(d.id)?.name || d.nationalId || 'Unknown', sub:`Cert: ${d.deathCertNo}`,
         date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
     }
 
@@ -670,10 +674,11 @@ router.get('/records', async (req, res) => {
     const citizens = await prisma.citizen.findMany({
       where:{ registeredById:officerId },
       orderBy:{ registeredAt:'desc' }, take:30,
-      select:{ id:true, firstName:true, surname:true, nationalId:true, registeredAt:true },
+      select:{ id:true, birthId:true, firstName:true, surname:true, nationalId:true, registeredAt:true },
     }).catch(()=>[])
     for (const c of citizens) {
       out.push({ id:`c-${c.id}`, type:'citizens', icon:'👤', color:'#0891b2',
+        birthId: c.birthId ?? null,
         label:`${c.firstName} ${c.surname}`, sub:c.nationalId||'—',
         date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
     }

@@ -21,11 +21,14 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
-import { ArrowLeft, Search, User, Cross, FileText } from 'lucide-react-native'
+import { ArrowLeft, Search, User, Cross, FileText, Download } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { useResponsive } from '../../utils/responsive'
 import { apiGet } from '../../services/syncService'
+import { Alert } from '../../components/AppDialog'
+import { downloadCertificateById, describeError } from '../../services/certificateService'
+import BidCopy from '../../components/BidCopy'
 
 type VStack = { VillageHome: undefined; VillageViewRecords: undefined }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageViewRecords'> }
@@ -39,6 +42,7 @@ interface RecordRow {
   label: string
   sub: string
   date: string
+  birthId?: string | null
 }
 
 const FILTERS: { key: FilterType; label: string; Icon: any }[] = [
@@ -82,6 +86,18 @@ export default function VillageViewRecordsScreen({ navigation }: Props) {
       hasLoadedOnceRef.current = true
     }, [loadRecords])
   )
+
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const downloadDeath = async (id: string) => {
+    setBusyId(id)
+    try {
+      await downloadCertificateById('death', id)
+    } catch (e) {
+      console.warn('[certificate] download failed', e)
+      Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
+    }
+    setBusyId(null)
+  }
 
   const q = query.trim().toLowerCase()
   const visible = records.filter((r) => {
@@ -250,7 +266,27 @@ export default function VillageViewRecordsScreen({ navigation }: Props) {
                 <Text style={{ fontSize: 13, fontWeight: '700', color: T.text }}>{item.label}</Text>
                 <Text style={{ fontSize: 11, color: T.textSub, marginTop: 1 }}>{item.sub}</Text>
               </View>
-              <Text style={{ fontSize: 10, color: T.textDim }}>{item.date}</Text>
+              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <Text style={{ fontSize: 10, color: T.textDim }}>{item.date}</Text>
+                <BidCopy bid={item.birthId} />
+                {item.type === 'deaths' && (
+                  <TouchableOpacity
+                    onPress={() => downloadDeath(item.id)}
+                    disabled={busyId === item.id}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                  >
+                    {busyId === item.id ? (
+                      <ActivityIndicator size="small" color={item.color} />
+                    ) : (
+                      <Download size={13} color={item.color} />
+                    )}
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: item.color }}>
+                      Certificate
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
         />

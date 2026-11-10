@@ -228,8 +228,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       let base: string
       try {
         base = await resolveBase()
-      } catch {
-        setError('No internet connection — check Wi-Fi or mobile data')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Cannot reach the server. Please try again.')
         return
       }
       const res = await fetch(`${base}/auth/login`, {
@@ -287,8 +287,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       let base: string
       try {
         base = await resolveBase()
-      } catch {
-        setError('No internet connection — check Wi-Fi or mobile data')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Cannot reach the server. Please try again.')
         return
       }
       const res = await fetch(`${base}/auth/mfa/verify`, {

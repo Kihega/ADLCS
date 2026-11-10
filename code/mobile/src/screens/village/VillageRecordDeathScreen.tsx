@@ -24,6 +24,7 @@ import {
   Search,
   User,
   CheckCircle2 as CC,
+  Download,
 } from 'lucide-react-native'
 import * as Clipboard from 'expo-clipboard'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -32,7 +33,8 @@ import { useTheme, TZ } from '../../context/ThemeContext'
 import { apiPost, isOnline } from '../../services/syncService'
 import { resolveBase } from '../../services/apiResolver'
 
-import { saveDeath, generateDeathCertNo } from '../../services/localDb'
+import { saveDeath, generateDeathCertNo, LocalDeath } from '../../services/localDb'
+import { downloadDeathCertificate, describeError } from '../../services/certificateService'
 
 // ── Reusable calendar picker (no external packages) ──────────────────────────
 function CalPicker({
@@ -396,6 +398,8 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
   const [informant, setInformant] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [certNo, setCertNo] = useState('')
+  const [savedDeath, setSavedDeath] = useState<LocalDeath | null>(null)
+  const [downloading, setDownloading] = useState(false)
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [toast, setToast] = useState('')
   const [toastVis, setToastVis] = useState(false)
@@ -484,7 +488,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
           }
         } catch {}
       }
-      await saveDeath({
+      const savedRecord = await saveDeath({
         certNo: cert,
         nationalId: citizen?.birthId ?? citizen?.nationalId ?? lookupId.trim(),
         deceasedName:
@@ -514,11 +518,25 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
           })
         } catch {}
       }
+      setSavedDeath(savedRecord)
       setStep(3)
     } catch {
       Alert.alert('Error', 'Submission failed. Please try again.')
     }
     setSubmitting(false)
+  }
+
+  // PATCH-V3-2026-11: same download function as the hospital screens.
+  const handleDownloadCert = async () => {
+    if (!savedDeath) return
+    setDownloading(true)
+    try {
+      await downloadDeathCertificate(savedDeath)
+    } catch (e) {
+      console.warn('[certificate] download failed', e)
+      Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
+    }
+    setDownloading(false)
   }
 
   const copy = async (text: string, label: string) => {
@@ -910,6 +928,30 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 </View>
               </View>
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: TZ.green,
+                  borderRadius: 12,
+                  paddingVertical: 14,
+                  width: '100%',
+                  opacity: downloading ? 0.7 : 1,
+                }}
+                onPress={handleDownloadCert}
+                disabled={downloading || !savedDeath}
+              >
+                {downloading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Download size={16} color="#fff" />
+                )}
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                  {downloading ? 'Generating PDF…' : 'Download Certificate PDF'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={{
                   backgroundColor: '#dc2626',

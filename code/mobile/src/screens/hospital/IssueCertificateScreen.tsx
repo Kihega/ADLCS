@@ -37,7 +37,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { LocalBirth, LocalDeath } from '../../services/localDb'
 import { apiGet } from '../../services/syncService'
-import { sharePdf } from '../../services/certificateService'
+import {
+  downloadCertificateById,
+  printCertificateById,
+  describeError,
+} from '../../services/certificateService'
+import BidCopy from '../../components/BidCopy'
 import { useTheme, TZ } from '../../context/ThemeContext'
 
 type RootStack = { HospitalHome: undefined; IssueCertificate: undefined }
@@ -53,6 +58,7 @@ interface CertRow {
   date: string
   synced: boolean
   certPdfPath: string
+  birthId?: string | null
   raw: LocalBirth | LocalDeath
 }
 
@@ -83,6 +89,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             date: r.date ?? '—',
             synced: r.ritaSynced ?? true,
             certPdfPath: r.certIssued ? 'issued' : '',
+            birthId: r.birthId ?? null,
             raw: r as any,
           }))
         const deathRows: CertRow[] = json.data
@@ -95,6 +102,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             date: r.date ?? '—',
             synced: r.ritaSynced ?? true,
             certPdfPath: r.certIssued ? 'issued' : '',
+            birthId: r.birthId ?? null,
             raw: r as any,
           }))
         // API already returns in date-desc order
@@ -126,32 +134,30 @@ export default function IssueCertificateScreen({ navigation }: Props) {
 
   const filtered = tab === 'all' ? rows : rows.filter((r) => r.type === tab)
 
-  // ── Download PDF ──────────────────────────────────────────────────────────
+  // ── Download PDF / Print ─────────────────────────────────────────────────
+  // PATCH-V3-2026-11: the full record is fetched from the server and goes through
+  // the same download function used at registration (share sheet, with a
+  // print / "Save as PDF" fallback).
   const handleDownload = async (row: CertRow) => {
-    // PDF generation needs full registration data (not available from list API).
-    // Only show for records registered in this session (row.certPdfPath already set).
-    if (row.certPdfPath && row.certPdfPath !== 'issued') {
-      setActionId(row.id)
-      try {
-        await sharePdf(row.certPdfPath)
-      } catch {
-        Alert.alert('Error', 'Could not open PDF file.')
-      }
-      setActionId(null)
-      return
+    setActionId(row.id)
+    try {
+      await downloadCertificateById(row.type, row.id)
+    } catch (e) {
+      console.warn('[certificate] download failed', e)
+      Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
     }
-    Alert.alert(
-      'Certificate PDF',
-      `Cert No: ${row.certNo}\nRecord: ${row.name}\n\nTo download the full PDF certificate, go to the registration screen and re-open the record, or ask the system administrator to print from the web portal.`
-    )
+    setActionId(null)
   }
 
-  // ── Print ─────────────────────────────────────────────────────────────────
   const handlePrint = async (row: CertRow) => {
-    Alert.alert(
-      'Print Certificate',
-      `Cert No: ${row.certNo}\nName: ${row.name}\n\nFull certificate printing is available from the registration screen immediately after registration, or via the web portal.`
-    )
+    setActionId(`print-${row.id}`)
+    try {
+      await printCertificateById(row.type, row.id)
+    } catch (e) {
+      console.warn('[certificate] print failed', e)
+      Alert.alert('Error', `Could not print certificate. ${describeError(e)}`)
+    }
+    setActionId(null)
   }
 
   // ── Detail Modal ──────────────────────────────────────────────────────────
@@ -320,6 +326,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <Text style={[s.cardDate, { color: T.textDim }]}>{item.date}</Text>
+            <BidCopy bid={item.birthId} />
             <ChevronRight size={13} color={T.textDim} />
           </View>
         </View>

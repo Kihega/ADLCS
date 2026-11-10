@@ -29,7 +29,7 @@ const { requireAuth } = require('../middleware/auth')
 const { findPersonByBid, calcAge, buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
 const nida = require('../lib/nidaClient')
-const { lookupIdentity, resolveDeceasedRef } = require('../lib/identityLookup')
+const { lookupIdentity, resolveDeceasedRef, resolveDeceasedDisplay } = require('../lib/identityLookup')
 
 const router = Router()
 router.use(requireAuth)
@@ -276,21 +276,24 @@ router.get('/records', async (req, res) => {
       const deaths = await prisma.death.findMany({
         where: { villageOfficerId: id },
         orderBy: { registeredAt: 'desc' }, take: limit, skip,
-        select: { id: true, deathCertNo: true, nationalId: true, causeOfDeath: true, registeredAt: true, ritaSynced: true },
+        select: { id: true, deathCertNo: true, citizenId: true, nationalId: true, causeOfDeath: true, registeredAt: true, ritaSynced: true },
       })
+      const deathInfoV = await resolveDeceasedDisplay(deaths)
       for (const d of deaths) {
         out.push({ id: `death-${d.id}`, type: 'death', certNo: d.deathCertNo,
-          name: d.nationalId ?? 'Unknown',
+          birthId: deathInfoV.get(d.id)?.birthId ?? null,
+          name: deathInfoV.get(d.id)?.name || d.nationalId || 'Unknown',
           date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
           ritaSynced: d.ritaSynced ?? false, certIssued: false })
       }
       const citizens = await prisma.citizen.findMany({
         where: { registeredById: id },
         orderBy: { registeredAt: 'desc' }, take: limit, skip,
-        select: { id: true, firstName: true, surname: true, nationalId: true, registeredAt: true },
+        select: { id: true, birthId: true, firstName: true, surname: true, nationalId: true, registeredAt: true },
       })
       for (const c of citizens) {
         out.push({ id: `citizen-${c.id}`, type: 'birth', certNo: c.nationalId ?? '—',
+          birthId: c.birthId ?? null,
           name: `${c.firstName} ${c.surname}`,
           date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
           ritaSynced: true, certIssued: false })
@@ -317,10 +320,11 @@ router.get('/records', async (req, res) => {
           ]} : {}),
         },
         orderBy: { registeredAt: 'desc' }, take: type === 'all' ? skip + limit : limit, skip: type === 'all' ? 0 : skip,
-        select: { id: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
+        select: { id: true, birthId: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
       })
       for (const b of births) {
         results.push({ id: `birth-${b.id}`, type: 'birth', certNo: b.birthCertNo,
+          birthId: b.birthId ?? null,
           name: `${b.childFirstName} ${b.childSurname}`,
           date: new Date(b.registeredAt).toLocaleDateString('en-TZ'),
           ritaSynced: b.ritaSynced, certIssued: !!b.certPdfUrl, registeredAt: b.registeredAt })
@@ -336,11 +340,13 @@ router.get('/records', async (req, res) => {
           ]} : {}),
         },
         orderBy: { registeredAt: 'desc' }, take: limit, skip,
-        select: { id: true, deathCertNo: true, nationalId: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
+        select: { id: true, deathCertNo: true, citizenId: true, nationalId: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
       })
+      const deathInfoH = await resolveDeceasedDisplay(deaths)
       for (const d of deaths) {
         results.push({ id: `death-${d.id}`, type: 'death', certNo: d.deathCertNo,
-          name: d.nationalId ?? 'Unknown',
+          birthId: deathInfoH.get(d.id)?.birthId ?? null,
+          name: deathInfoH.get(d.id)?.name || d.nationalId || 'Unknown',
           date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
           ritaSynced: d.ritaSynced ?? false, certIssued: !!d.certPdfUrl })
       }
@@ -458,6 +464,118 @@ router.get('/certificate/lookup', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid type' })
   } catch (err) {
     console.error('[cert-lookup]', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+})
+
+// ── GET /api/officer/certificate/data ────────────────────────────────────────
+// PATCH-V3-2026-11: everything needed to build a birth / death certificate PDF on
+// the phone (same shape the registration screens use), for ANY record the
+// officer is allowed to see - so every "download certificate" button can use the
+// one shared download function.
+//   ?type=birth&id=<birth id>            (hospital officer: own registrations)
+//   ?type=birth&birthId=BID-XXXXXXXXXX   (hospital officer, or village officer for
+//                                         children of his own village)
+//   ?type=death&id=<death id>            (hospital or village officer: own records)
+function fmtDDMMYYYY(v) {
+  if (!v) return ''
+  const x = new Date(v)
+  if (Number.isNaN(x.getTime())) return ''
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(x.getUTCDate())}/${p(x.getUTCMonth() + 1)}/${x.getUTCFullYear()}`
+}
+router.get('/certificate/data', async (req, res) => {
+  const { id: officerId, role } = req.user
+  const type = String(req.query.type || '')
+  const recordId = String(req.query.id || '').trim().replace(/^(birth|death|b|d)-/, '')
+  const bid = String(req.query.birthId || '').trim().toUpperCase()
+  if (!recordId && !bid) return res.status(400).json({ success: false, message: 'Record id or Birth ID required' })
+  try {
+    if (type === 'birth') {
+      let where
+      if (role === 'village_officer') {
+        const vo = await prisma.villageOfficer.findUnique({ where: { id: officerId }, select: { villageId: true } })
+        if (!vo?.villageId) return res.status(403).json({ success: false, message: 'Your officer account is not assigned to a village yet.' })
+        where = {
+          ...(bid ? { birthId: bid } : { id: recordId }),
+          OR: [{ originVillageId: vo.villageId }, { child: { currentVillageId: vo.villageId } }],
+        }
+      } else {
+        where = { ...(bid ? { birthId: bid } : { id: recordId }), officerId }
+      }
+      const b = await prisma.birth.findFirst({
+        where,
+        include: {
+          officer: { select: { fullName: true } },
+          facility: { select: { facilityName: true } },
+          child: { select: { nationalId: true } },
+        },
+      })
+      if (!b) return res.status(404).json({ success: false, message: 'No birth record on file for this person.' })
+      const loc = await resolveFacilityLocation(b.facilityId)
+      return res.json({
+        success: true,
+        data: {
+          id: b.id,
+          certNo: b.birthCertNo,
+          birthId: b.birthId || '',
+          childFirstName: b.childFirstName,
+          childMiddleName: b.childMiddleName || '',
+          childSurname: b.childSurname,
+          gender: b.gender,
+          dateOfBirth: fmtDDMMYYYY(b.dateOfBirth),
+          fatherName: b.fatherName || '',
+          fatherNid: b.fatherIdentifier || '',
+          motherName: b.motherName || '',
+          motherNid: b.motherIdentifier || '',
+          facilityName: b.facility?.facilityName || '',
+          facilityDistrict: loc.district,
+          facilityRegion: loc.region,
+          officerName: b.officer?.fullName || '',
+          registeredAt: new Date(b.registeredAt).toISOString(),
+          synced: b.ritaSynced ? 1 : 0,
+          certPdfPath: '',
+          rawJson: '',
+          nationalId: b.child?.nationalId || '',
+        },
+      })
+    }
+    if (type === 'death') {
+      if (!recordId) return res.status(400).json({ success: false, message: 'Record id required' })
+      const dth = await prisma.death.findFirst({
+        where: { id: recordId, OR: [{ hospitalOfficerId: officerId }, { villageOfficerId: officerId }] },
+        include: {
+          facility: { select: { facilityName: true } },
+          hospitalOfficer: { select: { fullName: true } },
+          villageOfficer: { select: { fullName: true, village: { select: { name: true } } } },
+        },
+      })
+      if (!dth) return res.status(404).json({ success: false, message: 'Death record not found.' })
+      const info = (await resolveDeceasedDisplay([dth])).get(dth.id)
+      return res.json({
+        success: true,
+        data: {
+          id: dth.id,
+          certNo: dth.deathCertNo,
+          nationalId: dth.nationalId || '',
+          deceasedName: info?.name || dth.nationalId || '',
+          causeOfDeath: dth.causeOfDeath || '',
+          dateOfDeath: fmtDDMMYYYY(dth.dateOfDeath),
+          locationType: dth.locationType || '',
+          category: dth.category || '',
+          informantName: dth.informantName || '',
+          facilityName: dth.facility?.facilityName || dth.villageOfficer?.village?.name || '',
+          officerName: dth.hospitalOfficer?.fullName || dth.villageOfficer?.fullName || '',
+          registeredAt: new Date(dth.registeredAt).toISOString(),
+          synced: dth.ritaSynced ? 1 : 0,
+          certPdfPath: '',
+          rawJson: '',
+        },
+      })
+    }
+    return res.status(400).json({ success: false, message: 'Invalid type' })
+  } catch (err) {
+    console.error('[certificate/data]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
