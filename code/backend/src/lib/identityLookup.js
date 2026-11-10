@@ -116,10 +116,71 @@ async function lookupIdentity(raw) {
 // is created later). So that a village officer can find the child by Birth ID
 // straight away - but ONLY when the child's origin village/street is the
 // officer's own village - the village lookup falls back to the Birth table.
-async function findBirthResidentInVillage(birthId, villageId) {
+// PATCH-VILLAGE-SCOPE-2026 ---------------------------------------------------
+// The village/street chosen at birth (or citizen) registration is always linked to
+// a ward. A village officer must be able to see people of HIS area even when the
+// hospital picked a sibling village/street row, so the profile lookup matches by
+// WARD by default. Set VILLAGE_LOOKUP_SCOPE=village in .env for strict matching.
+const SCOPE_LEVEL = String(process.env.VILLAGE_LOOKUP_SCOPE || 'ward').toLowerCase()
+async function getScope(villageId) {
+  if (villageId == null || villageId < 0) return null
+  return prisma.village.findUnique({ where: { id: villageId }, select: { id: true, name: true, wardId: true } })
+}
+function citizenScopeWhere(scope) {
+  return SCOPE_LEVEL === 'village' ? { currentVillageId: scope.id } : { currentVillage: { wardId: scope.wardId } }
+}
+function birthScopeWhere(scope) {
+  return SCOPE_LEVEL === 'village' ? { originVillageId: scope.id } : { originVillage: { wardId: scope.wardId } }
+}
+
+// Explains WHY a BID / NIN was not found in the officer's area.
+async function explainMissing(ident, raw) {
+  const geoSel = { currentVillage: { select: VILLAGE_GEO_SELECT } }
+  let known = false
+  let village = null
+  try {
+    let c = null
+    if (ident.type === 'BID') {
+      c = await prisma.citizen.findFirst({ where: { birthId: ident.value }, select: geoSel })
+      if (!c) {
+        const b = await prisma.birth.findFirst({
+          where: { birthId: ident.value },
+          select: { originVillage: { select: VILLAGE_GEO_SELECT } },
+        })
+        if (b) { known = true; village = b.originVillage }
+      }
+    } else {
+      c = await prisma.citizen.findFirst({
+        where: { OR: [{ nationalId: ident.value }, { nationalId: String(raw).trim() }] },
+        select: geoSel,
+      })
+    }
+    if (c) { known = true; village = c.currentVillage }
+  } catch (e) {
+    console.warn('[explainMissing]', e && e.message)
+  }
+  if (!known) {
+    return { code: 'NOT_FOUND', message: 'No citizen with this Birth ID / NIN was found in the NBS database. Check the number and try again.' }
+  }
+  if (!village) {
+    return {
+      code: 'NO_VILLAGE_ON_RECORD',
+      message: 'This Birth ID / NIN is registered, but no village or street was recorded for it, so it cannot be linked to your area. Ask the registering officer to record the village / street.',
+    }
+  }
+  const g = buildGeo(village)
+  const area = SCOPE_LEVEL === 'village' ? 'village' : 'ward'
+  return {
+    code: 'OUTSIDE_YOUR_AREA',
+    message: `This citizen is registered in ${g.village} (${g.ward} ward, ${g.district}, ${g.region}), not in your ${area}. Use Migrate Citizen if they have moved to your area.`,
+  }
+}
+
+async function findBirthResidentInVillage(birthId, villageId, opts = {}) {
   if (!birthId || villageId == null || villageId < 0) return null
+  const scope = opts.wide ? await getScope(villageId) : null
   const birth = await prisma.birth.findFirst({
-    where: { birthId, originVillageId: villageId, childCitizenId: null },
+    where: { birthId, childCitizenId: null, ...(scope ? birthScopeWhere(scope) : { originVillageId: villageId }) },
     select: {
       id: true, birthId: true, childFirstName: true, childMiddleName: true,
       childSurname: true, gender: true, dateOfBirth: true, registeredAt: true,
@@ -207,28 +268,28 @@ async function materializeCitizenFromBirth(birthId, villageId) {
  * Village-scoped strict lookup (migration tracking, citizen profile): the
  * citizen must already be registered in `villageId`. BID or NIN only.
  */
-async function lookupResidentInVillage(raw, villageId, select) {
+async function lookupResidentInVillage(raw, villageId, select, opts = {}) {
   const ident = classifyIdentifier(raw)
   if (!ident.type) return { found: false, code: 'INVALID_ID', message: INVALID_ID_MESSAGE }
   if (ident.type === 'NIN' && !nida.isConfigured()) {
     return { found: false, idType: 'NIN', code: 'NIDA_NOT_CONFIGURED', message: NIDA_NOT_LINKED_MESSAGE }
   }
-  const where = ident.type === 'BID'
-    ? { birthId: ident.value, currentVillageId: villageId }
-    : { OR: [{ nationalId: ident.value }, { nationalId: String(raw).trim() }], currentVillageId: villageId }
-  const citizen = await prisma.citizen.findFirst({ where, select })
+  // opts.wide = match the officer's whole area (ward) instead of one exact village row
+  const wide = !!opts.wide
+  const scope = wide ? await getScope(villageId) : null
+  const place = scope ? citizenScopeWhere(scope) : { currentVillageId: villageId }
+  const idWhere = ident.type === 'BID'
+    ? { birthId: ident.value }
+    : { OR: [{ nationalId: ident.value }, { nationalId: String(raw).trim() }] }
+  const citizen = await prisma.citizen.findFirst({ where: { ...idWhere, ...place }, select })
   // PATCH-V2-2026-11: newborn registered at the hospital (Birth row only)
   if (!citizen && ident.type === 'BID') {
-    const fromBirth = await findBirthResidentInVillage(ident.value, villageId)
+    const fromBirth = await findBirthResidentInVillage(ident.value, villageId, { wide })
     if (fromBirth) return { found: true, idType: 'BID', source: 'birth', citizen: fromBirth }
   }
   if (!citizen) {
-    return {
-      found: false,
-      idType: ident.type,
-      code: 'NOT_IN_VILLAGE',
-      message: 'No citizen with this Birth ID / NIN is registered in your village.',
-    }
+    const why = await explainMissing(ident, raw)
+    return { found: false, idType: ident.type, code: why.code, message: why.message }
   }
   return { found: true, idType: ident.type, citizen }
 }
@@ -293,13 +354,13 @@ async function resolveDeceasedDisplay(deaths) {
     or.length
       ? prisma.citizen.findMany({
           where: { OR: or },
-          select: { id: true, birthId: true, nationalId: true, firstName: true, middleName: true, surname: true },
+          select: { id: true, birthId: true, nationalId: true, firstName: true, middleName: true, surname: true, gender: true },
         })
       : [],
     bids.length
       ? prisma.birth.findMany({
           where: { birthId: { in: bids } },
-          select: { birthId: true, childFirstName: true, childMiddleName: true, childSurname: true },
+          select: { birthId: true, childFirstName: true, childMiddleName: true, childSurname: true, gender: true },
         })
       : [],
   ])
@@ -314,12 +375,15 @@ async function resolveDeceasedDisplay(deaths) {
     const b = birthByBid.get(nid)
     const name = c ? join(c.firstName, c.middleName, c.surname)
       : b ? join(b.childFirstName, b.childMiddleName, b.childSurname) : null
-    out.set(d.id, { name, birthId: c?.birthId || (nid.startsWith('BID-') ? nid : null) })
+    out.set(d.id, { name, birthId: c?.birthId || (nid.startsWith('BID-') ? nid : null), gender: c?.gender ?? b?.gender ?? null })
   }
   return out
 }
 
 module.exports = {
+  getScope,
+  citizenScopeWhere,
+  birthScopeWhere,
   lookupIdentity,
   resolveDeceasedDisplay,
   lookupResidentInVillage,

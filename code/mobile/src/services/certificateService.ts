@@ -61,6 +61,13 @@ function _today(): string {
     .toUpperCase()
 }
 
+function genderLabel(g?: string | null): string {
+  const v = String(g ?? '').trim().toLowerCase()
+  if (v === 'male' || v === 'm') return 'MALE'
+  if (v === 'female' || v === 'f') return 'FEMALE'
+  return '—'
+}
+
 // ─── Birth Certificate HTML ────────────────────────────────────────────────────
 // PATCH-V2-2026-11: a missing field must never crash PDF generation.
 function fillStrings<T extends object>(o: T, keys: readonly string[]): T {
@@ -75,7 +82,7 @@ const BIRTH_TEXT_FIELDS = [
 ] as const
 const DEATH_TEXT_FIELDS = [
   'certNo', 'deceasedName', 'nationalId', 'causeOfDeath', 'dateOfDeath', 'locationType',
-  'category', 'informantName', 'facilityName', 'registeredAt',
+  'category', 'informantName', 'facilityName', 'registeredAt', 'gender',
 ] as const
 
 export function buildBirthCertHtml(input: LocalBirth): string {
@@ -260,14 +267,14 @@ export function buildDeathCertHtml(input: LocalDeath): string {
       <tr><td class="fn">(1)</td><td class="fk">Entry No.</td><td class="fv">${entryNo}</td></tr>
       <tr><td class="fn">(2)</td><td class="fk">Deceased's Name</td><td class="fv">${d.deceasedName.toUpperCase() || d.nationalId || '—'}</td></tr>
       <tr><td class="fn">(3)</td><td class="fk">Age at Death</td><td class="fv">${d.category === 'infant' ? 'LESS THAN 1 YEAR' : d.category === 'child' ? 'UNDER 18 YEARS' : 'ADULT (18+)'}</td></tr>
-      <tr><td class="fn">(4)</td><td class="fk">Sex</td><td class="fv">—</td></tr>
+      <tr><td class="fn">(4)</td><td class="fk">Sex</td><td class="fv">${genderLabel(d.gender)}</td></tr>
       <tr><td class="fn">(5)</td><td class="fk">Last Known Residence</td><td class="fv">${d.facilityName || '—'}</td></tr>
-      <tr><td class="fn">(6)</td><td class="fk">Occupation</td><td class="fv">—</td></tr>
+      <tr><td class="fn">(6)</td><td class="fk">Occupation</td><td class="fv">Not applicable</td></tr>
       <tr><td class="fn">(7)</td><td class="fk">Nationality</td><td class="fv">TANZANIAN</td></tr>
       <tr><td class="fn">(8)</td><td class="fk">Date of Death</td><td class="fv">${fmtDate(d.dateOfDeath)}</td></tr>
       <tr><td class="fn">(9)</td><td class="fk">Place of Death</td><td class="fv">${d.locationType.replace(/_/g, ' ').toUpperCase()} — ${d.facilityName || '—'}</td></tr>
       <tr><td class="fn">(10)</td><td class="fk">Cause of Death</td><td class="fv">${d.causeOfDeath.toUpperCase()}</td></tr>
-      <tr><td class="fn">(11)</td><td class="fk">Informant Name &amp; Address</td><td class="fv">${d.informantName.toUpperCase() || '—'}</td></tr>
+      <tr><td class="fn">(11)</td><td class="fk">Informant Name &amp; Address</td><td class="fv">${(d.informantName || d.facilityName || 'NOT APPLICABLE').toUpperCase()}</td></tr>
       <tr><td class="fn">(12)</td><td class="fk">Date of Registration</td><td class="fv">${fmtDate(d.registeredAt)}</td></tr>
       <tr><td class="fn">(13)</td><td class="fk">Registry Number</td><td class="fv">${d.certNo}</td></tr>
       <tr><td class="fn">(14)</td><td class="fk">National ID Number (NIN)</td><td class="fv" style="font-size:11pt;font-weight:900;letter-spacing:2px;">${d.nationalId || '—'}</td></tr>

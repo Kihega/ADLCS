@@ -228,7 +228,6 @@ export default function IssueCertificateScreen({ navigation }: Props) {
                     ['Date of Death', d.dateOfDeath],
                     ['Location', d.locationType.replace(/_/g, ' ')],
                     ['Category', d.category],
-                    ['Informant', d.informantName || '—'],
                     ['Facility', d.facilityName || '—'],
                     ['Officer', d.officerName || '—'],
                     ['Registered', new Date(d.registeredAt).toLocaleString('en-TZ')],
