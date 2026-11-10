@@ -46,6 +46,7 @@ export interface LocalDeath {
   certNo: string
   nationalId: string
   deceasedName: string
+  gender?: string // male | female (from the citizen record)
   causeOfDeath: string
   dateOfDeath: string // DD/MM/YYYY
   locationType: string

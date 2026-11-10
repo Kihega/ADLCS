@@ -32,7 +32,8 @@ const LOGO_W = Math.min(W * 0.55, 260)
 const LOGO_H = LOGO_W * (370 / 340) // logo asset is 340 x 370
 const BAR_W = Math.min(W * 0.6, 280)
 
-const SHOW_MS = 3400 // how long the splash stays before opening Login
+const FADE_MS = 2800 // logo fade-in (slow, plays once)
+const SHOW_MS = 5200 // how long the splash stays before opening Login
 
 const C = {
   top: '#00A8E8' as const, // bright ocean blue
@@ -46,7 +47,7 @@ export default function SplashScreen({ navigation }: Props) {
   // Progress bar (JS driver — animates width, cannot use the native driver)
   const progress = useRef(new Animated.Value(0)).current
   // Logo zoom-out loop (native driver — transform + opacity only)
-  const zoom = useRef(new Animated.Value(1.28)).current
+  const zoom = useRef(new Animated.Value(1.1)).current
   const logoOpacity = useRef(new Animated.Value(0)).current
   // Fade-out of the whole screen
   const screenFade = useRef(new Animated.Value(1)).current
@@ -59,25 +60,25 @@ export default function SplashScreen({ navigation }: Props) {
       useNativeDriver: false,
     }).start()
 
-    // Repeated zoom-out: starts big, shrinks to normal, short rest, repeat.
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(zoom, {
-            toValue: 1,
-            duration: 1100,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(logoOpacity, { toValue: 1, duration: 450, useNativeDriver: true }),
-        ]),
-        Animated.delay(300),
-      ])
-    )
+    // Slow, gentle fade-in with a very slight zoom-out. Plays ONCE (no fast loop).
+    const loop = Animated.parallel([
+      Animated.timing(logoOpacity, {
+        toValue: 1,
+        duration: FADE_MS,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(zoom, {
+        toValue: 1,
+        duration: FADE_MS + 800,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ])
     loop.start()
 
     const navTimer = setTimeout(() => {
-      Animated.timing(screenFade, { toValue: 0, duration: 350, useNativeDriver: true }).start(
+      Animated.timing(screenFade, { toValue: 0, duration: 800, useNativeDriver: true }).start(
         () => {
           loop.stop()
           navigation.replace('Login')

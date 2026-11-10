@@ -500,6 +500,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
         locationType: locationType as any,
         category: category as any,
         informantName: informant.trim(),
+        gender: citizen?.gender ?? '',
         facilityName: facilityName || 'Village',
         officerName,
         rawJson: JSON.stringify({ nationalId: citizen?.nationalId, causeOfDeath: cause.trim() }),

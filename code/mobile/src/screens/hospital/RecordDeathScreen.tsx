@@ -382,7 +382,6 @@ export default function RecordDeathScreen({ navigation }: Props) {
   const [showCal, setShowCal] = useState(false)
   const [locType, setLocType] = useState<LocationType>('health_facility')
   const [category, setCategory] = useState<DeathCategory>('adult')
-  const [informant, setInformant] = useState('')
 
   // Step 4: outcome
   const [submitting, setSubmitting] = useState(false)
@@ -395,7 +394,6 @@ export default function RecordDeathScreen({ navigation }: Props) {
   const [toastVis, setToastVis] = useState(false)
 
   const causeRef = useRef<TextInputHandle>(null)
-  const informantRef = useRef<TextInputHandle>(null)
 
   const LOC_TYPES: { val: LocationType; label: string }[] = [
     { val: 'health_facility', label: 'Health Facility' },
@@ -519,10 +517,6 @@ export default function RecordDeathScreen({ navigation }: Props) {
       Alert.alert('Required', 'Select date of death.')
       return
     }
-    if (!informant.trim()) {
-      Alert.alert('Required', 'Enter informant name.')
-      return
-    }
     setSubmitting(true)
 
     try {
@@ -587,7 +581,8 @@ export default function RecordDeathScreen({ navigation }: Props) {
         dateOfDeath: dod.trim(),
         locationType: locType,
         category: finalCategory,
-        informantName: informant.trim(),
+        informantName: '',
+        gender: citizen?.gender ?? '',
         facilityName,
         officerName,
         rawJson: JSON.stringify({
@@ -599,7 +594,6 @@ export default function RecordDeathScreen({ navigation }: Props) {
           dateOfDeath: dod.trim(),
           locationType: locType,
           category: finalCategory,
-          informantName: informant.trim(),
         }),
       })
 
@@ -631,7 +625,6 @@ export default function RecordDeathScreen({ navigation }: Props) {
     dod,
     locType,
     category,
-    informant,
     citizen,
     lookupId,
     deathType,
@@ -1052,8 +1045,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
                 onChangeText={setCause}
                 placeholder="e.g. Cardiac arrest, Malaria complications"
                 multiline
-                returnKeyType="next"
-                onSubmitEditing={() => informantRef.current?.focus()}
+                returnKeyType="default"
                 inputRef={causeRef}
                 bg={T.card2}
                 bc={T.border}
@@ -1153,21 +1145,6 @@ export default function RecordDeathScreen({ navigation }: Props) {
                   </View>
                 </View>
               )}
-
-              {/* Informant */}
-              <StableField
-                label="Informant Name *"
-                value={informant}
-                onChangeText={setInformant}
-                placeholder="Full name of the reporting person"
-                returnKeyType="done"
-                onSubmitEditing={handleSubmit}
-                inputRef={informantRef}
-                bg={T.card2}
-                bc={T.border}
-                tc={T.text}
-                dc={T.textDim}
-              />
 
               <TouchableOpacity
                 style={[s.submitBtn, { opacity: submitting ? 0.7 : 1 }]}

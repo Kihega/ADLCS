@@ -22,7 +22,7 @@ const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
-const { lookupResidentInVillage, materializeCitizenFromBirth, resolveDeceasedRef, resolveDeceasedDisplay } = require('../lib/identityLookup')
+const { lookupResidentInVillage, materializeCitizenFromBirth, resolveDeceasedRef, resolveDeceasedDisplay, getScope, birthScopeWhere } = require('../lib/identityLookup')
 const { buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 
 const router = Router()
@@ -120,7 +120,10 @@ router.post('/citizen', async (req, res) => {
     nin = c.value
   }
   try {
-    const officer = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
+    const officer = await prisma.villageOfficer.findUnique({
+      where:{ id:officerId },
+      select:{ villageId:true, village:{ select:{ ward:{ select:{ district:{ select:{ regionId:true } } } } } } },
+    })
     const citizen = await prisma.citizen.create({
       data:{
         firstName:   firstName.trim(),
@@ -135,6 +138,7 @@ router.post('/citizen', async (req, res) => {
         // found by BID everywhere else in the system.
         birthId:     birthId ?? genBirthId(),
         currentVillageId: officer?.villageId ?? undefined,
+        regionId:         officer?.village?.ward?.district?.regionId ?? undefined,
         registeredById:   officerId,
         vitalStatus:      'alive',
       },
@@ -168,7 +172,7 @@ router.post('/death', async (req, res) => {
     if (!officerRow?.villageId) {
       return res.status(422).json({ success:false, message:'Your officer account is not assigned to a village yet.' })
     }
-    const scope = await lookupResidentInVillage(nationalId, officerRow.villageId, { id:true, vitalStatus:true })
+    const scope = await lookupResidentInVillage(nationalId, officerRow.villageId, { id:true, vitalStatus:true }, { wide: true })
     if (!scope.found) {
       return res.status(scope.code === 'INVALID_ID' ? 400 : 422).json({ success:false, code:scope.code, message:scope.message })
     }
@@ -626,7 +630,7 @@ router.get('/citizen-lookup', async (req, res) => {
     })
     if (!officer) return res.status(404).json({ success: false, message: 'Officer not found' })
 
-    const r = await lookupResidentInVillage(term, officer.villageId ?? -1, CITIZEN_LOOKUP_SELECT)
+    const r = await lookupResidentInVillage(term, officer.villageId ?? -1, CITIZEN_LOOKUP_SELECT, { wide: true })
     if (!r.found) {
       return res.status(r.code === 'INVALID_ID' ? 400 : 404).json({ success: false, code: r.code, message: r.message })
     }
@@ -682,6 +686,25 @@ router.get('/records', async (req, res) => {
         label:`${c.firstName} ${c.surname}`, sub:c.nationalId||'—',
         date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
     }
+
+    // PATCH-VILLAGE-SCOPE-2026: newborns that only have a hospital birth record
+    try {
+      const vo = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
+      const scope = vo?.villageId ? await getScope(vo.villageId) : null
+      if (scope) {
+        const births = await prisma.birth.findMany({
+          where:{ childCitizenId:null, ...birthScopeWhere(scope) },
+          orderBy:{ registeredAt:'desc' }, take:30,
+          select:{ id:true, birthId:true, childFirstName:true, childSurname:true, registeredAt:true },
+        })
+        for (const b of births) {
+          out.push({ id:`b-${b.id}`, type:'citizens', icon:'👤', color:'#0891b2',
+            birthId: b.birthId ?? null,
+            label:`${b.childFirstName} ${b.childSurname}`, sub:'Birth record',
+            date: new Date(b.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
+        }
+      }
+    } catch (e) { console.warn('[village/records] births in area', e && e.message) }
 
     out.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 

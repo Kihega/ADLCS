@@ -1,15 +1,11 @@
 /**
  * CitizenProfileScreen.tsx — Village Officer · Citizen Profile Lookup
  *
- * Flow: officer enters a citizen's NIN → search → backend looks the citizen
- * up SCOPED TO THE OFFICER'S OWN VILLAGE (GET /village/citizen-lookup) → on
- * a hit, an expandable profile card shows full details: name, gender, DOB,
- * marital status, vital (alive/deceased) status, the date the NIN was
- * registered, and whether the NIN certificate/ID card has been issued.
- *
- * Citizens are scoped to a village via `currentVillageId`, which every
- * citizen inherits from the Village Officer who registered them — so this
- * screen can never show a citizen registered in a different village.
+ * Flow: officer enters a Birth ID (BID) or NIN → search → backend looks the citizen up in
+ * the officer's area (GET /village/citizen-lookup) → ONE pop-up card shows everything:
+ * identity, full location hierarchy (region › district › ward › village/street), status,
+ * ID-card state. The card scrolls when the content is long and is closed with OK.
+ * A failed search shows the usual "Search failed" card with the reason.
  */
 import React, { useState } from 'react'
 import {
@@ -19,6 +15,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Modal,
+  ScrollView,
+  StyleSheet,
 } from 'react-native'
 import { Alert, useErrorDialog } from '../../components/AppDialog'
 import BidCopy from '../../components/BidCopy'
@@ -29,15 +28,10 @@ import {
   ArrowLeft,
   Search,
   User,
-  Calendar,
   Heart,
   HeartCrack,
-  IdCard,
   ShieldCheck,
   ShieldAlert,
-  MapPin,
-  ChevronDown,
-  ChevronUp,
   Download,
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -56,6 +50,7 @@ interface CitizenProfile {
   firstName: string
   middleName: string | null
   surname: string
+  fullName?: string
   gender: string
   dateOfBirth: string
   age: number
@@ -70,17 +65,18 @@ interface CitizenProfile {
   registeredAt: string
   ninCertificateIssued: boolean
   hasBirthRecord?: boolean
+  source?: string
+  region?: string | null
+  district?: string | null
+  ward?: string | null
+  village?: string | null
   villageName: string | null
 }
 
 function fmtDate(d?: string | null): string {
   if (!d) return '—'
   try {
-    return new Date(d).toLocaleDateString('en-TZ', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    })
+    return new Date(d).toLocaleDateString('en-TZ', { day: '2-digit', month: 'short', year: 'numeric' })
   } catch {
     return d
   }
@@ -101,10 +97,14 @@ export default function CitizenProfileScreen({ navigation }: Props) {
   const [error, setError] = useState('')
   useErrorDialog(error, () => setError(''), 'Search failed')
   const [profile, setProfile] = useState<CitizenProfile | null>(null)
-  const [expanded, setExpanded] = useState(true)
+  const [cardOpen, setCardOpen] = useState(false)
   const [certBusy, setCertBusy] = useState(false)
 
-  // PATCH-V3-2026-11: same download function as every other certificate button.
+  const dismissCard = () => {
+    setCardOpen(false)
+    setProfile(null)
+  }
+
   const handleBirthCert = async () => {
     if (!profile?.birthId) return
     setCertBusy(true)
@@ -118,16 +118,11 @@ export default function CitizenProfileScreen({ navigation }: Props) {
   }
 
   const handleSearch = async () => {
-    // PATCH-BID-LOOKUP-2026: search by Birth ID (BID) — a citizen only ever has
-    // a NIN because they already had a BID, so BID alone is enough.
     const value = nin.trim()
     if (!value) {
       setError('Enter a citizen Birth ID (BID) or NIN to search.')
       return
     }
-    // PATCH-V2-2026-11: BID (main way) or NIN. If the NIDA link is not configured
-    // the backend answers "NIDA NOT LINKED YET, USE BIRTH ID INSTEAD", which is
-    // shown in the alert exactly like in birth registration / death.
     if (!isValidId(value)) {
       setProfile(null)
       setError(ID_HELP)
@@ -136,22 +131,38 @@ export default function CitizenProfileScreen({ navigation }: Props) {
     setSearching(true)
     setError('')
     setProfile(null)
+    setCardOpen(false)
     try {
       const json = await apiGet(`/village/citizen-lookup?q=${encodeURIComponent(value.toUpperCase())}`)
       if (json.success && json.data) {
         setProfile(json.data)
-        setExpanded(true)
+        setCardOpen(true)
       } else {
-        setError(json.message ?? 'Citizen not found in your village.')
+        setError(json.message ?? 'Citizen not found.')
       }
     } catch (e: any) {
-      setError(e?.message ?? 'No citizen with this Birth ID was found registered in your village.')
+      setError(e?.message ?? 'Could not search right now. Check your connection and try again.')
     } finally {
       setSearching(false)
     }
   }
 
   const isAlive = profile?.vitalStatus?.toLowerCase() === 'alive'
+  const fullName = profile
+    ? profile.fullName || [profile.firstName, profile.middleName, profile.surname].filter(Boolean).join(' ')
+    : ''
+
+  const Section = ({ title }: { title: string }) => (
+    <Text style={[cs.section, { color: G }]}>{title}</Text>
+  )
+  const Row = ({ label, value }: { label: string; value: string }) => (
+    <View style={cs.row}>
+      <Text style={[cs.rowLabel, { color: T.textSub }]}>{label}</Text>
+      <Text style={[cs.rowValue, { color: T.text }]}>{value}</Text>
+    </View>
+  )
+
+  const streetHouse = [profile?.streetName, profile?.houseRegNumber].filter(Boolean).join(' / ')
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
@@ -187,10 +198,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <KeyboardSafeView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardSafeView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <KeyboardAwareScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{
@@ -250,117 +258,82 @@ export default function CitizenProfileScreen({ navigation }: Props) {
               )}
             </TouchableOpacity>
           </View>
-          {!!error && (
-            <Text style={{ fontSize: 11, color: T.danger, marginTop: 8 }}>{error}</Text>
-          )}
+        </KeyboardAwareScrollView>
+      </KeyboardSafeView>
 
-          {profile && (
-            <View
-              style={{
-                marginTop: 18,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: `${G}40`,
-                backgroundColor: T.card,
-                overflow: 'hidden',
-              }}
-            >
-              {/* Card header — always visible, tap to expand/collapse */}
-              <TouchableOpacity
-                onPress={() => setExpanded((v) => !v)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: 14,
-                  backgroundColor: `${G}10`,
-                }}
-              >
-                <View
-                  style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 23,
-                    backgroundColor: `${G}25`,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <User size={22} color={G} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: T.text }}>
-                    {[profile.firstName, profile.middleName, profile.surname]
-                      .filter(Boolean)
-                      .join(' ')}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                    <BidCopy bid={profile.birthId} size={11} />
-                    {!!profile.nationalId && (
-                      <Text style={{ fontSize: 11, color: T.textSub }}>NIN {profile.nationalId}</Text>
+      {/* ── Result: ONE scrollable card with an OK button ───────────────── */}
+      <Modal
+        visible={!!profile && cardOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={dismissCard}
+      >
+        <View style={cs.backdrop}>
+          <View style={[cs.card, { backgroundColor: T.card, borderColor: T.border }]}>
+            {profile && (
+              <>
+                <View style={cs.head}>
+                  <View style={[cs.avatar, { backgroundColor: `${G}25` }]}>
+                    <User size={26} color={G} />
+                  </View>
+                  <Text style={[cs.name, { color: T.text }]}>{fullName}</Text>
+                  <View style={{ marginTop: 4 }}>
+                    <BidCopy bid={profile.birthId} size={12} />
+                  </View>
+                  <View
+                    style={[
+                      cs.badge,
+                      { backgroundColor: isAlive ? `${TZ.green}20` : '#dc262620' },
+                    ]}
+                  >
+                    {isAlive ? (
+                      <Heart size={12} color={TZ.green} />
+                    ) : (
+                      <HeartCrack size={12} color="#dc2626" />
                     )}
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: isAlive ? TZ.green : '#dc2626' }}>
+                      {titleCase(profile.vitalStatus)}
+                    </Text>
                   </View>
                 </View>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 4,
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    borderRadius: 8,
-                    backgroundColor: isAlive ? `${TZ.green}20` : '#dc262620',
-                  }}
-                >
-                  {isAlive ? (
-                    <Heart size={11} color={TZ.green} />
-                  ) : (
-                    <HeartCrack size={11} color="#dc2626" />
-                  )}
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontWeight: '700',
-                      color: isAlive ? TZ.green : '#dc2626',
-                    }}
-                  >
-                    {titleCase(profile.vitalStatus)}
-                  </Text>
-                </View>
-                {expanded ? (
-                  <ChevronUp size={16} color={T.textDim} />
-                ) : (
-                  <ChevronDown size={16} color={T.textDim} />
-                )}
-              </TouchableOpacity>
 
-              {/* Expandable detail rows */}
-              {expanded && (
-                <View style={{ padding: 14, gap: 10 }}>
-                  {[
-                    { icon: Calendar, label: 'Date of Birth', value: `${fmtDate(profile.dateOfBirth)} (Age ${profile.age})` },
-                    { icon: User, label: 'Gender', value: titleCase(profile.gender) },
-                    { icon: Heart, label: 'Marital Status', value: titleCase(profile.maritalStatus) },
-                    { icon: MapPin, label: 'Street / House No.', value: `${profile.streetName ?? '—'} / ${profile.houseRegNumber ?? '—'}` },
-                    { icon: Calendar, label: 'Registered On', value: fmtDate(profile.registeredAt) },
-                  ].map((row) => (
-                    <View key={row.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <row.icon size={14} color={T.textDim} />
-                      <Text style={{ fontSize: 11, color: T.textSub, flex: 1 }}>{row.label}</Text>
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: T.text }}>{row.value}</Text>
-                    </View>
-                  ))}
+                <ScrollView
+                  style={{ flexShrink: 1, alignSelf: 'stretch' }}
+                  contentContainerStyle={{ paddingBottom: 4 }}
+                  showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                >
+                  <Section title="IDENTITY" />
+                  <Row label="Full name" value={fullName || '—'} />
+                  <Row label="Gender" value={titleCase(profile.gender)} />
+                  <Row
+                    label="Date of birth"
+                    value={`${fmtDate(profile.dateOfBirth)} (Age ${profile.age ?? '—'})`}
+                  />
+                  <Row label="Marital status" value={titleCase(profile.maritalStatus)} />
+                  <Row label="Education" value={titleCase(profile.educationLevel)} />
+                  <Row label="NIN" value={profile.nationalId || 'Not issued'} />
+
+                  <Section title="LOCATION" />
+                  <Row label="Region" value={profile.region || '—'} />
+                  <Row label="District" value={profile.district || '—'} />
+                  <Row label="Ward" value={profile.ward || '—'} />
+                  <Row label="Village / Street" value={profile.village || profile.villageName || '—'} />
+                  {!!streetHouse && <Row label="Street / House No." value={streetHouse} />}
+
+                  <Section title="REGISTRATION" />
+                  <Row label="Registered on" value={fmtDate(profile.registeredAt)} />
+                  <Row
+                    label="Record"
+                    value={profile.source === 'birth' ? 'Hospital birth record' : 'Village registration'}
+                  />
 
                   <View
-                    style={{
-                      marginTop: 4,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: 10,
-                      borderRadius: 10,
-                      backgroundColor: profile.ninCertificateIssued ? `${TZ.green}15` : '#f9731615',
-                    }}
+                    style={[
+                      cs.idBox,
+                      { backgroundColor: profile.ninCertificateIssued ? `${TZ.green}15` : '#f9731615' },
+                    ]}
                   >
                     {profile.ninCertificateIssued ? (
                       <ShieldCheck size={16} color={TZ.green} />
@@ -371,8 +344,8 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                       style={{
                         fontSize: 11,
                         fontWeight: '700',
-                        color: profile.ninCertificateIssued ? TZ.green : '#f97316',
                         flex: 1,
+                        color: profile.ninCertificateIssued ? TZ.green : '#f97316',
                       }}
                     >
                       {profile.ninCertificateIssued
@@ -381,28 +354,11 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                     </Text>
                   </View>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                    <IdCard size={12} color={T.textDim} />
-                    <Text style={{ fontSize: 10, color: T.textDim }}>
-                      Scoped to {profile.villageName ?? 'your'} village — visible to this officer only
-                    </Text>
-                  </View>
-
                   {!!profile.hasBirthRecord && (
                     <TouchableOpacity
                       onPress={handleBirthCert}
                       disabled={certBusy}
-                      style={{
-                        marginTop: 6,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        paddingVertical: 12,
-                        borderRadius: 10,
-                        backgroundColor: TZ.green,
-                        opacity: certBusy ? 0.7 : 1,
-                      }}
+                      style={[cs.certBtn, { opacity: certBusy ? 0.7 : 1 }]}
                     >
                       {certBusy ? (
                         <ActivityIndicator size="small" color="#fff" />
@@ -414,12 +370,77 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                       </Text>
                     </TouchableOpacity>
                   )}
-                </View>
-              )}
-            </View>
-          )}
-        </KeyboardAwareScrollView>
-      </KeyboardSafeView>
+                </ScrollView>
+
+                <TouchableOpacity style={[cs.ok, { backgroundColor: T.primary }]} onPress={dismissCard}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>OK</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
+
+const cs = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '88%',
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+  },
+  head: { alignItems: 'center', marginBottom: 6 },
+  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  name: { fontSize: 17, fontWeight: '800', textAlign: 'center', marginTop: 10 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  section: { fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 14, marginBottom: 4 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 6 },
+  rowLabel: { fontSize: 12, flexShrink: 0 },
+  rowValue: { fontSize: 12, fontWeight: '700', flex: 1, textAlign: 'right' },
+  idBox: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+  },
+  certBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: TZ.green,
+  },
+  ok: {
+    marginTop: 14,
+    minHeight: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+})

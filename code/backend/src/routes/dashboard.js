@@ -29,7 +29,7 @@ const { requireAuth } = require('../middleware/auth')
 const { findPersonByBid, calcAge, buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
 const nida = require('../lib/nidaClient')
-const { lookupIdentity, resolveDeceasedRef, resolveDeceasedDisplay } = require('../lib/identityLookup')
+const { lookupIdentity, resolveDeceasedRef, resolveDeceasedDisplay, getScope, citizenScopeWhere, birthScopeWhere } = require('../lib/identityLookup')
 
 const router = Router()
 router.use(requireAuth)
@@ -80,6 +80,18 @@ async function resolveFacilityLocation(facilityId) {
 }
 
 // ── GET /api/officer/dashboard ─────────────────────────────────────────────────
+// PATCH-VILLAGE-SCOPE-2026: residents of the officer's area = registered citizens
+// + newborns that so far only have a hospital birth record.
+async function countVillageResidents(vid) {
+  const scope = await getScope(vid)
+  if (!scope) return 0
+  const [c, b] = await Promise.all([
+    prisma.citizen.count({ where: citizenScopeWhere(scope) }),
+    prisma.birth.count({ where: { childCitizenId: null, ...birthScopeWhere(scope) } }),
+  ])
+  return c + b
+}
+
 router.get('/dashboard', async (req, res) => {
   const { id, role } = req.user
   try {
@@ -156,7 +168,7 @@ router.get('/dashboard', async (req, res) => {
       const vid = officer.villageId ?? -1
 
       const [totalCitizens, monthBirths, monthDeaths, monthMigrations, pendingCases, incomingMigrationsPending] = await Promise.all([
-        prisma.citizen.count({ where: { currentVillageId: vid } }),
+        countVillageResidents(vid).catch(() => 0),
         prisma.birth.count({
           where: { registeredAt: { gte: monthStart }, child: { currentVillageId: vid } },
         }),
@@ -250,6 +262,23 @@ router.get('/activity', async (req, res) => {
           registeredAt: d.registeredAt,
           color: '#dc2626' })
       }
+      try {
+        const vo = await prisma.villageOfficer.findUnique({ where: { id }, select: { villageId: true } })
+        const scope = vo?.villageId ? await getScope(vo.villageId) : null
+        if (scope) {
+          const births = await prisma.birth.findMany({
+            where: { childCitizenId: null, registeredAt: { gte: startOfDay(), lte: endOfDay() }, ...birthScopeWhere(scope) },
+            orderBy: { registeredAt: 'desc' }, take: limit,
+            select: { id: true, childFirstName: true, childSurname: true, registeredAt: true },
+          })
+          for (const b of births) {
+            items.push({ id: `birth-${b.id}`, icon: '👤', label: 'Citizen registered',
+              name: `${b.childFirstName} ${b.childSurname}`.trim(),
+              time: new Date(b.registeredAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
+              registeredAt: b.registeredAt, color: '#00a3dd' })
+          }
+        }
+      } catch (e) { console.warn('[activity] births in area', e && e.message) }
       // Sort by actual timestamp desc (today-only, so this is a same-day sort)
       items.sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime())
     }
@@ -559,6 +588,7 @@ router.get('/certificate/data', async (req, res) => {
           certNo: dth.deathCertNo,
           nationalId: dth.nationalId || '',
           deceasedName: info?.name || dth.nationalId || '',
+          gender: info?.gender || '',
           causeOfDeath: dth.causeOfDeath || '',
           dateOfDeath: fmtDDMMYYYY(dth.dateOfDeath),
           locationType: dth.locationType || '',
