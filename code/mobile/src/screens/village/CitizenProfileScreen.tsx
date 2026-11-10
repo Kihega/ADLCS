@@ -3,8 +3,9 @@
  *
  * Flow: officer enters a Birth ID (BID) or NIN → search → backend looks the citizen up in
  * the officer's area (GET /village/citizen-lookup) → ONE pop-up card shows everything:
- * identity, full location hierarchy (region › district › ward › village/street), status,
- * ID-card state. The card scrolls when the content is long and is closed with OK.
+ * identity, full location hierarchy (region › district › ward › village/street), status.
+ * The card is for DISPLAY ONLY (no alerts, no certificate button): it scrolls when long
+ * and is closed with OK.
  * A failed search shows the usual "Search failed" card with the reason.
  */
 import React, { useState } from 'react'
@@ -19,9 +20,8 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native'
-import { Alert, useErrorDialog } from '../../components/AppDialog'
+import { useErrorDialog } from '../../components/AppDialog'
 import BidCopy from '../../components/BidCopy'
-import { downloadCertificateById, describeError } from '../../services/certificateService'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
@@ -30,9 +30,6 @@ import {
   User,
   Heart,
   HeartCrack,
-  ShieldCheck,
-  ShieldAlert,
-  Download,
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
@@ -98,23 +95,10 @@ export default function CitizenProfileScreen({ navigation }: Props) {
   useErrorDialog(error, () => setError(''), 'Search failed')
   const [profile, setProfile] = useState<CitizenProfile | null>(null)
   const [cardOpen, setCardOpen] = useState(false)
-  const [certBusy, setCertBusy] = useState(false)
 
   const dismissCard = () => {
     setCardOpen(false)
     setProfile(null)
-  }
-
-  const handleBirthCert = async () => {
-    if (!profile?.birthId) return
-    setCertBusy(true)
-    try {
-      await downloadCertificateById('birth', '', profile.birthId)
-    } catch (e) {
-      console.warn('[certificate] download failed', e)
-      Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
-    }
-    setCertBusy(false)
   }
 
   const handleSearch = async () => {
@@ -329,47 +313,6 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                     value={profile.source === 'birth' ? 'Hospital birth record' : 'Village registration'}
                   />
 
-                  <View
-                    style={[
-                      cs.idBox,
-                      { backgroundColor: profile.ninCertificateIssued ? `${TZ.green}15` : '#f9731615' },
-                    ]}
-                  >
-                    {profile.ninCertificateIssued ? (
-                      <ShieldCheck size={16} color={TZ.green} />
-                    ) : (
-                      <ShieldAlert size={16} color={T.warning} />
-                    )}
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: '700',
-                        flex: 1,
-                        color: profile.ninCertificateIssued ? TZ.green : '#f97316',
-                      }}
-                    >
-                      {profile.ninCertificateIssued
-                        ? `NIN certificate / ID card issued${profile.idCardIssued ? ` on ${fmtDate(profile.idCardIssued)}` : ''}`
-                        : 'NIN certificate / ID card not yet issued'}
-                    </Text>
-                  </View>
-
-                  {!!profile.hasBirthRecord && (
-                    <TouchableOpacity
-                      onPress={handleBirthCert}
-                      disabled={certBusy}
-                      style={[cs.certBtn, { opacity: certBusy ? 0.7 : 1 }]}
-                    >
-                      {certBusy ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Download size={15} color="#fff" />
-                      )}
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
-                        {certBusy ? 'Generating PDF…' : 'Download Birth Certificate'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                 </ScrollView>
 
                 <TouchableOpacity style={[cs.ok, { backgroundColor: T.primary }]} onPress={dismissCard}>
@@ -418,24 +361,6 @@ const cs = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 6 },
   rowLabel: { fontSize: 12, flexShrink: 0 },
   rowValue: { fontSize: 12, fontWeight: '700', flex: 1, textAlign: 'right' },
-  idBox: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: 10,
-  },
-  certBtn: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: TZ.green,
-  },
   ok: {
     marginTop: 14,
     minHeight: 46,

@@ -48,7 +48,7 @@ function shapeCitizen(citizen) {
  * @returns {Promise<{found:boolean, person?:object, idType?:'BID'|'NIN'|null,
  *                    code?:string, message?:string, nidaAvailable?:boolean}>}
  */
-async function lookupIdentity(raw) {
+async function _lookupIdentity(raw) {
   const ident = classifyIdentifier(raw)
   if (!ident.type) {
     return { found: false, idType: null, code: 'INVALID_ID', message: INVALID_ID_MESSAGE }
@@ -281,7 +281,16 @@ async function lookupResidentInVillage(raw, villageId, select, opts = {}) {
   const idWhere = ident.type === 'BID'
     ? { birthId: ident.value }
     : { OR: [{ nationalId: ident.value }, { nationalId: String(raw).trim() }] }
-  const citizen = await prisma.citizen.findFirst({ where: { ...idWhere, ...place }, select })
+  // PATCH-C-2026-11: always load what is needed to decide alive / deceased.
+  const citizen = await prisma.citizen.findFirst({
+    where: { ...idWhere, ...place },
+    select: { ...select, id: true, birthId: true, nationalId: true, vitalStatus: true },
+  })
+  // A death on the death register always wins over a stale "alive" flag.
+  if (citizen && String(citizen.vitalStatus || '').toLowerCase() !== 'deceased') {
+    const dead = await findDeathRecord({ citizenId: citizen.id, birthId: citizen.birthId, nationalId: citizen.nationalId })
+    if (dead) citizen.vitalStatus = 'deceased'
+  }
   // PATCH-V2-2026-11: newborn registered at the hospital (Birth row only)
   if (!citizen && ident.type === 'BID') {
     const fromBirth = await findBirthResidentInVillage(ident.value, villageId, { wide })
@@ -380,7 +389,39 @@ async function resolveDeceasedDisplay(deaths) {
   return out
 }
 
+// -- PATCH-C-2026-11 ----------------------------------------------------------
+// Is there a death on the register for this person? (by citizen id, Birth ID or NIN)
+async function findDeathRecord({ citizenId, birthId, nationalId } = {}) {
+  const ids = [birthId, nationalId].filter(Boolean).map((v) => String(v).trim().toUpperCase())
+  const or = []
+  if (citizenId) or.push({ citizenId })
+  if (ids.length) or.push({ nationalId: { in: ids } })
+  if (!or.length) return null
+  return prisma.death.findFirst({ where: { OR: or }, select: { id: true, dateOfDeath: true } })
+}
+
+// Public lookup (hospital apps, death recording): same as before, but a person with
+// a death on the register is reported as `deceased` (+ deathRecordId / dateOfDeath).
+async function lookupIdentity(raw) {
+  const r = await _lookupIdentity(raw)
+  if (r.found && r.person && r.person.source !== 'nida') {
+    const p = r.person
+    const dead = await findDeathRecord({
+      citizenId: p.source === 'citizen' ? p.id : null,
+      birthId: p.birthId,
+      nationalId: p.nationalId,
+    })
+    if (dead) {
+      p.vitalStatus = 'deceased'
+      p.deathRecordId = dead.id
+      p.dateOfDeath = dead.dateOfDeath
+    }
+  }
+  return r
+}
+
 module.exports = {
+  findDeathRecord,
   getScope,
   citizenScopeWhere,
   birthScopeWhere,

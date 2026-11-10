@@ -1,541 +1,421 @@
 /**
- * IssueCertificateScreen.tsx — Certificate Issuance & Management  v3.0
+ * IssueCertificateScreen.tsx — Hospital Officer · Issue Certificate  v4.0
  *
- * Lists ALL registered births and deaths from local SQLite DB.
- * Each row has Download PDF and Print buttons.
- * After registration the new record appears here automatically.
- * Works fully offline — PDFs generated on-device with expo-print.
+ * Same idea as the village Citizen Profile lookup: the officer enters a Birth ID (BID)
+ * or NIN → search (GET /officer/citizen-lookup) → ONE pop-up card shows the citizen's
+ * identity, location and registration details.
+ *
+ * The card carries the certificate button:
+ *   • status ALIVE     → "Download Birth Certificate"
+ *   • status DECEASED  → "Download Death Certificate"
+ * The card scrolls when the content is long and is closed with OK.
  */
-
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState } from 'react'
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
-  StyleSheet,
-  FlatList,
   ActivityIndicator,
-  RefreshControl,
+  Platform,
   Modal,
   ScrollView,
+  StyleSheet,
 } from 'react-native'
-import { Alert } from '../../components/AppDialog'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import {
-  ArrowLeft,
-  FileText,
-  Baby,
-  Cross,
-  Download,
-  Printer,
-  ChevronRight,
-  CheckCircle2,
-  Clock,
-  RefreshCw,
-} from 'lucide-react-native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-
-import { LocalBirth, LocalDeath } from '../../services/localDb'
-import { apiGet } from '../../services/syncService'
-import {
-  downloadCertificateById,
-  printCertificateById,
-  describeError,
-} from '../../services/certificateService'
+import { Alert, useErrorDialog } from '../../components/AppDialog'
 import BidCopy from '../../components/BidCopy'
+import { downloadCertificateById, describeError } from '../../services/certificateService'
+import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { ArrowLeft, Search, User, Heart, HeartCrack, Download } from 'lucide-react-native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
+import { useResponsive } from '../../utils/responsive'
+import { apiGet } from '../../services/syncService'
+import { isValidId, ID_HELP } from '../../services/identityLookup'
 
 type RootStack = { HospitalHome: undefined; IssueCertificate: undefined }
 type Props = { navigation: NativeStackNavigationProp<RootStack, 'IssueCertificate'> }
 
-type FilterTab = 'all' | 'birth' | 'death'
-
-interface CertRow {
-  id: string
-  type: 'birth' | 'death'
-  certNo: string
-  name: string
-  date: string
-  synced: boolean
-  certPdfPath: string
+interface CitizenCard {
+  id?: string | null
   birthId?: string | null
-  raw: LocalBirth | LocalDeath
+  nationalId?: string | null
+  firstName?: string
+  middleName?: string | null
+  surname?: string
+  fullName?: string
+  gender?: string
+  dateOfBirth?: string
+  dateOfDeath?: string | null
+  age?: number | null
+  vitalStatus?: string
+  maritalStatus?: string
+  educationLevel?: string
+  registeredAt?: string | null
+  source?: string
+  hasBirthRecord?: boolean
+  deathRecordId?: string | null
+  region?: string | null
+  district?: string | null
+  ward?: string | null
+  village?: string | null
+}
+
+function fmtDate(d?: string | null): string {
+  if (!d) return '—'
+  try {
+    return new Date(d).toLocaleDateString('en-TZ', { day: '2-digit', month: 'short', year: 'numeric' })
+  } catch {
+    return d
+  }
+}
+
+function titleCase(s?: string | null): string {
+  if (!s) return '—'
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
 }
 
 export default function IssueCertificateScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
-  const [tab, setTab] = useState<FilterTab>('all')
-  const [rows, setRows] = useState<CertRow[]>([])
-  const [counts, setCounts] = useState({ all: 0, birth: 0, death: 0 })
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [actionId, setActionId] = useState<string | null>(null) // cert ID being processed
-  const [selected, setSelected] = useState<CertRow | null>(null)
+  const { contentMaxWidth } = useResponsive()
+  const G = TZ.green
 
-  // ── Load from local DB ────────────────────────────────────────────────────
-  const loadCerts = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true)
-    try {
-      // Fetch all records directly from PostgreSQL via backend API
-      const json = await apiGet(`/officer/records?type=${tab}&limit=100`)
-      if (json.success && Array.isArray(json.data)) {
-        const birthRows: CertRow[] = json.data
-          .filter((r: any) => r.type === 'birth')
-          .map((r: any) => ({
-            id: r.id,
-            type: 'birth' as const,
-            certNo: r.certNo ?? '—',
-            name: r.name ?? '—',
-            date: r.date ?? '—',
-            synced: r.ritaSynced ?? true,
-            certPdfPath: r.certIssued ? 'issued' : '',
-            birthId: r.birthId ?? null,
-            raw: r as any,
-          }))
-        const deathRows: CertRow[] = json.data
-          .filter((r: any) => r.type === 'death')
-          .map((r: any) => ({
-            id: r.id,
-            type: 'death' as const,
-            certNo: r.certNo ?? '—',
-            name: r.name ?? '—',
-            date: r.date ?? '—',
-            synced: r.ritaSynced ?? true,
-            certPdfPath: r.certIssued ? 'issued' : '',
-            birthId: r.birthId ?? null,
-            raw: r as any,
-          }))
-        // API already returns in date-desc order
-        const order = new Map<string, number>((json.data as any[]).map((r, i) => [String(r.id), i]))
-      const merged = [...birthRows, ...deathRows].sort(
-        (a: any, b: any) => (order.get(String(a.id)) ?? 0) - (order.get(String(b.id)) ?? 0),
-      )
-      setRows(merged)
-      if (json.counts) {
-        setCounts({ all: json.counts.all ?? 0, birth: json.counts.birth ?? 0, death: json.counts.death ?? 0 })
-      } else if (tab === 'all') {
-        setCounts({ all: merged.length, birth: birthRows.length, death: deathRows.length })
-      }
-      } else {
-        setRows([])
-      }
-    } catch (e) {
-      console.warn('loadCerts error', e)
-      setRows([])
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
+  const [idText, setIdText] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [error, setError] = useState('')
+  useErrorDialog(error, () => setError(''), 'Search failed')
+  const [profile, setProfile] = useState<CitizenCard | null>(null)
+  const [cardOpen, setCardOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const dismissCard = () => {
+    setCardOpen(false)
+    setProfile(null)
+  }
+
+  const handleSearch = async () => {
+    const value = idText.trim()
+    if (!value) {
+      setError('Enter a citizen Birth ID (BID) or NIN to search.')
+      return
     }
-  }, [tab])
-
-  useEffect(() => {
-    loadCerts()
-  }, [loadCerts])
-
-  const filtered = tab === 'all' ? rows : rows.filter((r) => r.type === tab)
-
-  // ── Download PDF / Print ─────────────────────────────────────────────────
-  // PATCH-V3-2026-11: the full record is fetched from the server and goes through
-  // the same download function used at registration (share sheet, with a
-  // print / "Save as PDF" fallback).
-  const handleDownload = async (row: CertRow) => {
-    setActionId(row.id)
+    if (!isValidId(value)) {
+      setProfile(null)
+      setError(ID_HELP)
+      return
+    }
+    setSearching(true)
+    setError('')
+    setProfile(null)
+    setCardOpen(false)
     try {
-      await downloadCertificateById(row.type, row.id)
+      const json = await apiGet(`/officer/citizen-lookup?q=${encodeURIComponent(value.toUpperCase())}`)
+      if (json.success && json.data) {
+        setProfile(json.data)
+        setCardOpen(true)
+      } else {
+        setError(json.message ?? 'Citizen not found.')
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not search right now. Check your connection and try again.')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const isDeceased = String(profile?.vitalStatus ?? '').toLowerCase() === 'deceased'
+  const isAlive = !isDeceased
+  const certColor = isDeceased ? '#dc2626' : TZ.green
+  const canDownload = isDeceased
+    ? !!profile?.deathRecordId
+    : !!profile?.birthId && profile?.hasBirthRecord !== false
+  const fullName = profile
+    ? profile.fullName || [profile.firstName, profile.middleName, profile.surname].filter(Boolean).join(' ')
+    : ''
+
+  const handleDownload = async () => {
+    if (!profile) return
+    setBusy(true)
+    try {
+      if (isDeceased) await downloadCertificateById('death', String(profile.deathRecordId))
+      else await downloadCertificateById('birth', '', String(profile.birthId))
     } catch (e) {
       console.warn('[certificate] download failed', e)
       Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
     }
-    setActionId(null)
+    setBusy(false)
   }
 
-  const handlePrint = async (row: CertRow) => {
-    setActionId(`print-${row.id}`)
-    try {
-      await printCertificateById(row.type, row.id)
-    } catch (e) {
-      console.warn('[certificate] print failed', e)
-      Alert.alert('Error', `Could not print certificate. ${describeError(e)}`)
-    }
-    setActionId(null)
-  }
+  const Section = ({ title }: { title: string }) => (
+    <Text style={[cs.section, { color: G }]}>{title}</Text>
+  )
+  const Row = ({ label, value }: { label: string; value: string }) => (
+    <View style={cs.row}>
+      <Text style={[cs.rowLabel, { color: T.textSub }]}>{label}</Text>
+      <Text style={[cs.rowValue, { color: T.text }]}>{value}</Text>
+    </View>
+  )
 
-  // ── Detail Modal ──────────────────────────────────────────────────────────
-  const DetailModal = () => {
-    if (!selected) return null
-    const isBirth = selected.type === 'birth'
-    const b = selected.raw as LocalBirth
-    const d = selected.raw as LocalDeath
-    const color = isBirth ? TZ.green : '#dc2626'
-
-    return (
-      <Modal
-        visible={!!selected}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSelected(null)}
-      >
-        <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { backgroundColor: T.card }]}>
-            <View style={s.sheetHandle} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-              <View style={[s.sheetTypeIcon, { backgroundColor: `${color}18` }]}>
-                {isBirth ? <Baby size={18} color={color} /> : <Cross size={18} color={color} />}
-              </View>
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={[s.sheetTitle, { color: T.text }]}>{selected.name}</Text>
-                <Text style={[s.sheetCertNo, { color: color }]}>{selected.certNo}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setSelected(null)} style={s.sheetClose}>
-                <Text style={{ color: T.textSub, fontSize: 18 }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {isBirth ? (
-                <>
-                  {[
-                    [
-                      'Child',
-                      [b.childFirstName, b.childMiddleName, b.childSurname]
-                        .filter(Boolean)
-                        .join(' '),
-                    ],
-                    ['Date of Birth', b.dateOfBirth],
-                    ['Gender', b.gender],
-                    ['Father', b.fatherName || '—'],
-                    ['Mother', b.motherName || '—'],
-                    ['Facility', b.facilityName || '—'],
-                    ['District', b.facilityDistrict || '—'],
-                    ['Region', b.facilityRegion || '—'],
-                    ['Officer', b.officerName || '—'],
-                    ['NIN', b.nationalId || 'Pending'],
-                    ['Registered', new Date(b.registeredAt).toLocaleString('en-TZ')],
-                    ['Synced', b.synced === 1 ? 'Yes ✓' : 'Pending'],
-                  ].map(([k, v]) => (
-                    <View key={k} style={[s.detailRow, { borderBottomColor: T.border }]}>
-                      <Text style={[s.detailKey, { color: T.textSub }]}>{k}</Text>
-                      <Text style={[s.detailVal, { color: T.text }]}>{v}</Text>
-                    </View>
-                  ))}
-                </>
-              ) : (
-                <>
-                  {[
-                    ['Deceased', d.deceasedName || d.nationalId || '—'],
-                    ['National ID', d.nationalId || '—'],
-                    ['Cause', d.causeOfDeath],
-                    ['Date of Death', d.dateOfDeath],
-                    ['Location', d.locationType.replace(/_/g, ' ')],
-                    ['Category', d.category],
-                    ['Facility', d.facilityName || '—'],
-                    ['Officer', d.officerName || '—'],
-                    ['Registered', new Date(d.registeredAt).toLocaleString('en-TZ')],
-                    ['Synced', d.synced === 1 ? 'Yes ✓' : 'Pending'],
-                  ].map(([k, v]) => (
-                    <View key={k} style={[s.detailRow, { borderBottomColor: T.border }]}>
-                      <Text style={[s.detailKey, { color: T.textSub }]}>{k}</Text>
-                      <Text style={[s.detailVal, { color: T.text }]}>{v}</Text>
-                    </View>
-                  ))}
-                </>
-              )}
-            </ScrollView>
-
-            {/* Action buttons inside modal */}
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-              <TouchableOpacity
-                style={[s.modalBtn, { backgroundColor: `${color}18`, borderColor: `${color}50` }]}
-                onPress={() => {
-                  setSelected(null)
-                  setTimeout(() => handlePrint(selected), 300)
-                }}
-              >
-                <Printer size={14} color={color} />
-                <Text style={[s.modalBtnText, { color }]}>Print</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.modalBtn, { flex: 2, backgroundColor: color, borderColor: color }]}
-                onPress={() => {
-                  setSelected(null)
-                  setTimeout(() => handleDownload(selected), 300)
-                }}
-              >
-                <Download size={14} color="#fff" />
-                <Text style={[s.modalBtnText, { color: '#fff' }]}>Download PDF</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    )
-  }
-
-  // ── Row item ──────────────────────────────────────────────────────────────
-  const renderItem = ({ item }: { item: CertRow }) => {
-    const isBirth = item.type === 'birth'
-    const color = isBirth ? TZ.green : '#dc2626'
-    const isWorking = actionId === item.id
-    const isPrinting = actionId === `print-${item.id}`
-
-    return (
-      <TouchableOpacity
-        style={[s.card, { backgroundColor: T.card, borderColor: T.border }]}
-        onPress={() => setSelected(item)}
-        activeOpacity={0.8}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-          <View style={[s.typeIcon, { backgroundColor: `${color}18` }]}>
-            {isBirth ? <Baby size={18} color={color} /> : <Cross size={18} color={color} />}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[s.cardName, { color: T.text }]} numberOfLines={1}>
-              {item.name}
-            </Text>
-            <Text style={[s.cardCert, { color: color }]}>{item.certNo}</Text>
-            <View style={{ flexDirection: 'row', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
-              <View style={[s.tag, { backgroundColor: `${color}18`, borderColor: `${color}40` }]}>
-                <Text style={[s.tagText, { color }]}>{isBirth ? 'BIRTH' : 'DEATH'}</Text>
-              </View>
-              <View
-                style={[
-                  s.tag,
-                  {
-                    backgroundColor: item.synced ? `${TZ.green}18` : '#f9731618',
-                    borderColor: item.synced ? `${TZ.green}40` : '#f9731640',
-                  },
-                ]}
-              >
-                {item.synced ? (
-                  <CheckCircle2 size={9} color={TZ.green} />
-                ) : (
-                  <Clock size={9} color={T.warning} />
-                )}
-                <Text style={[s.tagText, { color: item.synced ? T.brand : T.warning }]}>
-                  {item.synced ? 'Synced' : 'Pending sync'}
-                </Text>
-              </View>
-              {!!item.certPdfPath && (
-                <View style={[s.tag, { backgroundColor: '#0891b218', borderColor: '#0891b240' }]}>
-                  <FileText size={9} color="#0891b2" />
-                  <Text style={[s.tagText, { color: '#0891b2' }]}>PDF ready</Text>
-                </View>
-              )}
-            </View>
-          </View>
-          <View style={{ alignItems: 'flex-end', gap: 4 }}>
-            <Text style={[s.cardDate, { color: T.textDim }]}>{item.date}</Text>
-            <BidCopy bid={item.birthId} />
-            <ChevronRight size={13} color={T.textDim} />
-          </View>
-        </View>
-
-        {/* Download + Print inline buttons */}
-        <View style={[s.cardActions, { borderTopColor: T.border }]}>
-          <TouchableOpacity
-            style={[s.cardBtn, { borderColor: T.border }]}
-            onPress={() => handlePrint(item)}
-            disabled={!!actionId}
-          >
-            {isPrinting ? (
-              <ActivityIndicator size="small" color={color} />
-            ) : (
-              <Printer size={13} color={T.textSub} />
-            )}
-            <Text style={[s.cardBtnText, { color: T.textSub }]}>Print</Text>
-          </TouchableOpacity>
-          <View style={{ width: 1, backgroundColor: T.border }} />
-          <TouchableOpacity
-            style={[s.cardBtn, { backgroundColor: `${color}10` }]}
-            onPress={() => handleDownload(item)}
-            disabled={!!actionId}
-          >
-            {isWorking ? (
-              <ActivityIndicator size="small" color={color} />
-            ) : (
-              <Download size={13} color={color} />
-            )}
-            <Text style={[s.cardBtnText, { color }]}>
-              {item.certPdfPath ? 'Download PDF' : 'Generate & Download'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    )
-  }
+  const recordLabel =
+    profile?.source === 'birth'
+      ? 'Hospital birth record'
+      : profile?.source === 'nida'
+        ? 'NIDA registry'
+        : 'Village registration'
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: T.bg }} edges={['top']}>
-      {/* Header */}
-      <View style={[s.header, { backgroundColor: T.card, borderBottomColor: T.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <ArrowLeft size={20} color={T.text} />
-        </TouchableOpacity>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={[s.headerTitle, { color: T.text }]}>Certificates</Text>
-          <Text style={[s.headerSub, { color: T.textSub }]}>{counts.all} issued</Text>
-        </View>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 14,
+          paddingTop: 10,
+          paddingBottom: 12,
+          gap: 10,
+          backgroundColor: G,
+        }}
+      >
         <TouchableOpacity
-          style={[s.backBtn, { backgroundColor: T.card2 }]}
-          onPress={() => loadCerts()}
+          onPress={() => navigation.goBack()}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: 'rgba(255,255,255,0.15)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          <RefreshCw size={16} color={T.textSub} />
+          <ArrowLeft size={20} color="#fff" />
         </TouchableOpacity>
-      </View>
-
-      {/* Filter tabs */}
-      <View style={[s.tabs, { backgroundColor: T.card, borderBottomColor: T.border }]}>
-        {(['all', 'birth', 'death'] as FilterTab[]).map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[s.tab, tab === t && { borderBottomWidth: 2, borderBottomColor: T.primary }]}
-            onPress={() => setTab(t)}
-          >
-            <Text style={[s.tabText, { color: tab === t ? T.primary : T.textSub }]}>
-              {t === 'all'
-                ? `All (${counts.all})`
-                : t === 'birth'
-                  ? `Births (${counts.birth})`
-                  : `Deaths (${counts.death})`}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={T.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '900', color: '#fff' }}>Issue Certificate</Text>
+          <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 1 }}>
+            Find a citizen by Birth ID or NIN to download their certificate
+          </Text>
         </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(i) => i.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ padding: 12, paddingBottom: 40, gap: 10 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true)
-                loadCerts(true)
-              }}
-              tintColor={T.primary}
-            />
-          }
-          ListEmptyComponent={
-            <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
-              <FileText size={40} color={T.textDim} />
-              <Text style={{ color: T.textSub, fontSize: 14, fontWeight: '700' }}>
-                {tab === 'death' ? 'No death certificates yet' : tab === 'birth' ? 'No birth certificates yet' : 'No certificates yet'}
-              </Text>
-              <Text style={{ color: T.textDim, fontSize: 12, textAlign: 'center' }}>
-                Complete a birth or death registration to see certificates here.
-              </Text>
-            </View>
-          }
-        />
-      )}
+      </View>
 
-      <DetailModal />
+      <KeyboardSafeView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAwareScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: 60,
+            width: '100%',
+            maxWidth: contentMaxWidth,
+            alignSelf: 'center',
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
+            Citizen Birth ID (BID) or NIN *
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              style={{
+                flex: 1,
+                backgroundColor: T.card2,
+                borderWidth: 1,
+                borderColor: error ? T.danger : T.border,
+                borderRadius: 10,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                color: T.text,
+                fontSize: 14,
+                letterSpacing: 0.5,
+              }}
+              value={idText}
+              onChangeText={(t) => {
+                setIdText(t)
+                setError('')
+              }}
+              placeholder="BID-XXXXXXXXXX or 20-digit NIN"
+              placeholderTextColor={T.textDim}
+              autoCapitalize="characters"
+              returnKeyType="search"
+              onSubmitEditing={handleSearch}
+            />
+            <TouchableOpacity
+              onPress={handleSearch}
+              disabled={searching || !idText.trim()}
+              style={{
+                borderRadius: 10,
+                paddingHorizontal: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 76,
+                backgroundColor: idText.trim() ? G : T.card2,
+                opacity: searching ? 0.6 : 1,
+              }}
+            >
+              {searching ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Search size={18} color={idText.trim() ? '#fff' : T.textDim} />
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAwareScrollView>
+      </KeyboardSafeView>
+
+      {/* ── Result: ONE scrollable card with the certificate button + OK ── */}
+      <Modal
+        visible={!!profile && cardOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={dismissCard}
+      >
+        <View style={cs.backdrop}>
+          <View style={[cs.card, { backgroundColor: T.card, borderColor: T.border }]}>
+            {profile && (
+              <>
+                <View style={cs.head}>
+                  <View style={[cs.avatar, { backgroundColor: `${G}25` }]}>
+                    <User size={26} color={G} />
+                  </View>
+                  <Text style={[cs.name, { color: T.text }]}>{fullName}</Text>
+                  <View style={{ marginTop: 4 }}>
+                    <BidCopy bid={profile.birthId} size={12} />
+                  </View>
+                  <View
+                    style={[
+                      cs.badge,
+                      { backgroundColor: isAlive ? `${TZ.green}20` : '#dc262620' },
+                    ]}
+                  >
+                    {isAlive ? (
+                      <Heart size={12} color={TZ.green} />
+                    ) : (
+                      <HeartCrack size={12} color="#dc2626" />
+                    )}
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: isAlive ? TZ.green : '#dc2626' }}>
+                      {titleCase(profile.vitalStatus)}
+                    </Text>
+                  </View>
+                </View>
+
+                <ScrollView
+                  style={{ flexShrink: 1, alignSelf: 'stretch' }}
+                  contentContainerStyle={{ paddingBottom: 4 }}
+                  showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                >
+                  <Section title="IDENTITY" />
+                  <Row label="Full name" value={fullName || '—'} />
+                  <Row label="Gender" value={titleCase(profile.gender)} />
+                  <Row
+                    label="Date of birth"
+                    value={`${fmtDate(profile.dateOfBirth)} (Age ${profile.age ?? '—'})`}
+                  />
+                  {isDeceased && !!profile.dateOfDeath && (
+                    <Row label="Date of death" value={fmtDate(profile.dateOfDeath)} />
+                  )}
+                  <Row label="Marital status" value={titleCase(profile.maritalStatus)} />
+                  <Row label="Education" value={titleCase(profile.educationLevel)} />
+                  <Row label="NIN" value={profile.nationalId || 'Not issued'} />
+
+                  <Section title="LOCATION" />
+                  <Row label="Region" value={profile.region || '—'} />
+                  <Row label="District" value={profile.district || '—'} />
+                  <Row label="Ward" value={profile.ward || '—'} />
+                  <Row label="Village / Street" value={profile.village || '—'} />
+
+                  <Section title="REGISTRATION" />
+                  <Row label="Registered on" value={fmtDate(profile.registeredAt)} />
+                  <Row label="Record" value={recordLabel} />
+
+                  {canDownload ? (
+                    <TouchableOpacity
+                      onPress={handleDownload}
+                      disabled={busy}
+                      style={[cs.certBtn, { backgroundColor: certColor, opacity: busy ? 0.7 : 1 }]}
+                    >
+                      {busy ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Download size={15} color="#fff" />
+                      )}
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
+                        {busy
+                          ? 'Generating PDF…'
+                          : isDeceased
+                            ? 'Download Death Certificate'
+                            : 'Download Birth Certificate'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={{ marginTop: 12, fontSize: 11, textAlign: 'center', color: T.textSub }}>
+                      {isDeceased
+                        ? 'No death record on file for this citizen.'
+                        : 'No birth record on file for this citizen.'}
+                    </Text>
+                  )}
+                </ScrollView>
+
+                <TouchableOpacity style={[cs.ok, { backgroundColor: T.primary }]} onPress={dismissCard}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>OK</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
 
-const s = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: { fontSize: 15, fontWeight: '800' },
-  headerSub: { fontSize: 11, marginTop: 2 },
-  tabs: { flexDirection: 'row', borderBottomWidth: 1 },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 11 },
-  tabText: { fontSize: 12, fontWeight: '700' },
-  card: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  typeIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardName: { fontSize: 13, fontWeight: '700' },
-  cardCert: { fontSize: 12, fontWeight: '800', marginTop: 2, letterSpacing: 0.5 },
-  cardDate: { fontSize: 10 },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  tagText: { fontSize: 9, fontWeight: '700' },
-  cardActions: { flexDirection: 'row', borderTopWidth: 1, marginTop: 10 },
-  cardBtn: {
+const cs = StyleSheet.create({
+  backdrop: {
     flex: 1,
-    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-  },
-  cardBtnText: { fontSize: 12, fontWeight: '700' },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     padding: 20,
-    paddingBottom: 36,
-    maxHeight: '80%',
   },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#ccc',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  sheetTypeIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetTitle: { fontSize: 14, fontWeight: '800' },
-  sheetCertNo: { fontSize: 12, fontWeight: '700', marginTop: 2 },
-  sheetClose: { padding: 8 },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  detailKey: { fontSize: 12, width: '40%' },
-  detailVal: { fontSize: 12, fontWeight: '600', flex: 1, textAlign: 'right' },
-  modalBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '88%',
+    borderRadius: 20,
     borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 13,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
   },
-  modalBtnText: { fontSize: 13, fontWeight: '800' },
+  head: { alignItems: 'center', marginBottom: 6 },
+  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  name: { fontSize: 17, fontWeight: '800', textAlign: 'center', marginTop: 10 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  section: { fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 14, marginBottom: 4 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 6 },
+  rowLabel: { fontSize: 12, flexShrink: 0 },
+  rowValue: { fontSize: 12, fontWeight: '700', flex: 1, textAlign: 'right' },
+  certBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  ok: {
+    marginTop: 14,
+    minHeight: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })

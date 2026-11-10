@@ -22,7 +22,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native'
-import { Alert } from '../../components/AppDialog'
+import { Alert, showDialog } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { isValidId, ID_HELP } from '../../services/identityLookup'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -77,7 +77,18 @@ export default function TrackMigrationScreen({ navigation }: Props) {
     setCitizen(null)
     try {
       const json = await apiGet(`/village/citizen-lookup?q=${encodeURIComponent(term)}`)
-      if (json.success && json.data) {
+      if (json.success && json.data && String(json.data.vitalStatus ?? '').toLowerCase() === 'deceased') {
+        // PATCH-C-2026-11: a deceased citizen cannot be migrated - warn, clear the field, let the officer retype
+        setCitizen(null)
+        setQuery('')
+        showDialog({
+          title: 'Citizen is deceased',
+          message:
+            'This citizen is recorded as deceased. A citizen must be alive to register a migration. Check the Birth ID / NIN and try again.',
+          kind: 'warning',
+          buttons: [{ text: 'OK' }],
+        })
+      } else if (json.success && json.data) {
         setCitizen({
           id: json.data.id,
           birthId: json.data.birthId,

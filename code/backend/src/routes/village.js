@@ -22,7 +22,7 @@ const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
-const { lookupResidentInVillage, materializeCitizenFromBirth, resolveDeceasedRef, resolveDeceasedDisplay, getScope, birthScopeWhere } = require('../lib/identityLookup')
+const { lookupResidentInVillage, materializeCitizenFromBirth, resolveDeceasedRef, resolveDeceasedDisplay, getScope, birthScopeWhere, findDeathRecord } = require('../lib/identityLookup')
 const { buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 
 const router = Router()
@@ -197,11 +197,16 @@ router.post('/death', async (req, res) => {
         dateOfDeath:      parseDDMMYYYY(dateOfDeath),
         locationType:     locMap[locationType]  ?? 'outside',
         category:         catMap[category]      ?? 'adult',
-        informantName:    informantName ?? undefined,
+        informantName:    (typeof informantName === 'string' && informantName.trim()) ? informantName.trim() : undefined, // optional
         villageOfficerId: officerId,   // village officer FK only — no hospitalOfficerId
       },
       select:{ id:true, deathCertNo:true },
     })
+    // PATCH-C-2026-11: the citizen is now deceased (migration etc. must see this)
+    if (deceased.citizenId) {
+      await prisma.citizen.update({ where:{ id: deceased.citizenId }, data:{ vitalStatus:'deceased' } })
+        .catch((e) => console.warn('[village/death] vitalStatus', e && e.message))
+    }
     return res.json({ success:true, data:{ serverId:death.id, deathCertNo:death.deathCertNo } })
   } catch (err) {
     if (err.code === 'P2002') return res.json({ success:true, duplicate:true })
@@ -298,6 +303,19 @@ router.post('/migration', async (req, res) => {
 
     if (!citizen) {
       return res.status(422).json({ success: false, message: 'Citizen not found in your village. Look them up first using their Birth ID (or NIN).' })
+    }
+
+    // PATCH-C-2026-11: only a LIVING citizen can be migrated.
+    {
+      const row = await prisma.citizen.findUnique({
+        where: { id: citizen.id },
+        select: { vitalStatus: true, birthId: true, nationalId: true },
+      })
+      const dead = row && (row.vitalStatus === 'deceased'
+        || await findDeathRecord({ citizenId: citizen.id, birthId: row.birthId, nationalId: row.nationalId }))
+      if (dead) {
+        return res.status(409).json({ success: false, code: 'CITIZEN_DECEASED', message: 'This citizen is deceased. A citizen must be alive to register a migration.' })
+      }
     }
 
     const toVid = Number(toVillageId)
@@ -548,6 +566,18 @@ router.post('/migration/confirm', async (req, res) => {
       return res.status(404).json({ success: false, message: 'No matching migration request found for that Birth ID and token. Please check both are correct.' })
     }
 
+    // PATCH-C-2026-11: a citizen who has died cannot be confirmed into a village.
+    {
+      const row = await prisma.citizen.findUnique({
+        where: { id: migration.citizenId },
+        select: { vitalStatus: true, birthId: true, nationalId: true },
+      })
+      if (row && (row.vitalStatus === 'deceased'
+        || await findDeathRecord({ citizenId: migration.citizenId, birthId: row.birthId, nationalId: row.nationalId }))) {
+        return res.status(409).json({ success: false, code: 'CITIZEN_DECEASED', message: 'This citizen is deceased. A citizen must be alive to register a migration.' })
+      }
+    }
+
     if (migration.toVillageId !== officer.villageId) {
       return res.status(403).json({ success: false, message: 'This migration request is not addressed to your village.' })
     }
@@ -656,62 +686,67 @@ router.get('/citizen-lookup', async (req, res) => {
 })
 
 router.get('/records', async (req, res) => {
-  const { id:officerId } = req.user
+  // PATCH-C-2026-11: the village "View Records" screen lists this officer's DEATH and
+  // MIGRATION records only. `ts` is a real timestamp so the app can sort newest first.
+  const { id: officerId } = req.user
   try {
     const out = []
 
-    // Deaths
     const deaths = await prisma.death.findMany({
-      where:{ villageOfficerId:officerId },
-      orderBy:{ registeredAt:'desc' }, take:30,
-      select:{ id:true, deathCertNo:true, citizenId:true, nationalId:true, causeOfDeath:true, registeredAt:true },
-    }).catch(()=>[])
-    const deathInfo = await resolveDeceasedDisplay(deaths).catch(()=>new Map())
+      where: { villageOfficerId: officerId },
+      orderBy: { registeredAt: 'desc' }, take: 100,
+      select: { id: true, deathCertNo: true, citizenId: true, nationalId: true, causeOfDeath: true, registeredAt: true },
+    }).catch(() => [])
+    const deathInfo = await resolveDeceasedDisplay(deaths).catch(() => new Map())
     for (const d of deaths) {
-      out.push({ id:`d-${d.id}`, type:'deaths', icon:'✝', color:'#dc2626',
+      const when = new Date(d.registeredAt ?? new Date())
+      out.push({
+        id: `d-${d.id}`, recordId: d.id, type: 'deaths', color: '#dc2626',
         birthId: deathInfo.get(d.id)?.birthId ?? null,
-        label: deathInfo.get(d.id)?.name || d.nationalId || 'Unknown', sub:`Cert: ${d.deathCertNo}`,
-        date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
+        label: deathInfo.get(d.id)?.name || d.nationalId || 'Unknown',
+        certNo: d.deathCertNo, cause: d.causeOfDeath || '',
+        sub: `Cert: ${d.deathCertNo}`,
+        date: when.toLocaleDateString('en-TZ'), ts: when.toISOString(),
+      })
     }
 
-    // Citizens
-    const citizens = await prisma.citizen.findMany({
-      where:{ registeredById:officerId },
-      orderBy:{ registeredAt:'desc' }, take:30,
-      select:{ id:true, birthId:true, firstName:true, surname:true, nationalId:true, registeredAt:true },
-    }).catch(()=>[])
-    for (const c of citizens) {
-      out.push({ id:`c-${c.id}`, type:'citizens', icon:'👤', color:'#0891b2',
-        birthId: c.birthId ?? null,
-        label:`${c.firstName} ${c.surname}`, sub:c.nationalId||'—',
-        date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
+    const migrations = await prisma.migration.findMany({
+      where: { OR: [{ sourceOfficerId: officerId }, { targetOfficerId: officerId }] },
+      orderBy: { requestDate: 'desc' }, take: 100,
+      select: {
+        id: true, status: true, reason: true, requestDate: true, confirmedDate: true, expiryDate: true,
+        migrationToken: true, sourceOfficerId: true,
+        citizen: { select: { firstName: true, middleName: true, surname: true, birthId: true } },
+        fromVillage: { select: { name: true } },
+        toVillage: { select: { name: true } },
+      },
+    }).catch(() => [])
+    const now = new Date()
+    for (const m of migrations) {
+      const status = (m.status === 'pending' && m.expiryDate && new Date(m.expiryDate) < now) ? 'expired' : m.status
+      const when = new Date(m.confirmedDate ?? m.requestDate ?? now)
+      const name = [m.citizen?.firstName, m.citizen?.middleName, m.citizen?.surname].filter(Boolean).join(' ')
+      out.push({
+        id: `m-${m.id}`, recordId: m.id, type: 'migrations', color: '#7c3aed',
+        birthId: m.citizen?.birthId ?? null,
+        label: name || 'Unknown',
+        sub: `${m.fromVillage?.name ?? '—'} → ${m.toVillage?.name ?? '—'}`,
+        status,
+        direction: m.sourceOfficerId === officerId ? 'outgoing' : 'incoming',
+        fromVillage: m.fromVillage?.name ?? '—',
+        toVillage: m.toVillage?.name ?? '—',
+        reason: m.reason || '',
+        migrationToken: m.migrationToken ?? null,
+        requestDate: m.requestDate, confirmedDate: m.confirmedDate, expiryDate: m.expiryDate,
+        date: when.toLocaleDateString('en-TZ'), ts: when.toISOString(),
+      })
     }
 
-    // PATCH-VILLAGE-SCOPE-2026: newborns that only have a hospital birth record
-    try {
-      const vo = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
-      const scope = vo?.villageId ? await getScope(vo.villageId) : null
-      if (scope) {
-        const births = await prisma.birth.findMany({
-          where:{ childCitizenId:null, ...birthScopeWhere(scope) },
-          orderBy:{ registeredAt:'desc' }, take:30,
-          select:{ id:true, birthId:true, childFirstName:true, childSurname:true, registeredAt:true },
-        })
-        for (const b of births) {
-          out.push({ id:`b-${b.id}`, type:'citizens', icon:'👤', color:'#0891b2',
-            birthId: b.birthId ?? null,
-            label:`${b.childFirstName} ${b.childSurname}`, sub:'Birth record',
-            date: new Date(b.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
-        }
-      }
-    } catch (e) { console.warn('[village/records] births in area', e && e.message) }
-
-    out.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-    return res.json({ success:true, data:out })
+    out.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    return res.json({ success: true, data: out })
   } catch (err) {
     console.error('[village/records]', err)
-    return res.status(500).json({ success:false, message:'Internal server error' })
+    return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 })
 

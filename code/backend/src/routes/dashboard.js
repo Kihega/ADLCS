@@ -380,7 +380,7 @@ router.get('/records', async (req, res) => {
           birthId: deathInfoH.get(d.id)?.birthId ?? null,
           name: deathInfoH.get(d.id)?.name || d.nationalId || 'Unknown',
           date: new Date(d.registeredAt ?? new Date()).toLocaleDateString('en-TZ'),
-          ritaSynced: d.ritaSynced ?? false, certIssued: !!d.certPdfUrl })
+          ritaSynced: d.ritaSynced ?? false, certIssued: !!d.certPdfUrl, registeredAt: d.registeredAt })
       }
     }
     results.sort((a, b) => new Date(b.registeredAt || 0) - new Date(a.registeredAt || 0))
@@ -471,6 +471,11 @@ router.post('/death', async (req, res) => {
       },
       select: { id: true, deathCertNo: true },
     })
+    // PATCH-C-2026-11: the citizen is now deceased
+    if (deceased.citizenId) {
+      await prisma.citizen.update({ where: { id: deceased.citizenId }, data: { vitalStatus: 'deceased' } })
+        .catch((e) => console.warn('[death] vitalStatus', e && e.message))
+    }
     return res.json({ success: true, data: { deathCertNo: death.deathCertNo } })
   } catch (err) {
     console.error('[death]', err)
@@ -545,7 +550,9 @@ router.get('/certificate/data', async (req, res) => {
           OR: [{ originVillageId: vo.villageId }, { child: { currentVillageId: vo.villageId } }],
         }
       } else {
-        where = { ...(bid ? { birthId: bid } : { id: recordId }), officerId }
+        // PATCH-C-2026-11: a hospital officer who looked a citizen up by Birth ID may issue
+        // that citizen's birth certificate; by record id only his own registrations.
+        where = bid ? { birthId: bid } : { id: recordId, officerId }
       }
       const b = await prisma.birth.findFirst({
         where,
@@ -585,9 +592,14 @@ router.get('/certificate/data', async (req, res) => {
       })
     }
     if (type === 'death') {
-      if (!recordId) return res.status(400).json({ success: false, message: 'Record id required' })
+      if (!recordId && !bid) return res.status(400).json({ success: false, message: 'Record id required' })
+      // PATCH-C-2026-11: hospital officers can issue a death certificate for any recorded death
+      // they looked up; village officers still only their own records.
+      const dthWhere = role === 'hospital_officer'
+        ? (recordId ? { id: recordId } : { nationalId: bid })
+        : { id: recordId, OR: [{ hospitalOfficerId: officerId }, { villageOfficerId: officerId }] }
       const dth = await prisma.death.findFirst({
-        where: { id: recordId, OR: [{ hospitalOfficerId: officerId }, { villageOfficerId: officerId }] },
+        where: dthWhere,
         include: {
           facility: { select: { facilityName: true } },
           hospitalOfficer: { select: { fullName: true } },
@@ -728,7 +740,29 @@ router.get('/citizen-lookup', async (req, res) => {
   if (!q) return res.status(400).json({ success: false, message: 'Birth ID or NIN required' })
   try {
     const r = await lookupIdentity(q)
-    if (r.found) return res.json({ success: true, data: r.person })
+    if (r.found) {
+      // PATCH-C-2026-11: enrich the card (marital status, education, registration, records on file)
+      const p = r.person
+      const extra = {}
+      try {
+        if (p.source === 'birth') { extra.maritalStatus = 'single'; extra.educationLevel = 'none' }
+        if (p.source === 'citizen' && p.id) {
+          const c = await prisma.citizen.findUnique({
+            where: { id: p.id },
+            select: { maritalStatus: true, educationLevel: true, registeredAt: true },
+          })
+          if (c) Object.assign(extra, c)
+        }
+        if (p.birthId) {
+          const b = await prisma.birth.findFirst({ where: { birthId: p.birthId }, select: { registeredAt: true } })
+          extra.hasBirthRecord = !!b
+          if (b && !extra.registeredAt) extra.registeredAt = b.registeredAt
+        }
+      } catch (e) {
+        console.warn('[citizen-lookup] enrich', e && e.message)
+      }
+      return res.json({ success: true, data: { ...p, ...extra } })
+    }
     return res.json({
       success: false,
       idType: r.idType ?? null,
