@@ -41,13 +41,15 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { useResponsive } from '../../utils/responsive'
 import { apiGet } from '../../services/syncService'
+import { isValidId, ID_HELP } from '../../services/identityLookup'
 
 type VStack = { VillageHome: undefined; CitizenProfile: undefined }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'CitizenProfile'> }
 
 interface CitizenProfile {
-  id: string
-  nationalId: string
+  id: string | null
+  birthId?: string | null
+  nationalId: string | null
   firstName: string
   middleName: string | null
   surname: string
@@ -102,14 +104,22 @@ export default function CitizenProfileScreen({ navigation }: Props) {
     // a NIN because they already had a BID, so BID alone is enough.
     const value = nin.trim()
     if (!value) {
-      setError('Enter a citizen Birth ID to search.')
+      setError('Enter a citizen Birth ID (BID) or NIN to search.')
+      return
+    }
+    // PATCH-V2-2026-11: BID (main way) or NIN. If the NIDA link is not configured
+    // the backend answers "NIDA NOT LINKED YET, USE BIRTH ID INSTEAD", which is
+    // shown in the alert exactly like in birth registration / death.
+    if (!isValidId(value)) {
+      setProfile(null)
+      setError(ID_HELP)
       return
     }
     setSearching(true)
     setError('')
     setProfile(null)
     try {
-      const json = await apiGet(`/village/citizen-lookup?birthId=${encodeURIComponent(value)}`)
+      const json = await apiGet(`/village/citizen-lookup?q=${encodeURIComponent(value.toUpperCase())}`)
       if (json.success && json.data) {
         setProfile(json.data)
         setExpanded(true)
@@ -175,7 +185,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={{ fontSize: 12, fontWeight: '600', color: T.textSub, marginBottom: 6 }}>
-            Citizen Birth ID (BID) *
+            Citizen Birth ID (BID) or NIN *
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
@@ -196,7 +206,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                 setNin(t)
                 setError('')
               }}
-              placeholder="BID-XXXXXXXXXX"
+              placeholder="BID-XXXXXXXXXX or 20-digit NIN"
               placeholderTextColor={T.textDim}
               autoCapitalize="characters"
               returnKeyType="search"
@@ -267,7 +277,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                       .join(' ')}
                   </Text>
                   <Text style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>
-                    {profile.nationalId}
+                    {[profile.birthId, profile.nationalId].filter(Boolean).join(' · ')}
                   </Text>
                 </View>
                 <View

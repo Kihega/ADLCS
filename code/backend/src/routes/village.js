@@ -22,7 +22,7 @@ const { Router } = require('express')
 const { prisma }  = require('../lib/prisma')
 const { requireAuth } = require('../middleware/auth')
 const { classifyIdentifier } = require('../lib/parentIdentifier')
-const { lookupResidentInVillage, resolveDeceasedRef } = require('../lib/identityLookup')
+const { lookupResidentInVillage, materializeCitizenFromBirth, resolveDeceasedRef } = require('../lib/identityLookup')
 const { buildGeo, VILLAGE_GEO_SELECT } = require('../lib/personLookup')
 
 const router = Router()
@@ -162,6 +162,19 @@ router.post('/death', async (req, res) => {
     if (existing) return res.json({ success:true, duplicate:true, serverId:existing.id })
 
     // PATCH-STRICT-ID-2026: the deceased must resolve to a real person (BID / NIN).
+    // PATCH-V2-2026-11: a village officer may only record a death for someone
+    // registered in HIS OWN village/street (BID or NIN is checked against it).
+    const officerRow = await prisma.villageOfficer.findUnique({ where:{ id:officerId }, select:{ villageId:true } })
+    if (!officerRow?.villageId) {
+      return res.status(422).json({ success:false, message:'Your officer account is not assigned to a village yet.' })
+    }
+    const scope = await lookupResidentInVillage(nationalId, officerRow.villageId, { id:true, vitalStatus:true })
+    if (!scope.found) {
+      return res.status(scope.code === 'INVALID_ID' ? 400 : 422).json({ success:false, code:scope.code, message:scope.message })
+    }
+    if (String(scope.citizen.vitalStatus || '').toLowerCase() === 'deceased') {
+      return res.status(409).json({ success:false, message:'This person is already recorded as deceased.' })
+    }
     const deceased = await resolveDeceasedRef(nationalId, { category })
     if (!deceased.ok) return res.status(deceased.status || 422).json({ success:false, message: deceased.message })
 
@@ -264,13 +277,20 @@ router.post('/migration', async (req, res) => {
     // are actually responsible for.
     // PATCH-BID-LOOKUP-2026: birthId is preferred; nationalId kept only as a
     // legacy fallback for any older client still sending it.
-    const citizen = citizenId
+    let citizen = citizenId
       ? await prisma.citizen.findFirst({ where: { id: citizenId, currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
       : birthId
         ? await prisma.citizen.findFirst({ where: { birthId: String(birthId).trim(), currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
         : nationalId
           ? await prisma.citizen.findFirst({ where: { nationalId: String(nationalId).trim(), currentVillageId: officer.villageId }, select: { id: true, currentVillageId: true } })
           : null
+
+    // PATCH-V2-2026-11: a child registered at the hospital has no Citizen row yet.
+    // Create it from the birth record - only if the child's origin village is
+    // THIS officer's village.
+    if (!citizen && !citizenId && birthId) {
+      citizen = await materializeCitizenFromBirth(String(birthId).trim().toUpperCase(), officer.villageId)
+    }
 
     if (!citizen) {
       return res.status(422).json({ success: false, message: 'Citizen not found in your village. Look them up first using their Birth ID (or NIN).' })
@@ -619,6 +639,7 @@ router.get('/citizen-lookup', async (req, res) => {
         ...buildGeo(citizen.currentVillage),
         fullName: [citizen.firstName, citizen.middleName, citizen.surname].filter(Boolean).join(' '),
         ninCertificateIssued: !!citizen.idCardIssued,
+        source: r.source ?? 'citizen',
         villageName: officer.village?.name ?? null,
       },
     })

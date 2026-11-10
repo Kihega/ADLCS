@@ -55,7 +55,11 @@ import {
   updateBirthCertPath,
   LocalBirth,
 } from '../../services/localDb'
-import { generateBirthPdf, sharePdf } from '../../services/certificateService'
+import {
+  generateBirthPdf,
+  downloadBirthCertificate,
+  describeError,
+} from '../../services/certificateService'
 import { triggerSync, saveAndSyncBirth } from '../../services/syncService'
 import { resolveBase } from '../../services/apiResolver'
 import { useTheme, TZ } from '../../context/ThemeContext'
@@ -928,17 +932,17 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   ])
 
   const handleDownload = async () => {
+    if (!savedBirth) return
     setDownloading(true)
     try {
-      let path = _pdfPath
-      if (!path && savedBirth) {
-        path = await generateBirthPdf(savedBirth)
-        await updateBirthCertPath(savedBirth.id, path)
+      const path = await downloadBirthCertificate(savedBirth, _pdfPath)
+      if (path && path !== _pdfPath) {
         setPdfPath(path)
+        await updateBirthCertPath(savedBirth.id, path)
       }
-      if (path) await sharePdf(path)
     } catch (e) {
-      Alert.alert('Error', 'Could not generate PDF. Please try again.')
+      console.warn('[certificate] download failed', e)
+      Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
     }
     setDownloading(false)
   }

@@ -209,14 +209,14 @@ router.get('/activity', async (req, res) => {
         where:   { officerId: id, registeredAt: { gte: startOfDay(), lte: endOfDay() } },
         orderBy: { registeredAt: 'desc' },
         take:    limit,
-        select:  { id: true, childFirstName: true, childSurname: true, gender: true, registeredAt: true },
+        select:  { id: true, birthId: true, childFirstName: true, childSurname: true, gender: true, registeredAt: true },
       })
       for (const b of births) {
         items.push({
           id:           `birth-${b.id}`,
-          icon:         '👶',
-          label:        'Birth registered',
-          name:         `${b.childFirstName} ${b.childSurname} — ${b.gender === 'male' ? 'Baby Boy' : 'Baby Girl'}`,
+          icon:         '👤',
+          label:        'New citizen registered',
+          name:         [`${b.childFirstName} ${b.childSurname}`.trim(), b.birthId].filter(Boolean).join(' · '),
           time:         new Date(b.registeredAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
           registeredAt: b.registeredAt,
           color:        '#1eb53a',

@@ -424,7 +424,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
       if (token && isOnline()) {
         const base = await resolveBase()
         const r = await fetch(
-          `${base}/officer/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
+          `${base}/village/citizen-lookup?q=${encodeURIComponent(lookupId.trim())}`,
           {
             headers: { Authorization: `Bearer ${token}` },
             signal: (() => {
@@ -486,7 +486,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
       }
       await saveDeath({
         certNo: cert,
-        nationalId: citizen?.nationalId ?? citizen?.birthId ?? lookupId.trim(),
+        nationalId: citizen?.birthId ?? citizen?.nationalId ?? lookupId.trim(),
         deceasedName:
           (citizen?.fullName ?? citizen?.firstName)
             ? `${citizen.firstName} ${citizen.surname ?? ''}`.trim()
@@ -504,7 +504,7 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
         try {
           await apiPost('/village/death', {
             deceasedName: citizen?.fullName ?? lookupId.trim(),
-            nationalId: citizen?.nationalId ?? citizen?.birthId ?? lookupId.trim(),
+            nationalId: citizen?.birthId ?? citizen?.nationalId ?? lookupId.trim(),
             causeOfDeath: cause.trim(),
             dateOfDeath: dod.trim(),
             category: category,
