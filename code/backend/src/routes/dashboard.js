@@ -297,6 +297,7 @@ router.get('/records', async (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit) || 20, 50)
   const q      = req.query.q?.toString().trim() || ''
   const skip   = (page - 1) * limit
+  const unissuedWhere = req.query.unissued === '1' ? { certPdfUrl: null } : {} // PATCH-PENDING-2026
 
   // Village officers use the dedicated village/records endpoint
   if (role === 'village_officer') {
@@ -342,6 +343,7 @@ router.get('/records', async (req, res) => {
       const births = await prisma.birth.findMany({
         where: {
           officerId: id,
+          ...unissuedWhere,
           ...(q ? { OR: [
             { birthCertNo:    { contains: q, mode: 'insensitive' } },
             { childFirstName: { contains: q, mode: 'insensitive' } },
@@ -363,6 +365,7 @@ router.get('/records', async (req, res) => {
       const deaths = await prisma.death.findMany({
         where: {
           hospitalOfficerId: id,
+          ...unissuedWhere,
           ...(q ? { OR: [
             { deathCertNo: { contains: q, mode: 'insensitive' } },
             { nationalId:  { contains: q, mode: 'insensitive' } },
@@ -385,8 +388,8 @@ router.get('/records', async (req, res) => {
     // Real totals per kind, so the Certificates tabs never show a count that
     // depends on which tab is currently loaded.
     const [birthCount, deathCount] = await Promise.all([
-      prisma.birth.count({ where: { officerId: id } }),
-      prisma.death.count({ where: { hospitalOfficerId: id } }),
+      prisma.birth.count({ where: { officerId: id, ...unissuedWhere } }),
+      prisma.death.count({ where: { hospitalOfficerId: id, ...unissuedWhere } }),
     ])
     return res.json({
       success: true, data: pageRows, total: results.length, page,
@@ -402,25 +405,37 @@ router.get('/records', async (req, res) => {
 router.get('/records/pending', async (req, res) => {
   const { id } = req.user
   try {
-    const births = await prisma.birth.findMany({
-      where: { officerId: id, OR: [{ certPdfUrl: null }, { ritaSynced: false }] },
-      orderBy: { registeredAt: 'desc' }, take: 50,
-      select: { id: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, certPdfUrl: true, ritaSynced: true },
-    })
-    return res.json({
-      success: true,
-      data: births.map(b => ({
-        id:      `birth-${b.id}`,
-        type:    'birth',
-        certNo:  b.birthCertNo,
-        name:    `${b.childFirstName} ${b.childSurname}`,
-        date:    new Date(b.registeredAt).toLocaleDateString('en-TZ'),
-        reasons: [
-          ...(!b.certPdfUrl  ? ['no_certificate'] : []),
-          ...(!b.ritaSynced  ? ['rita_unsynced']  : []),
-        ],
+    // PATCH-PENDING-2026: a case is pending only until its certificate has been issued.
+    const [births, deaths] = await Promise.all([
+      prisma.birth.findMany({
+        where: { officerId: id, certPdfUrl: null },
+        orderBy: { registeredAt: 'desc' }, take: 50,
+        select: { id: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, ritaSynced: true },
+      }),
+      prisma.death.findMany({
+        where: { hospitalOfficerId: id, certPdfUrl: null },
+        orderBy: { registeredAt: 'desc' }, take: 50,
+        select: { id: true, deathCertNo: true, citizenId: true, nationalId: true, registeredAt: true, ritaSynced: true },
+      }),
+    ])
+    const deathInfo = await resolveDeceasedDisplay(deaths).catch(() => new Map())
+    const rows = [
+      ...births.map((b) => ({
+        id: `birth-${b.id}`, type: 'birth', certNo: b.birthCertNo,
+        name: `${b.childFirstName} ${b.childSurname}`,
+        date: new Date(b.registeredAt).toLocaleDateString('en-TZ'),
+        registeredAt: b.registeredAt,
+        reasons: ['no_certificate', ...(!b.ritaSynced ? ['rita_unsynced'] : [])],
       })),
-    })
+      ...deaths.map((d) => ({
+        id: `death-${d.id}`, type: 'death', certNo: d.deathCertNo,
+        name: deathInfo.get(d.id)?.name || d.nationalId || 'Unknown',
+        date: new Date(d.registeredAt).toLocaleDateString('en-TZ'),
+        registeredAt: d.registeredAt,
+        reasons: ['no_certificate', ...(!d.ritaSynced ? ['rita_unsynced'] : [])],
+      })),
+    ].sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime())
+    return res.json({ success: true, data: rows })
   } catch (err) {
     console.error('[pending]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })
@@ -612,18 +627,34 @@ router.get('/certificate/data', async (req, res) => {
 
 // ── POST /api/officer/certificate/issue ──────────────────────────────────────
 router.post('/certificate/issue', async (req, res) => {
-  const { type, recordId } = req.body
-  if (!type || !recordId) return res.status(400).json({ success: false, message: 'type and recordId required' })
+  // PATCH-PENDING-2026: marks a certificate as issued. The app sends the server id OR the
+  // certificate number (registration screens only know the number). Owner records only.
+  const { id: officerId } = req.user
+  const { type, recordId, certNo } = req.body
+  const rid = String(recordId || '').trim().replace(/^(birth|death|b|d)-/, '')
+  const cno = String(certNo || '').trim()
+  if (!type || (!rid && !cno)) return res.status(400).json({ success: false, message: 'type and recordId (or certNo) required' })
   try {
-    // BUGFIX-2: build the certificate URL from .env instead of a hardcoded
-    // domain, so it automatically follows the backend if it ever moves.
+    // BUGFIX-2: build the certificate URL from .env instead of a hardcoded domain.
     const publicBase = (process.env.PUBLIC_BACKEND_URL || '').replace(/\/$/, '')
-    if (!publicBase) {
-      console.warn('⚠️  PUBLIC_BACKEND_URL is not set in .env — certificate links will be relative paths only.')
+    let rec = null
+    if (type === 'birth') {
+      rec = await prisma.birth.findFirst({
+        where: { ...(rid ? { id: rid } : { birthCertNo: cno }), officerId },
+        select: { id: true },
+      })
+    } else if (type === 'death') {
+      rec = await prisma.death.findFirst({
+        where: { ...(rid ? { id: rid } : { deathCertNo: cno }), OR: [{ hospitalOfficerId: officerId }, { villageOfficerId: officerId }] },
+        select: { id: true },
+      })
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid type' })
     }
-    const pdfUrl = `${publicBase}/certificates/${type}/${recordId}.pdf`
-    if (type === 'birth')       await prisma.birth.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
-    else if (type === 'death')  await prisma.death.update({ where: { id: recordId }, data: { certPdfUrl: pdfUrl } })
+    if (!rec) return res.status(404).json({ success: false, message: 'Record not found' })
+    const pdfUrl = `${publicBase}/certificates/${type}/${rec.id}.pdf`
+    if (type === 'birth') await prisma.birth.update({ where: { id: rec.id }, data: { certPdfUrl: pdfUrl } })
+    else await prisma.death.update({ where: { id: rec.id }, data: { certPdfUrl: pdfUrl } })
     return res.json({ success: true, data: { pdfUrl } })
   } catch (err) {
     console.error('[cert-issue]', err)
