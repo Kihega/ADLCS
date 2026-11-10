@@ -316,14 +316,14 @@ router.get('/records', async (req, res) => {
             { childSurname:   { contains: q, mode: 'insensitive' } },
           ]} : {}),
         },
-        orderBy: { registeredAt: 'desc' }, take: limit, skip,
+        orderBy: { registeredAt: 'desc' }, take: type === 'all' ? skip + limit : limit, skip: type === 'all' ? 0 : skip,
         select: { id: true, birthCertNo: true, childFirstName: true, childSurname: true, registeredAt: true, ritaSynced: true, certPdfUrl: true },
       })
       for (const b of births) {
         results.push({ id: `birth-${b.id}`, type: 'birth', certNo: b.birthCertNo,
           name: `${b.childFirstName} ${b.childSurname}`,
           date: new Date(b.registeredAt).toLocaleDateString('en-TZ'),
-          ritaSynced: b.ritaSynced, certIssued: !!b.certPdfUrl })
+          ritaSynced: b.ritaSynced, certIssued: !!b.certPdfUrl, registeredAt: b.registeredAt })
       }
     }
     if (type === 'all' || type === 'death') {
@@ -345,7 +345,18 @@ router.get('/records', async (req, res) => {
           ritaSynced: d.ritaSynced ?? false, certIssued: !!d.certPdfUrl })
       }
     }
-    return res.json({ success: true, data: results.slice(0, limit), total: results.length, page })
+    results.sort((a, b) => new Date(b.registeredAt || 0) - new Date(a.registeredAt || 0))
+    const pageRows = type === 'all' ? results.slice(skip, skip + limit) : results.slice(0, limit)
+    // Real totals per kind, so the Certificates tabs never show a count that
+    // depends on which tab is currently loaded.
+    const [birthCount, deathCount] = await Promise.all([
+      prisma.birth.count({ where: { officerId: id } }),
+      prisma.death.count({ where: { hospitalOfficerId: id } }),
+    ])
+    return res.json({
+      success: true, data: pageRows, total: results.length, page,
+      counts: { all: birthCount + deathCount, birth: birthCount, death: deathCount },
+    })
   } catch (err) {
     console.error('[records]', err)
     return res.status(500).json({ success: false, message: 'Internal server error' })

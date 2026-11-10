@@ -16,10 +16,10 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Modal,
   ScrollView,
 } from 'react-native'
+import { Alert } from '../../components/AppDialog'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -60,6 +60,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
   const { theme: T } = useTheme()
   const [tab, setTab] = useState<FilterTab>('all')
   const [rows, setRows] = useState<CertRow[]>([])
+  const [counts, setCounts] = useState({ all: 0, birth: 0, death: 0 })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null) // cert ID being processed
@@ -70,7 +71,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
     if (!silent) setLoading(true)
     try {
       // Fetch all records directly from PostgreSQL via backend API
-      const json = await apiGet('/officer/records?type=all&limit=100')
+      const json = await apiGet(`/officer/records?type=${tab}&limit=100`)
       if (json.success && Array.isArray(json.data)) {
         const birthRows: CertRow[] = json.data
           .filter((r: any) => r.type === 'birth')
@@ -97,7 +98,16 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             raw: r as any,
           }))
         // API already returns in date-desc order
-        setRows([...birthRows, ...deathRows])
+        const order = new Map<string, number>((json.data as any[]).map((r, i) => [String(r.id), i]))
+      const merged = [...birthRows, ...deathRows].sort(
+        (a: any, b: any) => (order.get(String(a.id)) ?? 0) - (order.get(String(b.id)) ?? 0),
+      )
+      setRows(merged)
+      if (json.counts) {
+        setCounts({ all: json.counts.all ?? 0, birth: json.counts.birth ?? 0, death: json.counts.death ?? 0 })
+      } else if (tab === 'all') {
+        setCounts({ all: merged.length, birth: birthRows.length, death: deathRows.length })
+      }
       } else {
         setRows([])
       }
@@ -108,7 +118,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [tab])
 
   useEffect(() => {
     loadCerts()
@@ -357,7 +367,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={[s.headerTitle, { color: T.text }]}>Certificates</Text>
-          <Text style={[s.headerSub, { color: T.textSub }]}>{rows.length} issued</Text>
+          <Text style={[s.headerSub, { color: T.textSub }]}>{counts.all} issued</Text>
         </View>
         <TouchableOpacity
           style={[s.backBtn, { backgroundColor: T.card2 }]}
@@ -372,15 +382,15 @@ export default function IssueCertificateScreen({ navigation }: Props) {
         {(['all', 'birth', 'death'] as FilterTab[]).map((t) => (
           <TouchableOpacity
             key={t}
-            style={[tab === t && { borderBottomWidth: 2, borderBottomColor: T.primary }]}
+            style={[s.tab, tab === t && { borderBottomWidth: 2, borderBottomColor: T.primary }]}
             onPress={() => setTab(t)}
           >
             <Text style={[s.tabText, { color: tab === t ? T.primary : T.textSub }]}>
               {t === 'all'
-                ? `All (${rows.length})`
+                ? `All (${counts.all})`
                 : t === 'birth'
-                  ? `Births (${rows.filter((r) => r.type === 'birth').length})`
-                  : `Deaths (${rows.filter((r) => r.type === 'death').length})`}
+                  ? `Births (${counts.birth})`
+                  : `Deaths (${counts.death})`}
             </Text>
           </TouchableOpacity>
         ))}
@@ -411,7 +421,7 @@ export default function IssueCertificateScreen({ navigation }: Props) {
             <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
               <FileText size={40} color={T.textDim} />
               <Text style={{ color: T.textSub, fontSize: 14, fontWeight: '700' }}>
-                No certificates yet
+                {tab === 'death' ? 'No death certificates yet' : tab === 'birth' ? 'No birth certificates yet' : 'No certificates yet'}
               </Text>
               <Text style={{ color: T.textDim, fontSize: 12, textAlign: 'center' }}>
                 Complete a birth or death registration to see certificates here.

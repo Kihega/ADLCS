@@ -19,8 +19,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Eye, EyeOff, Lock, Mail, Shield, ChevronRight, RefreshCw,
-  MapPin, Smartphone, AlertCircle,
-} from 'lucide-react'
+  MapPin, Smartphone } from 'lucide-react'
+import AlertModal from '../components/AlertModal'
 
 import { useAuthStore }           from '../store/authStore'
 import { apiLogin, apiMfaVerify } from '../api/auth.api'
@@ -211,11 +211,7 @@ if (_adminType) {
                     </button>
                   </div>
                 </div>
-                {error && (
-                  <p className="text-red-400 text-[10px] flex items-center gap-1">
-                    <AlertCircle size={10} />{error}
-                  </p>
-                )}
+                {error && <AlertModal title="Sign-in problem" message={error} onClose={() => setError('')} />}
                 <button
                   onClick={handleLogin}
                   className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-[#00d4ff] to-[#0088bb] text-[#060f1e] flex items-center justify-center gap-2 hover:opacity-90 transition-all"
@@ -247,11 +243,7 @@ if (_adminType) {
                     className={`${inp} tracking-[0.6em] text-center text-lg font-mono`}
                   />
                 </div>
-                {error && (
-                  <p className="text-red-400 text-[10px] flex items-center gap-1">
-                    <AlertCircle size={10} />{error}
-                  </p>
-                )}
+                {error && <AlertModal title="Sign-in problem" message={error} onClose={() => setError('')} />}
                 <button
                   onClick={handleMfaVerify}
                   className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-[#00d4ff] to-[#0088bb] text-[#060f1e] flex items-center justify-center gap-2 hover:opacity-90 transition-all"

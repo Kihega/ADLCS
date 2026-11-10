@@ -21,13 +21,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  Alert,
   ActivityIndicator,
   Animated,
   Platform,
   Image,
   ImageBackground,
 } from 'react-native'
+import { Alert, useErrorDialog } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -701,10 +701,12 @@ export default function RegisterBirthScreen({ navigation }: Props) {
   const [fatherData, setFatherData] = useState<any>(null)
   const [fatherLoading, setFatherLoading] = useState(false)
   const [fatherError, setFatherError] = useState('')
+  useErrorDialog(fatherError, () => setFatherError(''), 'ID lookup failed')
   const [motherNid, setMotherNid] = useState('')
   const [motherData, setMotherData] = useState<any>(null)
   const [motherLoading, setMotherLoading] = useState(false)
   const [motherError, setMotherError] = useState('')
+  useErrorDialog(motherError, () => setMotherError(''), 'ID lookup failed')
   const [childFirst, setChildFirst] = useState('')
   const [childMiddle, setChildMiddle] = useState('')
   const [childSurname, setChildSurname] = useState('')

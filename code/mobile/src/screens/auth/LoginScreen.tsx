@@ -22,11 +22,11 @@ import {
   ActivityIndicator,
   Platform,
   Animated,
-  Alert,
   useWindowDimensions,
   ImageBackground,
   Image,
 } from 'react-native'
+import { Alert, useErrorDialog } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Eye, EyeOff, Shield, MapPin, Smartphone, AlertCircle } from 'lucide-react-native'
@@ -200,6 +200,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [loginMode, setLoginMode] = useState<'login' | 'mfa_verify'>('login')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  useErrorDialog(error, () => setError(''), 'Sign-in error')
 
   const fadeAnim = useRef(new Animated.Value(0)).current
 

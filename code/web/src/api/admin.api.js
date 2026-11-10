@@ -166,11 +166,6 @@ export async function apiGetMigrations(params = {}) {
   const { data } = await apiClient.get('/admin/migrations', { params })
   return data
 }
-export async function apiGetMarriages(params = {}) {
-  const { data } = await apiClient.get('/admin/marriages', { params })
-  return data
-}
-
 // ── Change password (self) ─────────────────────────────────────────────────────
 export async function apiChangePassword(currentPassword, newPassword) {
   const { data } = await apiClient.post('/auth/change-password', { currentPassword, newPassword })

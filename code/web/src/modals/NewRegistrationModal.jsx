@@ -24,6 +24,7 @@
  */
 import { useState, useEffect } from 'react'
 import { X, RefreshCw, CheckCircle, AlertCircle, Copy, Search, Plus } from 'lucide-react'
+import AlertModal from '../components/AlertModal'
 import {
   apiCreateSuperAdmin,
   apiCreateDistrictAdmin,
@@ -368,9 +369,7 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
               </>
             )}
 
-            {error && (
-              <p className="text-red-400 text-[11px] flex items-center gap-1"><AlertCircle size={11} />{error}</p>
-            )}
+            {error && <AlertModal title="Registration problem" message={error} onClose={() => setError('')} />}
 
             {confirmed && (
               <button

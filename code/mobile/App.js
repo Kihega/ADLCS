@@ -4,7 +4,7 @@
  * Changes:
  *  - GeofenceProvider removed (no geofencing)
  *  - Village screens trimmed to: RegisterCitizen,
- *    VillageRecordDeath, RegisterMarriage
+ *    VillageRecordDeath
  *  - No `animation` keys anywhere (crashes native-stack v7 + rn-screens 4.x)
  *  - No JSX comments inside Stack.Navigator (crash in @react-navigation/core)
  *  - screenOptions as arrow function (required)
@@ -19,6 +19,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { ThemeProvider } from './src/context/ThemeContext'
 import { navigationRef } from './src/navigation/navigationService'
 import ErrorBoundary from './src/components/ErrorBoundary'
+import { AppDialogHost } from './src/components/AppDialog'
 
 import SplashScreen from './src/screens/SplashScreen'
 import LoginScreen from './src/screens/auth/LoginScreen'
@@ -35,7 +36,6 @@ import VillageHomeScreen from './src/screens/village/VillageHomeScreen'
 import RegisterCitizenScreen from './src/screens/village/RegisterCitizenScreen'
 import CitizenProfileScreen from './src/screens/village/CitizenProfileScreen'
 import VillageViewRecordsScreen from './src/screens/village/VillageViewRecordsScreen'
-import RegisterMarriageScreen from './src/screens/village/RegisterMarriageScreen'
 import VillageRecordDeathScreen from './src/screens/village/VillageRecordDeathScreen'
 import MigrationHomeScreen from './src/screens/village/MigrationHomeScreen'
 import TrackMigrationScreen from './src/screens/village/TrackMigrationScreen'
@@ -90,7 +90,6 @@ export default function App() {
               <Stack.Screen name="RegisterCitizen" component={RegisterCitizenScreen} />
               <Stack.Screen name="CitizenProfile" component={CitizenProfileScreen} />
               <Stack.Screen name="VillageViewRecords" component={VillageViewRecordsScreen} />
-              <Stack.Screen name="RegisterMarriage" component={RegisterMarriageScreen} />
               <Stack.Screen name="VillageRecordDeath" component={VillageRecordDeathScreen} />
               <Stack.Screen name="MigrationHome" component={MigrationHomeScreen} />
               <Stack.Screen name="TrackMigration" component={TrackMigrationScreen} />
@@ -99,6 +98,7 @@ export default function App() {
             </Stack.Navigator>
           </NavigationContainer>
           </AppFrame>
+          <AppDialogHost />
         </ThemeProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

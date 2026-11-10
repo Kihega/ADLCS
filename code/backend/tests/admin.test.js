@@ -27,7 +27,6 @@ jest.mock('../src/lib/prisma', () => ({
     ward:            { findMany: jest.fn().mockResolvedValue([]) },
     village:         { findMany: jest.fn().mockResolvedValue([]) },
     migration:       { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-    marriage:        { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]) },
     birth:           { count: jest.fn().mockResolvedValue(0) },
     death:           { count: jest.fn().mockResolvedValue(0) },
     $queryRaw:       jest.fn().mockResolvedValue([{ '?column?': 1 }]),

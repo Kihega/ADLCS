@@ -10,9 +10,9 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Animated,
 } from 'react-native'
+import { Alert } from '../../components/AppDialog'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import {

@@ -26,7 +26,6 @@ export type RootStack = {
   RegisterCitizen: undefined
   CitizenProfile: undefined
   VillageViewRecords: undefined
-  RegisterMarriage: undefined
   VillageRecordDeath: undefined
 }
 

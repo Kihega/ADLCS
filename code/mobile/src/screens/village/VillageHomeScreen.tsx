@@ -9,7 +9,7 @@
  *  - Green accent (#1eb53a) instead of Hospital blue
  *
  * Village actions (NO birth registration — handled by Hospital Officer):
- *  Row 1: Register Citizen | Register Marriage | Record Death | Register Building
+ *  Row 1: Register Citizen | Record Death | Register Building
  *  Row 2: Register Infrastructure | Track Migration | View Records  | Sync Data
  */
 
@@ -24,7 +24,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   ActivityIndicator,
   Image,
   ImageBackground,
@@ -33,8 +32,8 @@ import {
   Modal,
   TouchableWithoutFeedback,
   useWindowDimensions,
-  InteractionManager,
 } from 'react-native'
+import { Alert } from '../../components/AppDialog'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { endSession, goToLogin } from '../../services/session'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -49,7 +48,6 @@ import {
   ChevronRight,
   Shield,
   Building2,
-  Heart,
   Wifi,
   WifiOff,
   User,
@@ -77,7 +75,6 @@ type VStack = {
   VillageHome: undefined
   HospitalHome: undefined
   RegisterCitizen: undefined
-  RegisterMarriage: undefined
   VillageRecordDeath: undefined
   SyncData: undefined
   MigrationHome: undefined
@@ -338,7 +335,8 @@ function Sidebar({
     ]).start(() => {
       setMounted(false)
       onClose()
-      InteractionManager.runAfterInteractions(() => fn())
+      // RN 0.88 removed it: let the drawer modal finish unmounting first
+      setTimeout(() => fn(), 60)
     })
   }
 
@@ -412,7 +410,7 @@ function Sidebar({
       <TouchableWithoutFeedback onPress={() => closeAndDo(() => {})}>
         <Animated.View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             { backgroundColor: 'rgba(0,0,0,0.55)', opacity: bg },
           ]}
         />
@@ -700,7 +698,7 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
 
   // NIN registration was removed from the Village Officer app — NIN issuance is
   // handled by a separate (NIDA) organisation. Remaining actions: Citizen profile,
-  // Death, Marriage, Migration.
+  // Death, Migration.
   // All records are posted/retrieved from the database via backend API.
   type AD = { id: string; icon: React.ReactNode; label: string; sub: string; bg: string }
   const ACTIONS: AD[] = [
@@ -719,13 +717,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       bg: '#dc2626',
     },
     {
-      id: 'marriage',
-      icon: <Heart size={18} color="#fff" />,
-      label: 'Register',
-      sub: 'Marriage',
-      bg: '#e11d48',
-    },
-    {
       id: 'migration',
       icon: <Repeat size={18} color="#fff" />,
       label: 'Migrate',
@@ -738,7 +729,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
     const m: Record<string, string> = {
       citizen: 'CitizenProfile',
       death: 'VillageRecordDeath',
-      marriage: 'RegisterMarriage',
       migration: 'MigrationHome',
       records: 'VillageViewRecords',
     }

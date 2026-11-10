@@ -41,7 +41,6 @@
  *   GET   /api/admin/system-performance       — [super_admin] live DB/Redis health
  *   GET   /api/admin/migrations               — scoped
  *   GET   /api/admin/migrations/trends        — scoped (Migration Trends sidebar)
- *   GET   /api/admin/marriages                — scoped
  */
 
 const { Router } = require('express')
@@ -1268,12 +1267,11 @@ router.get('/system-performance', requireRole('super_admin', 'district_admin'), 
       }
     } catch { redisOk = false }
 
-    const [citizens, births, deaths, migrations, marriages, auditLogs] = await Promise.all([
+    const [citizens, births, deaths, migrations, auditLogs] = await Promise.all([
       prisma.citizen.count(),
       prisma.birth.count(),
       prisma.death.count(),
       prisma.migration.count().catch(() => 0),
-      prisma.marriage.count().catch(() => 0),
       prisma.auditLog.count(),
     ])
 
@@ -1284,7 +1282,7 @@ router.get('/system-performance', requireRole('super_admin', 'district_admin'), 
         redisOk, redisLatencyMs,
         uptimeSeconds: Math.round(process.uptime()),
         nodeVersion: process.version,
-        tableCounts: { citizens, births, deaths, migrations, marriages, auditLogs },
+        tableCounts: { citizens, births, deaths, migrations, auditLogs },
       },
     })
   } catch (err) {
@@ -1362,39 +1360,7 @@ router.get('/migrations/trends', async (req, res) => {
   }
 })
 
-// ── MARRIAGES ───────────────────────────────────────────────────────────────────
-router.get('/marriages', async (req, res) => {
-  const { status } = req.query
-  const { page, limit, skip } = pagination(req)
-  try {
-    const adminDistrictId = await getAdminDistrictId(req)
-    const where = {
-      ...(status ? { status } : {}),
-      ...(req.user.role === 'district_admin' ? {
-        registeredBy: { districtId: adminDistrictId },
-      } : {}),
-    }
-    const [data, total, statusCounts] = await Promise.all([
-      prisma.marriage.findMany({
-        where, skip, take: limit, orderBy: { registeredAt: 'desc' },
-        select: {
-          id: true, marriageCertNo: true, marriageDate: true, marriagePlace: true, status: true,
-          religion: true, kindOfMarriage: true,
-          husband: { select: { firstName: true, surname: true } },
-          wife:    { select: { firstName: true, surname: true } },
-        },
-      }),
-      prisma.marriage.count({ where }),
-      prisma.marriage.groupBy({ by: ['status'], where, _count: { _all: true } }),
-    ])
-    return res.json({ success: true, data, total, page, limit, statusCounts })
-  } catch (err) {
-    console.error('[admin/marriages]', err)
-    return res.status(500).json({ success: false, message: 'Internal server error' })
-  }
-})
-
-// ── PATCH-4: GET /rita — birth/death/marriage trends for RITA sidebar ─────────
+// ── PATCH-4: GET /rita — birth/death trends for RITA sidebar ─────────
 router.get('/rita', async (req, res) => {
   try {
     const { regionId, districtId } = req.query
@@ -1412,7 +1378,7 @@ router.get('/rita', async (req, res) => {
     const districtScope = adminDistrictId ?? (districtId ? Number(districtId) : undefined)
     const regionScope   = adminDistrictId != null ? undefined : (regionId ? Number(regionId) : undefined)
 
-    // BUGFIX-RITA-2026: `createdAt` does not exist on Birth/Death/Marriage
+    // BUGFIX-RITA-2026: `createdAt` does not exist on Birth/Death
     // — the real field is `registeredAt`. Every call was throwing a Prisma
     // validation error, which is why this card always came back empty.
     const birthWhere = {
@@ -1431,13 +1397,8 @@ router.get('/rita', async (req, res) => {
             { hospitalOfficer: { district: { regionId: regionScope } } },
           ] } : {}),
     }
-    const marriageWhere = {
-      ...(Object.keys(dateFilter).length ? { registeredAt: dateFilter } : {}),
-      ...(districtScope != null ? { registeredBy: { districtId: districtScope } } :
-          regionScope   != null ? { registeredBy: { district: { regionId: regionScope } } } : {}),
-    }
 
-    const [birthRows, deathRows, marriageRows] = await Promise.all([
+    const [birthRows, deathRows] = await Promise.all([
       prisma.birth.groupBy({
         by: ['registeredAt'],
         _count: { id: true },
@@ -1450,12 +1411,6 @@ router.get('/rita', async (req, res) => {
         where: deathWhere,
         orderBy: { registeredAt: 'asc' },
       }),
-      prisma.marriage.groupBy({
-        by: ['registeredAt'],
-        _count: { id: true },
-        where: marriageWhere,
-        orderBy: { registeredAt: 'asc' },
-      }),
     ])
 
     // PATCH-WEEKLYTRENDS-2026: bucket into Week 1..5 of the selected month
@@ -1465,11 +1420,9 @@ router.get('/rita', async (req, res) => {
       data: {
         births:    groupByWeek(birthRows,    'registeredAt'),
         deaths:    groupByWeek(deathRows,    'registeredAt'),
-        marriages: groupByWeek(marriageRows, 'registeredAt'),
         totals: {
           births:    birthRows.reduce((s, r) => s + r._count.id, 0),
           deaths:    deathRows.reduce((s, r) => s + r._count.id, 0),
-          marriages: marriageRows.reduce((s, r) => s + r._count.id, 0),
         },
         year, month,
       },

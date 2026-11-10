@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native'
+import { useErrorDialog } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
@@ -92,6 +93,7 @@ export default function CitizenProfileScreen({ navigation }: Props) {
   const [nin, setNin] = useState('')
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
+  useErrorDialog(error, () => setError(''), 'Search failed')
   const [profile, setProfile] = useState<CitizenProfile | null>(null)
   const [expanded, setExpanded] = useState(true)
 

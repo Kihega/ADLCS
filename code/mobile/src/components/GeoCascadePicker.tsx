@@ -36,8 +36,8 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
-  Alert,
 } from 'react-native'
+import { Alert } from './AppDialog'
 import { KeyboardSafeView } from './KeyboardAware'
 import { ChevronDown, X, Search, MapPin, Plus } from 'lucide-react-native'
 import { useTheme, TZ } from '../context/ThemeContext'
