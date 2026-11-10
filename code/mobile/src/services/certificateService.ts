@@ -21,6 +21,7 @@ import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system/legacy'
 import type { LocalBirth, LocalDeath, LocalMarriage } from './localDb'
+import { apiGet } from './syncService'
 
 // ─── Format helpers ────────────────────────────────────────────────────────────
 function fmtDate(d: string): string {
@@ -386,4 +387,41 @@ export function downloadBirthCertificate(birth: LocalBirth, existingPath?: strin
 
 export function downloadDeathCertificate(death: LocalDeath, existingPath?: string): Promise<string> {
   return downloadCertificate(buildDeathCertHtml(death), () => generateDeathPdf(death), existingPath)
+}
+
+// PATCH-V3-2026-11: for list screens that only hold a record id / Birth ID.
+// The full record is fetched from the server and goes through the very same
+// download function the registration screens use.
+async function fetchCertificateData(
+  type: 'birth' | 'death',
+  recordId: string,
+  birthId?: string
+): Promise<LocalBirth | LocalDeath> {
+  const qs =
+    `type=${type}&id=${encodeURIComponent(recordId || '')}` +
+    (birthId ? `&birthId=${encodeURIComponent(birthId)}` : '')
+  const json = await apiGet(`/officer/certificate/data?${qs}`)
+  if (!json?.success || !json.data) throw new Error(json?.message || 'Certificate data not found.')
+  return json.data as LocalBirth | LocalDeath
+}
+
+export async function downloadCertificateById(
+  type: 'birth' | 'death',
+  recordId: string,
+  birthId?: string
+): Promise<void> {
+  const data = await fetchCertificateData(type, recordId, birthId)
+  if (type === 'birth') await downloadBirthCertificate(data as LocalBirth)
+  else await downloadDeathCertificate(data as LocalDeath)
+}
+
+export async function printCertificateById(
+  type: 'birth' | 'death',
+  recordId: string,
+  birthId?: string
+): Promise<void> {
+  const data = await fetchCertificateData(type, recordId, birthId)
+  const html =
+    type === 'birth' ? buildBirthCertHtml(data as LocalBirth) : buildDeathCertHtml(data as LocalDeath)
+  await Print.printAsync({ html })
 }

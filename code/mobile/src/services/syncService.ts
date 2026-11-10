@@ -239,16 +239,22 @@ export async function apiGet(endpoint: string): Promise<any> {
 
 // ── Connection quality — real ping ────────────────────────────────────────────
 export async function checkConnQuality(): Promise<ConnQuality> {
-  const { signal, clear } = makeSignal(4000)
   try {
-    const t = Date.now()
+    // PATCH-V3-2026-11: resolve first (may wait for a cold start), THEN start the
+    // timer - the old code started a 4s timer before the probe, so a slow
+    // wake-up was reported as "Offline". Any HTTP answer = reachable.
     const base = await resolveBase()
-    const res = await fetch(`${base}/health`, { signal })
-    clear()
-    if (!res.ok) return 'Fair'
-    return Date.now() - t < 800 ? 'Good' : 'Fair'
+    const { signal, clear } = makeSignal(8000)
+    const t = Date.now()
+    try {
+      await fetch(`${base}/health/live`, { signal })
+      clear()
+    } catch (e) {
+      clear()
+      throw e
+    }
+    return Date.now() - t < 1500 ? 'Good' : 'Fair'
   } catch (err) {
-    clear()
     resetResolver() // force re-probe next call after a connectivity event
     return 'Offline'
   }

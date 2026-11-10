@@ -20,7 +20,9 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native'
-import { useErrorDialog } from '../../components/AppDialog'
+import { Alert, useErrorDialog } from '../../components/AppDialog'
+import BidCopy from '../../components/BidCopy'
+import { downloadCertificateById, describeError } from '../../services/certificateService'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
@@ -36,6 +38,7 @@ import {
   MapPin,
   ChevronDown,
   ChevronUp,
+  Download,
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
@@ -66,6 +69,7 @@ interface CitizenProfile {
   educationLevel: string
   registeredAt: string
   ninCertificateIssued: boolean
+  hasBirthRecord?: boolean
   villageName: string | null
 }
 
@@ -98,6 +102,20 @@ export default function CitizenProfileScreen({ navigation }: Props) {
   useErrorDialog(error, () => setError(''), 'Search failed')
   const [profile, setProfile] = useState<CitizenProfile | null>(null)
   const [expanded, setExpanded] = useState(true)
+  const [certBusy, setCertBusy] = useState(false)
+
+  // PATCH-V3-2026-11: same download function as every other certificate button.
+  const handleBirthCert = async () => {
+    if (!profile?.birthId) return
+    setCertBusy(true)
+    try {
+      await downloadCertificateById('birth', '', profile.birthId)
+    } catch (e) {
+      console.warn('[certificate] download failed', e)
+      Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
+    }
+    setCertBusy(false)
+  }
 
   const handleSearch = async () => {
     // PATCH-BID-LOOKUP-2026: search by Birth ID (BID) — a citizen only ever has
@@ -276,9 +294,12 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                       .filter(Boolean)
                       .join(' ')}
                   </Text>
-                  <Text style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>
-                    {[profile.birthId, profile.nationalId].filter(Boolean).join(' · ')}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                    <BidCopy bid={profile.birthId} size={11} />
+                    {!!profile.nationalId && (
+                      <Text style={{ fontSize: 11, color: T.textSub }}>NIN {profile.nationalId}</Text>
+                    )}
+                  </View>
                 </View>
                 <View
                   style={{
@@ -366,6 +387,33 @@ export default function CitizenProfileScreen({ navigation }: Props) {
                       Scoped to {profile.villageName ?? 'your'} village — visible to this officer only
                     </Text>
                   </View>
+
+                  {!!profile.hasBirthRecord && (
+                    <TouchableOpacity
+                      onPress={handleBirthCert}
+                      disabled={certBusy}
+                      style={{
+                        marginTop: 6,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        paddingVertical: 12,
+                        borderRadius: 10,
+                        backgroundColor: TZ.green,
+                        opacity: certBusy ? 0.7 : 1,
+                      }}
+                    >
+                      {certBusy ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Download size={15} color="#fff" />
+                      )}
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
+                        {certBusy ? 'Generating PDF…' : 'Download Birth Certificate'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
