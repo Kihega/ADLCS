@@ -83,6 +83,65 @@ async function getOrCreateVillage(name, wardId, type = 'village') {
   return prisma.village.create({ data: { name, wardId, type } })
 }
 
+// PATCH-SEED-LINKGEO-2026 ----------------------------------------------------
+// Test officers and test parents must hang off the SAME region / district / ward /
+// village rows that the app's pickers use for real registrations, so everything is
+// found by NAME in the database and LINKED BY ID. Region/district/ward are never
+// created here (unless SEED_CREATE_MISSING=1); a missing village is created under the
+// real ward, exactly like POST /api/geo/villages does.
+const SEED_GEO = {
+  region:   process.env.SEED_REGION   || 'Iringa',
+  district: process.env.SEED_DISTRICT || 'Mufindi Municipal',
+  ward:     process.env.SEED_WARD     || 'Mdabulo',
+  village:  process.env.SEED_VILLAGE  || 'Ikanga',
+}
+const SEED_CREATE_MISSING = process.env.SEED_CREATE_MISSING === '1'
+const NAME_NOISE = new Set(['district', 'council', 'municipal', 'municipality', 'town', 'city', 'urban', 'rural', 'dc', 'mc', 'tc', 'region', 'ward'])
+const nameWords = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)
+const nameCore  = (s) => nameWords(s).filter((w) => !NAME_NOISE.has(w)).join(' ')
+function nameScore(candidate, wanted) {
+  const c = String(candidate).trim().toLowerCase()
+  const w = String(wanted).trim().toLowerCase()
+  if (c === w) return 100
+  const cc = nameCore(candidate)
+  const wc = nameCore(wanted)
+  if (cc && cc === wc) {
+    const ws = new Set(nameWords(wanted))
+    return 50 + nameWords(candidate).filter((x) => ws.has(x)).length
+  }
+  if (cc && wc && (cc.includes(wc) || wc.includes(cc))) return 10
+  return 0
+}
+async function resolveGeo(label, rows, wanted, createFn, alwaysCreate = false) {
+  let best = null
+  let bestScore = 0
+  let ties = []
+  for (const r of rows) {
+    const sc = nameScore(r.name, wanted)
+    if (sc > bestScore) { best = r; bestScore = sc; ties = [r] }
+    else if (sc === bestScore && sc > 0) ties.push(r)
+  }
+  if (best) {
+    if (ties.length > 1) {
+      console.warn(`  ! ${label}: several rows match "${wanted}" (${ties.map((t) => `${t.name}#${t.id}`).join(', ')}) - using #${best.id}`)
+    } else if (best.name !== wanted) {
+      console.log(`  ~ ${label}: "${wanted}" matched existing "${best.name}" (#${best.id})`)
+    }
+    return best
+  }
+  if (createFn && (alwaysCreate || SEED_CREATE_MISSING)) {
+    const made = await createFn(wanted)
+    console.log(`  + ${label}: "${wanted}" did not exist - created #${made.id}`)
+    return made
+  }
+  const names = rows.map((r) => r.name).slice(0, 60).join(', ') || '(none)'
+  throw new Error(
+    `${label} "${wanted}" was not found in the database, so nothing was linked.\n` +
+    `  Existing ${label.toLowerCase()} names here: ${names}\n` +
+    `  Fix the name with SEED_${label.toUpperCase()}="<exact name>" or set SEED_CREATE_MISSING=1.`
+  )
+}
+
 // HealthFacility has no unique column on `name` — facilityRegNo is the one
 // unique field, so (as with Region above) match on that rather than
 // upserting by name.
@@ -225,11 +284,25 @@ async function main() {
   await cleanupOldTestData()
 
   // ── Step 1: geography — Iringa → Mufindi District Council → Mdabulo → Ikanga
-  const region   = await getOrCreateRegion('Iringa')
-  const district = await getOrCreateDistrict('Mufindi District Council', region.id)
-  const ward     = await getOrCreateWard('Mdabulo', district.id)
-  const village  = await getOrCreateVillage('Ikanga', ward.id)
-  console.log(`  Geography ready: ${region.name} / ${district.name} / ${ward.name} / ${village.name}`)
+  // PATCH-SEED-LINKGEO-2026: LINK to the existing rows (by name -> id), never retype them.
+  const region = await resolveGeo('Region',
+    await prisma.region.findMany({ orderBy: { id: 'asc' } }),
+    SEED_GEO.region,
+    (n) => prisma.region.create({ data: { name: n, jurisdiction: 'mainland' } }))
+  const district = await resolveGeo('District',
+    await prisma.district.findMany({ where: { regionId: region.id }, orderBy: { id: 'asc' } }),
+    SEED_GEO.district,
+    (n) => prisma.district.create({ data: { name: n, regionId: region.id } }))
+  const ward = await resolveGeo('Ward',
+    await prisma.ward.findMany({ where: { districtId: district.id }, orderBy: { id: 'asc' } }),
+    SEED_GEO.ward,
+    (n) => prisma.ward.create({ data: { name: n, districtId: district.id } }))
+  const village = await resolveGeo('Village',
+    await prisma.village.findMany({ where: { wardId: ward.id }, orderBy: { id: 'asc' } }),
+    SEED_GEO.village,
+    (n) => prisma.village.create({ data: { name: n, wardId: ward.id, type: 'village' } }),
+    true)
+  console.log(`  Geography linked by id: ${region.name}#${region.id} / ${district.name}#${district.id} / ${ward.name}#${ward.id} / ${village.name}#${village.id}`)
 
   // ── Step 1b: Ifwagi Hospital — where the test Hospital Officer works ─────
   const hospital = await getOrCreateFacility('HF-IFWAGI-001', {
@@ -240,6 +313,11 @@ async function main() {
     villageId:     village.id,
     wardId:        ward.id,
     districtId:    district.id,
+  })
+  // PATCH-SEED-LINKGEO-2026: an existing facility row keeps its OLD (hand-typed) ids unless fixed here
+  await prisma.healthFacility.update({
+    where: { id: hospital.id },
+    data:  { villageId: village.id, wardId: ward.id, districtId: district.id },
   })
   console.log(`  Facility ready: ${hospital.facilityName}`)
 
@@ -324,7 +402,7 @@ async function main() {
     where:  { nationalId: TEST_FATHER.nationalId },
     // PATCH-4: isTestData flags this row so it's excluded from every
     // population-snapshot query (see buildCitizenGeoWhere in admin.js).
-    update: { age: 41, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_FATHER.birthId, isTestData: true },
+    update: { age: 41, vitalStatus: 'alive', currentVillageId: village.id, regionId: region.id, birthId: TEST_FATHER.birthId, isTestData: true },
     create: {
       birthId:          TEST_FATHER.birthId,
       nationalId:       TEST_FATHER.nationalId,
@@ -336,6 +414,7 @@ async function main() {
       age:              41,
       vitalStatus:      'alive',
       currentVillageId: village.id,
+      regionId:         region.id,
       registeredById:   villageOfficer.id,
       registeredAt:     new Date(),
       isTestData:       true,
@@ -347,7 +426,7 @@ async function main() {
     where:  { nationalId: TEST_MOTHER.nationalId },
     // PATCH-4: isTestData flags this row so it's excluded from every
     // population-snapshot query (see buildCitizenGeoWhere in admin.js).
-    update: { age: 37, vitalStatus: 'alive', currentVillageId: village.id, birthId: TEST_MOTHER.birthId, isTestData: true },
+    update: { age: 37, vitalStatus: 'alive', currentVillageId: village.id, regionId: region.id, birthId: TEST_MOTHER.birthId, isTestData: true },
     create: {
       birthId:          TEST_MOTHER.birthId,
       nationalId:       TEST_MOTHER.nationalId,
@@ -359,6 +438,7 @@ async function main() {
       age:              37,
       vitalStatus:      'alive',
       currentVillageId: village.id,
+      regionId:         region.id,
       registeredById:   villageOfficer.id,
       registeredAt:     new Date(),
       isTestData:       true,

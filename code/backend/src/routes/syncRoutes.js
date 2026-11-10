@@ -66,6 +66,19 @@ router.post('/birth/sync', async (req, res) => {
     const motherCitizenId = mother?.citizenId
     const clip = (v, n) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined)
 
+    // PATCH-SEED-LINKGEO-2026: if the app sent no village/street of origin, use the
+    // mother's (else father's) village so the child is never left without a hierarchy.
+    let originVid = originVillageId ? Number(originVillageId) : undefined
+    if (!originVid) {
+      const ids = [motherCitizenId, fatherCitizenId].filter(Boolean)
+      if (ids.length) {
+        const pcs = await prisma.citizen.findMany({ where: { id: { in: ids } }, select: { id: true, currentVillageId: true } })
+        originVid = pcs.find((p) => p.id === motherCitizenId)?.currentVillageId
+          ?? pcs.find((p) => p.id === fatherCitizenId)?.currentVillageId
+          ?? undefined
+      }
+    }
+
     // childCitizenId intentionally NOT set here.
     // It remains NULL until the child is linked to a Citizen record.
     const birth = await prisma.birth.create({
@@ -85,7 +98,7 @@ router.post('/birth/sync', async (req, res) => {
         motherName:       clip(motherName, 150),
         officerId,
         facilityId:       officer?.facilityId || undefined,
-        originVillageId:  originVillageId ? Number(originVillageId) : undefined,
+        originVillageId:  originVid,
         registeredAt:     registeredAt ? new Date(registeredAt) : new Date(),
         ritaSynced:       false,
       },

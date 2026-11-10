@@ -21,7 +21,7 @@ import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system/legacy'
 import type { LocalBirth, LocalDeath, LocalMarriage } from './localDb'
-import { apiGet } from './syncService'
+import { apiGet, apiPost } from './syncService'
 
 // ─── Format helpers ────────────────────────────────────────────────────────────
 function fmtDate(d: string): string {
@@ -179,7 +179,6 @@ export function buildBirthCertHtml(input: LocalBirth): string {
       <tr><td class="fn">(9)</td><td class="fk">Date of Birth</td><td class="fv">${fmtDate(b.dateOfBirth)}</td></tr>
       <tr><td class="fn">(10)</td><td class="fk">Date of Registration</td><td class="fv">${fmtDate(b.registeredAt)}</td></tr>
       <tr><td class="fn">(11)</td><td class="fk">Registrar / Officer</td><td class="fv">${b.officerName.toUpperCase() || '—'} · ${b.facilityName || '—'}</td></tr>
-      <tr><td class="fn">(12)</td><td class="fk">National ID Number (NIN)</td><td class="fv" style="font-size:11pt;font-weight:900;letter-spacing:2px;">${b.nationalId || 'PENDING — ASSIGNED AT AGE 18'}</td></tr>
     </table>
 
     <div class="footer">
@@ -277,7 +276,6 @@ export function buildDeathCertHtml(input: LocalDeath): string {
       <tr><td class="fn">(11)</td><td class="fk">Informant Name &amp; Address</td><td class="fv">${(d.informantName || d.facilityName || 'NOT APPLICABLE').toUpperCase()}</td></tr>
       <tr><td class="fn">(12)</td><td class="fk">Date of Registration</td><td class="fv">${fmtDate(d.registeredAt)}</td></tr>
       <tr><td class="fn">(13)</td><td class="fk">Registry Number</td><td class="fv">${d.certNo}</td></tr>
-      <tr><td class="fn">(14)</td><td class="fk">National ID Number (NIN)</td><td class="fv" style="font-size:11pt;font-weight:900;letter-spacing:2px;">${d.nationalId || '—'}</td></tr>
     </table>
     <div class="footer">
       <div class="copy-disclaimer" style="font-size:7.5pt;color:#555;text-align:center;margin-bottom:2mm;">
@@ -329,12 +327,31 @@ async function renderPdf(html: string, fileName: string): Promise<string> {
   }
 }
 
+// PATCH-PENDING-2026: tell the server a certificate has been issued, so the case leaves
+// Pending Cases / Issue Certificate and stays only in View Records. Never throws.
+export async function markCertificateIssued(
+  type: 'birth' | 'death',
+  ref: { recordId?: string; certNo?: string }
+): Promise<void> {
+  try {
+    const rid = ref.recordId && !String(ref.recordId).startsWith('online-') ? ref.recordId : ''
+    if (!rid && !ref.certNo) return
+    await apiPost('/officer/certificate/issue', { type, recordId: rid, certNo: ref.certNo })
+  } catch (e) {
+    console.warn('[certificate] could not mark as issued', e)
+  }
+}
+
 export async function generateBirthPdf(birth: LocalBirth): Promise<string> {
-  return renderPdf(buildBirthCertHtml(birth), `birth_${safeName(birth.certNo)}.pdf`)
+  const path = await renderPdf(buildBirthCertHtml(birth), `birth_${safeName(birth.certNo)}.pdf`)
+  await markCertificateIssued('birth', { recordId: birth.id, certNo: birth.certNo })
+  return path
 }
 
 export async function generateDeathPdf(death: LocalDeath): Promise<string> {
-  return renderPdf(buildDeathCertHtml(death), `death_${safeName(death.certNo)}.pdf`)
+  const path = await renderPdf(buildDeathCertHtml(death), `death_${safeName(death.certNo)}.pdf`)
+  await markCertificateIssued('death', { recordId: death.id, certNo: death.certNo })
+  return path
 }
 
 // ─── Share / Print ─────────────────────────────────────────────────────────────
