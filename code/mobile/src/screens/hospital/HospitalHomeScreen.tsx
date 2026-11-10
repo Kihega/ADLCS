@@ -1372,7 +1372,11 @@ export default function HospitalHomeScreen({ navigation: _navigation }: Props) {
                         justifyContent: 'center',
                       }}
                     >
-                      <Text style={{ fontSize: 15 }}>{item.icon}</Text>
+                      {item.icon === '✝' ? (
+                        <Text style={{ fontSize: 15 }}>{item.icon}</Text>
+                      ) : (
+                        <User size={16} color={item.color} />
+                      )}
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
                       <Text style={{ fontSize: 10, color: T.textSub, marginBottom: 2 }}>

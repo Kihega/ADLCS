@@ -42,7 +42,8 @@ type Props = { navigation: NativeStackNavigationProp<VStack, 'TrackMigration'> }
 const G = '#1eb53a'
 
 interface CitizenHit {
-  id: string
+  id: string | null
+  birthId?: string | null
   fullName: string
   nationalId: string | null
   gender: string
@@ -79,6 +80,7 @@ export default function TrackMigrationScreen({ navigation }: Props) {
       if (json.success && json.data) {
         setCitizen({
           id: json.data.id,
+          birthId: json.data.birthId,
           fullName: json.data.fullName,
           nationalId: json.data.nationalId,
           gender: json.data.gender,
@@ -121,7 +123,8 @@ export default function TrackMigrationScreen({ navigation }: Props) {
             setSubmitting(true)
             try {
               const json = await apiPost('/village/migration', {
-                citizenId: citizen.id,
+                citizenId: citizen.id ?? undefined,
+                birthId: citizen.birthId ?? undefined,
                 toVillageId: destination.villageId,
                 reason: reason.trim(),
               })

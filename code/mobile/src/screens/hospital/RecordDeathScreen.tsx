@@ -39,8 +39,8 @@ import {
 } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { generateDeathCertNo, updateDeathCertPath } from '../../services/localDb'
-import { sharePdf } from '../../services/certificateService'
+import { generateDeathCertNo, updateDeathCertPath, LocalDeath } from '../../services/localDb'
+import { downloadDeathCertificate, describeError } from '../../services/certificateService'
 import { triggerSync, saveAndSyncDeath } from '../../services/syncService'
 import { resolveBase } from '../../services/apiResolver'
 import { useTheme, TZ } from '../../context/ThemeContext'
@@ -389,6 +389,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
   const [savedCertNo, setSavedCertNo] = useState('')
   const [savedId, setSavedId] = useState('')
   const [pdfPath, setPdfPath] = useState('')
+  const [savedDeath, setSavedDeath] = useState<LocalDeath | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [toast, setToast] = useState('')
   const [toastVis, setToastVis] = useState(false)
@@ -603,6 +604,7 @@ export default function RecordDeathScreen({ navigation }: Props) {
       })
 
       setSavedId(death.id)
+      setSavedDeath(death)
       setSavedCertNo(certNo)
       setStep(4)
 
@@ -639,28 +641,20 @@ export default function RecordDeathScreen({ navigation }: Props) {
 
   // ── Download cert ─────────────────────────────────────────────────────────
   const handleDownload = async () => {
+    if (!savedDeath) {
+      Alert.alert('Error', 'Record not found.')
+      return
+    }
     setDownloading(true)
     try {
-      if (pdfPath) {
-        await sharePdf(pdfPath)
-        setDownloading(false)
-        return
+      const path = await downloadDeathCertificate(savedDeath, pdfPath)
+      if (path && path !== pdfPath) {
+        setPdfPath(path)
+        await updateDeathCertPath(savedId, path)
       }
-      const { getAllDeaths } = await import('../../services/localDb')
-      const deaths = await getAllDeaths()
-      const death = deaths.find((d) => d.id === savedId)
-      if (!death) {
-        Alert.alert('Error', 'Record not found.')
-        setDownloading(false)
-        return
-      }
-      const { generateDeathPdf } = await import('../../services/certificateService')
-      const pdf = await generateDeathPdf(death)
-      await updateDeathCertPath(savedId, pdf)
-      setPdfPath(pdf)
-      await sharePdf(pdf)
     } catch (e) {
-      Alert.alert('Error', 'Could not generate PDF. Try again.')
+      console.warn('[certificate] download failed', e)
+      Alert.alert('Error', `Could not generate PDF. ${describeError(e)}`)
     }
     setDownloading(false)
   }

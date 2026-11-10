@@ -61,7 +61,24 @@ function _today(): string {
 }
 
 // ─── Birth Certificate HTML ────────────────────────────────────────────────────
-export function buildBirthCertHtml(b: LocalBirth): string {
+// PATCH-V2-2026-11: a missing field must never crash PDF generation.
+function fillStrings<T extends object>(o: T, keys: readonly string[]): T {
+  const out = { ...o } as Record<string, unknown>
+  for (const k of keys) if (out[k] === undefined || out[k] === null) out[k] = ''
+  return out as T
+}
+const BIRTH_TEXT_FIELDS = [
+  'certNo', 'childFirstName', 'childMiddleName', 'childSurname', 'gender', 'dateOfBirth',
+  'fatherName', 'motherName', 'facilityName', 'facilityDistrict', 'facilityRegion',
+  'officerName', 'registeredAt', 'nationalId',
+] as const
+const DEATH_TEXT_FIELDS = [
+  'certNo', 'deceasedName', 'nationalId', 'causeOfDeath', 'dateOfDeath', 'locationType',
+  'category', 'informantName', 'facilityName', 'registeredAt',
+] as const
+
+export function buildBirthCertHtml(input: LocalBirth): string {
+  const b = fillStrings(input, BIRTH_TEXT_FIELDS)
   const entryNo = b.certNo.replace(' A', '').trim()
   return `<!DOCTYPE html>
 <html>
@@ -182,7 +199,8 @@ export function buildBirthCertHtml(b: LocalBirth): string {
 }
 
 // ─── Death Certificate HTML ────────────────────────────────────────────────────
-export function buildDeathCertHtml(d: LocalDeath): string {
+export function buildDeathCertHtml(input: LocalDeath): string {
+  const d = fillStrings(input, DEATH_TEXT_FIELDS)
   const entryNo = d.certNo.replace('TZ-D-', '').replace(' A', '').trim()
   return `<!DOCTYPE html>
 <html>
@@ -277,29 +295,38 @@ export function buildDeathCertHtml(d: LocalDeath): string {
 }
 
 // ─── PDF generation ────────────────────────────────────────────────────────────
-const CERT_DIR = FileSystem.documentDirectory + 'certificates/'
+// PATCH-V2-2026-11: robust PDF generation.
+//  - never builds the folder path at import time (documentDirectory can be null)
+//  - overwrites an existing file instead of failing
+//  - if copying to the documents folder fails, the freshly printed temp PDF is used
+function safeName(s: string): string {
+  return String(s ?? '').replace(/[^A-Za-z0-9_-]+/g, '_')
+}
 
-async function ensureCertDir(): Promise<void> {
-  const info = await FileSystem.getInfoAsync(CERT_DIR)
-  if (!info.exists) await FileSystem.makeDirectoryAsync(CERT_DIR, { intermediates: true })
+async function renderPdf(html: string, fileName: string): Promise<string> {
+  const { uri } = await Print.printToFileAsync({ html, base64: false })
+  try {
+    const base = FileSystem.documentDirectory || FileSystem.cacheDirectory
+    if (!base) return uri
+    const dir = base + 'certificates/'
+    const info = await FileSystem.getInfoAsync(dir)
+    if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
+    const dest = dir + fileName
+    await FileSystem.deleteAsync(dest, { idempotent: true })
+    await FileSystem.copyAsync({ from: uri, to: dest })
+    return dest
+  } catch (e) {
+    console.warn('[certificate] could not copy PDF to documents, using temp file', e)
+    return uri
+  }
 }
 
 export async function generateBirthPdf(birth: LocalBirth): Promise<string> {
-  await ensureCertDir()
-  const html = buildBirthCertHtml(birth)
-  const { uri } = await Print.printToFileAsync({ html, base64: false })
-  const dest = CERT_DIR + `birth_${birth.certNo.replace(/ /g, '_')}.pdf`
-  await FileSystem.copyAsync({ from: uri, to: dest })
-  return dest
+  return renderPdf(buildBirthCertHtml(birth), `birth_${safeName(birth.certNo)}.pdf`)
 }
 
 export async function generateDeathPdf(death: LocalDeath): Promise<string> {
-  await ensureCertDir()
-  const html = buildDeathCertHtml(death)
-  const { uri } = await Print.printToFileAsync({ html, base64: false })
-  const dest = CERT_DIR + `death_${death.certNo.replace(/ /g, '_').replace(/-/g, '_')}.pdf`
-  await FileSystem.copyAsync({ from: uri, to: dest })
-  return dest
+  return renderPdf(buildDeathCertHtml(death), `death_${safeName(death.certNo)}.pdf`)
 }
 
 // ─── Share / Print ─────────────────────────────────────────────────────────────
@@ -315,4 +342,48 @@ export async function sharePdf(path: string): Promise<void> {
 
 export async function printHtml(html: string): Promise<void> {
   await Print.printAsync({ html })
+}
+
+// PATCH-V2-2026-11: one call for the "Download Certificate PDF" buttons.
+//   1. use / generate the PDF       2. open the share sheet
+//   3. if either step fails, open the system print dialog (choose "Save as PDF")
+export function describeError(e: unknown): string {
+  const m = (e as { message?: string } | null)?.message ?? String(e ?? '')
+  return String(m).slice(0, 240)
+}
+
+async function shareOrPrint(path: string, html: string): Promise<void> {
+  try {
+    await sharePdf(path)
+  } catch (e) {
+    console.warn('[certificate] share failed, falling back to print dialog', e)
+    await Print.printAsync({ html })
+  }
+}
+
+async function downloadCertificate(
+  html: string,
+  make: () => Promise<string>,
+  existingPath?: string
+): Promise<string> {
+  let path = existingPath || ''
+  if (!path) {
+    try {
+      path = await make()
+    } catch (e) {
+      console.warn('[certificate] PDF generation failed, falling back to print dialog', e)
+      await Print.printAsync({ html })
+      return ''
+    }
+  }
+  await shareOrPrint(path, html)
+  return path
+}
+
+export function downloadBirthCertificate(birth: LocalBirth, existingPath?: string): Promise<string> {
+  return downloadCertificate(buildBirthCertHtml(birth), () => generateBirthPdf(birth), existingPath)
+}
+
+export function downloadDeathCertificate(death: LocalDeath, existingPath?: string): Promise<string> {
+  return downloadCertificate(buildDeathCertHtml(death), () => generateDeathPdf(death), existingPath)
 }
