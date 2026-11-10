@@ -21,10 +21,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Platform,
 } from 'react-native'
+import { Alert } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Repeat, CheckCircle2, User, Search } from 'lucide-react-native' // PATCH-BID-LOOKUP-2026

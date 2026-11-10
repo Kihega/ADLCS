@@ -18,4 +18,4 @@ export function classifyId(raw: string): IdKind {
 export const isValidId = (raw: string): boolean => classifyId(raw) !== null
 
 export const ID_HELP =
-  'Enter a Birth ID (BID-XXXXXXXXXX), or the 20-digit NIN if the citizen has no Birth ID. Names cannot be used.'
+  'Enter a Birth ID starting with BID- (main way), or a 20-digit NIN such as 20020505514250000124 if the citizen has no Birth ID. Names cannot be used.'

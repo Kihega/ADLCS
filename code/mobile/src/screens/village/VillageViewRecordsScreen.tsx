@@ -21,7 +21,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
-import { ArrowLeft, Search, User, Cross, Heart, FileText } from 'lucide-react-native'
+import { ArrowLeft, Search, User, Cross, FileText } from 'lucide-react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useTheme, TZ } from '../../context/ThemeContext'
 import { useResponsive } from '../../utils/responsive'
@@ -29,11 +29,11 @@ import { apiGet } from '../../services/syncService'
 
 type VStack = { VillageHome: undefined; VillageViewRecords: undefined }
 type Props = { navigation: NativeStackNavigationProp<VStack, 'VillageViewRecords'> }
-type FilterType = 'all' | 'citizens' | 'deaths' | 'marriages'
+type FilterType = 'all' | 'citizens' | 'deaths'
 
 interface RecordRow {
   id: string
-  type: 'citizens' | 'deaths' | 'marriages'
+  type: 'citizens' | 'deaths'
   icon: string
   color: string
   label: string
@@ -45,7 +45,6 @@ const FILTERS: { key: FilterType; label: string; Icon: any }[] = [
   { key: 'all', label: 'All', Icon: FileText },
   { key: 'citizens', label: 'Citizens', Icon: User },
   { key: 'deaths', label: 'Deaths', Icon: Cross },
-  { key: 'marriages', label: 'Marriages', Icon: Heart },
 ]
 
 export default function VillageViewRecordsScreen({ navigation }: Props) {

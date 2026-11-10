@@ -13,12 +13,13 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Modal,
   Platform,
   Animated,
 } from 'react-native'
+import { Alert, useErrorDialog } from '../../components/AppDialog'
+type TextInputHandle = React.ComponentRef<typeof TextInput>
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { isValidId, classifyId } from '../../services/identityLookup'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -257,7 +258,7 @@ interface FieldProps {
   multiline?: boolean
   returnKeyType?: 'next' | 'done'
   onSubmitEditing?: () => void
-  inputRef?: React.RefObject<TextInput | null>
+  inputRef?: React.RefObject<TextInputHandle | null>
   bg: string
   bc: string
   tc: string
@@ -368,10 +369,12 @@ export default function RecordDeathScreen({ navigation }: Props) {
   const [fatherData, setFatherData] = useState<any>(null)
   const [fatherLoad, setFatherLoad] = useState(false)
   const [fatherError, setFatherError] = useState('')
+  useErrorDialog(fatherError, () => setFatherError(''), 'ID lookup failed')
   const [motherNid, setMotherNid] = useState('')
   const [motherData, setMotherData] = useState<any>(null)
   const [motherLoad, setMotherLoad] = useState(false)
   const [motherError, setMotherError] = useState('')
+  useErrorDialog(motherError, () => setMotherError(''), 'ID lookup failed')
 
   // Step 3: Death details
   const [cause, setCause] = useState('')
@@ -390,8 +393,8 @@ export default function RecordDeathScreen({ navigation }: Props) {
   const [toast, setToast] = useState('')
   const [toastVis, setToastVis] = useState(false)
 
-  const causeRef = useRef<TextInput>(null)
-  const informantRef = useRef<TextInput>(null)
+  const causeRef = useRef<TextInputHandle>(null)
+  const informantRef = useRef<TextInputHandle>(null)
 
   const LOC_TYPES: { val: LocationType; label: string }[] = [
     { val: 'health_facility', label: 'Health Facility' },

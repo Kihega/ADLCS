@@ -5,7 +5,6 @@
  * POST  /api/village/citizen
  * POST  /api/village/birth        (fallback — primary is hospital officer)
  * POST  /api/village/death
- * POST  /api/village/marriage
  * POST  /api/village/migration           (create a migration REQUEST)
  * GET   /api/village/migration/incoming  (requests awaiting this officer's approval)
  * GET   /api/village/migration/outgoing  (requests this officer sent)
@@ -190,78 +189,6 @@ router.post('/death', async (req, res) => {
   } catch (err) {
     if (err.code === 'P2002') return res.json({ success:true, duplicate:true })
     console.error('[village/death]', err)
-    return res.status(500).json({ success:false, message:'Internal server error' })
-  }
-})
-
-// ── POST /api/village/marriage ────────────────────────────────────────────────
-router.post('/marriage', async (req, res) => {
-  const { id:officerId } = req.user
-  const { husbandNid, husbandName, wifeNid, wifeName, marriageDate,
-          marriageType, witness1, witness2, bridePrice, certNo } = req.body
-  // PATCH-BID-E2E-2026: marriagePlace was referenced below but never
-  // declared/destructured — a ReferenceError that made every single
-  // marriage submission fail with a 500, before the BID-based
-  // husband/wife lookup above ever got to write a record. The mobile
-  // app doesn't send this field yet either, so default to the same
-  // string its certificate PDF already hardcodes.
-  const marriagePlace = (typeof req.body.marriagePlace === 'string' && req.body.marriagePlace.trim())
-    || 'Village Registration Office'
-  if (!husbandName && !husbandNid)
-    return res.status(400).json({ success:false, message:'Husband details required' })
-  try {
-    // Check for duplicate cert
-    if (certNo) {
-      const existing = await prisma.marriage?.findFirst?.({ where:{ certNo }, select:{ id:true } }).catch(()=>null)
-      if (existing) return res.json({ success:true, duplicate:true })
-    }
-
-    // PATCH-BID-LOOKUP-2026: husbandNid/wifeNid now carry each citizen's Birth
-    // ID (BID) rather than their NIN — NIN is issued by NIDA, so BID is the primary ID here; BID
-    // is now the canonical lookup key. The certificate still records each
-    // spouse's real NIN below (fetched here, not the BID used to find them).
-    const husband = husbandNid ? await prisma.citizen.findFirst({ where:{ birthId:husbandNid }, select:{ id:true, dateOfBirth:true, nationalId:true } }) : null
-    const wife    = wifeNid    ? await prisma.citizen.findFirst({ where:{ birthId:wifeNid    }, select:{ id:true, dateOfBirth:true, nationalId:true } }) : null
-
-    if (!husband || !wife) {
-      return res.status(422).json({ success:false, message:'Both spouses must be registered citizens. Please use Register Citizen for each spouse first.' })
-    }
-
-    function ageFrom(dob) {
-      if (!dob) return 18
-      return Math.max(Math.floor((Date.now() - new Date(dob)) / 31557600000), 18)
-    }
-
-    const relMap = { islamic:'islamic', christian:'christian', customary:'customary', civil:'civil' }
-    const marriageCertNo = certNo ?? `TZ-MAR-${Date.now()}`
-
-    const record = await prisma.marriage.create({
-      data:{
-        marriageCertNo,
-        husbandId:        husband.id,
-        wifeId:           wife.id,
-        husbandNid:       husband.nationalId ?? husbandNid,
-        wifeNid:          wife.nationalId ?? wifeNid,
-        husbandAge:       ageFrom(husband.dateOfBirth),
-        wifeAge:          ageFrom(wife.dateOfBirth),
-        husbandStatusPrev:'single',
-        wifeStatusPrev:   'single',
-        marriageDate:     parseDDMMYYYY(marriageDate),
-        marriagePlace,
-        religion:         relMap[marriageType] ?? 'customary',
-        kindOfMarriage:   'monogamous',
-        // PATCH-BID-E2E-2026: witness1/witness2 were already being read
-        // off req.body above but never persisted — save them now.
-        witness1Name:     witness1 ? String(witness1).trim() : undefined,
-        witness2Name:     witness2 ? String(witness2).trim() : undefined,
-        registeredById:   officerId,
-      },
-      select:{ id:true },
-    })
-
-    return res.json({ success:true, data:{ certNo:marriageCertNo, serverId:record.id } })
-  } catch (err) {
-    console.error('[village/marriage]', err)
     return res.status(500).json({ success:false, message:'Internal server error' })
   }
 })
@@ -728,18 +655,6 @@ router.get('/records', async (req, res) => {
       out.push({ id:`c-${c.id}`, type:'citizens', icon:'👤', color:'#0891b2',
         label:`${c.firstName} ${c.surname}`, sub:c.nationalId||'—',
         date: new Date(c.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
-    }
-
-    // Marriages
-    const marriages = await prisma.marriage.findMany({
-      where:{ registeredById:officerId },
-      orderBy:{ registeredAt:'desc' }, take:30,
-      select:{ id:true, marriageCertNo:true, husbandNid:true, wifeNid:true, registeredAt:true },
-    }).catch(()=>[])
-    for (const m of marriages) {
-      out.push({ id:`m-${m.id}`, type:'marriages', icon:'💍', color:'#e11d48',
-        label:`${m.husbandNid} & ${m.wifeNid}`, sub:`Cert: ${m.marriageCertNo}`,
-        date: new Date(m.registeredAt ?? new Date()).toLocaleDateString('en-TZ') })
     }
 
     out.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())

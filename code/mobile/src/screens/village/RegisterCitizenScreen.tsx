@@ -4,12 +4,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Modal,
   Platform,
   Animated,
 } from 'react-native'
+import { Alert } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Calendar, X, CheckCircle2, Copy } from 'lucide-react-native'

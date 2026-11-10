@@ -19,8 +19,8 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  Alert,
 } from 'react-native'
+import { Alert } from '../../components/AppDialog'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Bell, CheckCircle2, XCircle, MapPin } from 'lucide-react-native'
 import { useFocusEffect } from '@react-navigation/native'

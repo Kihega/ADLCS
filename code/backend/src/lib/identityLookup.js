@@ -24,6 +24,8 @@ const CITIZEN_SELECT = {
   currentVillage: { select: VILLAGE_GEO_SELECT },
 }
 
+const NIDA_NOT_LINKED_MESSAGE = 'NIDA NOT LINKED YET, USE BIRTH ID INSTEAD'
+
 const INVALID_ID_MESSAGE =
   'Enter a valid Birth ID (BID-XXXXXXXXXX) or a 20-digit NIN. Searching by name is not allowed.'
 
@@ -61,13 +63,12 @@ async function lookupIdentity(raw) {
     return { found: false, idType: 'BID', code: 'BID_NOT_FOUND', message: 'Birth ID not found in the NBS Central Database.' }
   }
 
-  // ── NIN: local registry, then NIDA ─────────────────────────────────────────
-  const local = await prisma.citizen.findFirst({
-    where: { OR: [{ nationalId: ident.value }, { nationalId: String(raw).trim() }] },
-    select: CITIZEN_SELECT,
-  })
-  if (local) return { found: true, idType: 'NIN', person: shapeCitizen(local) }
-
+  // ── NIN (starts with digits, like 20020505514250000124) ────────────────────
+  // A NIN is verified at the external NIDA database. Until the NIDA link is
+  // configured (NIDA_API_URL) the officer is told to use the Birth ID.
+  if (!nida.isConfigured()) {
+    return { found: false, idType: 'NIN', nidaAvailable: false, code: 'NIDA_NOT_CONFIGURED', message: NIDA_NOT_LINKED_MESSAGE }
+  }
   const ext = await nida.lookupByNin(ident.value)
   if (ext.available && ext.found) {
     const p = ext.person
@@ -92,6 +93,13 @@ async function lookupIdentity(raw) {
       },
     }
   }
+  if (!ext.available) {
+    const local = await prisma.citizen.findFirst({
+      where: { OR: [{ nationalId: ident.value }, { nationalId: String(raw).trim() }] },
+      select: CITIZEN_SELECT,
+    })
+    if (local) return { found: true, idType: 'NIN', person: shapeCitizen(local) }
+  }
   return {
     found: false,
     idType: 'NIN',
@@ -99,7 +107,7 @@ async function lookupIdentity(raw) {
     code: ext.available ? 'NIN_NOT_FOUND' : (ext.reason || 'NIDA_NOT_CONFIGURED'),
     message: ext.available
       ? 'NIN not found at NIDA.'
-      : 'This citizen has no Birth ID in the system and NIDA is not connected yet, so the NIN cannot be verified. Use the Birth ID.',
+      : NIDA_NOT_LINKED_MESSAGE,
   }
 }
 
@@ -110,6 +118,9 @@ async function lookupIdentity(raw) {
 async function lookupResidentInVillage(raw, villageId, select) {
   const ident = classifyIdentifier(raw)
   if (!ident.type) return { found: false, code: 'INVALID_ID', message: INVALID_ID_MESSAGE }
+  if (ident.type === 'NIN' && !nida.isConfigured()) {
+    return { found: false, idType: 'NIN', code: 'NIDA_NOT_CONFIGURED', message: NIDA_NOT_LINKED_MESSAGE }
+  }
   const where = ident.type === 'BID'
     ? { birthId: ident.value, currentVillageId: villageId }
     : { OR: [{ nationalId: ident.value }, { nationalId: String(raw).trim() }], currentVillageId: villageId }

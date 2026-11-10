@@ -19,10 +19,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Platform,
 } from 'react-native'
+import { Alert } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import { isValidId, ID_HELP } from '../../services/identityLookup'
 import { SafeAreaView } from 'react-native-safe-area-context'

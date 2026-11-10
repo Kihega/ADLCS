@@ -148,7 +148,6 @@ model VillageOfficer {
   citizenId           String?       @unique @map("citizen_id")
   registeredCitizens  Citizen[]
   outsideDeaths       Death[]       @relation("VillageOfficerDeath")
-  registeredMarriages Marriage[]
   sourceMigrations    Migration[]   @relation("SourceOfficer")
   targetMigrations    Migration[]   @relation("TargetOfficer")
   citizenRecord       Citizen?      @relation("VillageOfficerCitizen", fields: [citizenId], references: [id])
@@ -269,8 +268,6 @@ model Citizen {
   infantMotherDeaths  Death[]          @relation("InfantMotherDeath")
   asDistrictAdmin     DistrictAdmin?   @relation("DistrictAdminCitizen")
   asHospitalOfficer   HospitalOfficer? @relation("HospitalOfficerCitizen")
-  husbandMarriages    Marriage[]       @relation("HusbandMarriage")
-  wifeMarriages       Marriage[]       @relation("WifeMarriage")
   migrations          Migration[]
   asSuperAdmin        SuperAdmin?      @relation("SuperAdminCitizen")
   asVillageOfficer    VillageOfficer?  @relation("VillageOfficerCitizen")
@@ -361,42 +358,6 @@ model Death {
   villageOfficer    VillageOfficer?   @relation("VillageOfficerDeath", fields: [villageOfficerId], references: [id])
 
   @@map("deaths")
-}
-
-model Marriage {
-  id                String           @id @default(uuid())
-  marriageCertNo    String           @unique @map("marriage_cert_no") @db.VarChar(30)
-  husbandId         String           @map("husband_id")
-  wifeId            String           @map("wife_id")
-  husbandNid        String           @map("husband_nid") @db.VarChar(23)
-  wifeNid           String           @map("wife_nid") @db.VarChar(23)
-  husbandAge        Int              @map("husband_age")
-  wifeAge           Int              @map("wife_age")
-  husbandStatusPrev String           @map("husband_status_prev") @db.VarChar(20)
-  wifeStatusPrev    String           @map("wife_status_prev") @db.VarChar(20)
-  marriageDate      DateTime         @map("marriage_date") @db.Date
-  marriagePlace     String           @map("marriage_place") @db.VarChar(120)
-  regionId          Int?             @map("region_id")
-  religion          MarriageReligion
-  kindOfMarriage    KindOfMarriage   @map("kind_of_marriage")
-  witness1Name      String?          @map("witness1_name") @db.VarChar(120)
-  witness2Name      String?          @map("witness2_name") @db.VarChar(120)
-  registrarName     String?          @map("registrar_name") @db.VarChar(120)
-  status            MarriageStatus   @default(active)
-  dissolutionDate   DateTime?        @map("dissolution_date") @db.Date
-  dissolutionReason String?          @map("dissolution_reason")
-  dissolutionAuth   String?          @map("dissolution_auth") @db.VarChar(120)
-  registeredById    String           @map("registered_by")
-  certPdfUrl        String?          @map("cert_pdf_url")
-  qrPayload         String?          @map("qr_payload")
-  ritaSynced        Boolean          @default(false) @map("rita_synced")
-  ritaSyncAt        DateTime?        @map("rita_sync_at")
-  registeredAt      DateTime         @default(now()) @map("registered_at")
-  husband           Citizen          @relation("HusbandMarriage", fields: [husbandId], references: [id])
-  registeredBy      VillageOfficer   @relation(fields: [registeredById], references: [id])
-  wife              Citizen          @relation("WifeMarriage", fields: [wifeId], references: [id])
-
-  @@map("marriages")
 }
 
 model Migration {
@@ -535,26 +496,6 @@ enum MigrationStatus {
   confirmed
   cancelled
   expired
-}
-
-enum MarriageStatus {
-  active
-  dissolved
-  pending_dissolution
-  unregistered
-}
-
-enum KindOfMarriage {
-  monogamous
-  potentially_polygamous
-  polygamous
-}
-
-enum MarriageReligion {
-  islamic
-  christian
-  customary
-  civil
 }
 
 enum FacilityType {

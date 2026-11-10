@@ -20,7 +20,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Image,
   ImageBackground,
@@ -29,8 +28,8 @@ import {
   Modal,
   TouchableWithoutFeedback,
   useWindowDimensions,
-  InteractionManager,
 } from 'react-native'
+import { Alert, useErrorDialog } from '../../components/AppDialog'
 import { KeyboardAwareScrollView, KeyboardSafeView } from '../../components/KeyboardAware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { endSession, goToLogin } from '../../services/session'
@@ -99,6 +98,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
   const [confirmPwd, setConfirmPwd] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  useErrorDialog(error, () => setError(''), 'Password error')
   const [showCurrent, setShowCurrent] = useState(false)
   const [showNew, setShowNew] = useState(false)
 
@@ -595,7 +595,8 @@ function Sidebar({
     ]).start(() => {
       setMounted(false)
       onClose()
-      InteractionManager.runAfterInteractions(() => action())
+      // RN 0.88 removed it: let the drawer modal finish unmounting first
+      setTimeout(() => action(), 60)
     })
   }
 
@@ -668,7 +669,7 @@ function Sidebar({
       <TouchableWithoutFeedback onPress={() => closeAndNavigate(() => {})}>
         <Animated.View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             { backgroundColor: 'rgba(0,0,0,0.55)', opacity: bg },
           ]}
         />

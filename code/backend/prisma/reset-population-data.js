@@ -2,7 +2,7 @@
 // PATCH-4: one-shot cleanup for a fresh start on REGISTERED POPULATION DATA.
 //
 // Deletes, in FK-safe order:
-//   Migration -> Death -> Marriage -> CitizenChild -> Birth -> Citizen
+//   Migration -> Death -> CitizenChild -> Birth -> Citizen
 // (this intentionally includes the seeded demo "test father/mother"
 // citizens too — everything under Citizen goes, no exceptions).
 //
@@ -31,10 +31,9 @@ const prisma = new PrismaClient()
 async function main() {
   const confirmed = process.argv.includes('--yes')
 
-  const [migrations, deaths, marriages, citizenChildren, births, citizens] = await Promise.all([
+  const [migrations, deaths, citizenChildren, births, citizens] = await Promise.all([
     prisma.migration.count(),
     prisma.death.count(),
-    prisma.marriage.count(),
     prisma.citizenChild.count(),
     prisma.birth.count(),
     prisma.citizen.count(),
@@ -44,7 +43,6 @@ async function main() {
   console.log('── Population data reset ─────────────────────────────────────────')
   console.log(`  Migrations:        ${migrations}`)
   console.log(`  Deaths:            ${deaths}`)
-  console.log(`  Marriages:         ${marriages}`)
   console.log(`  Citizen-child links: ${citizenChildren}`)
   console.log(`  Births:            ${births}`)
   console.log(`  Citizens:          ${citizens}  (of which ${testCitizens} are seeded test citizens)`)
@@ -62,7 +60,6 @@ async function main() {
   // about to remove.
   await prisma.migration.deleteMany({})
   await prisma.death.deleteMany({})
-  await prisma.marriage.deleteMany({})
   await prisma.citizenChild.deleteMany({})
   await prisma.birth.deleteMany({})
 

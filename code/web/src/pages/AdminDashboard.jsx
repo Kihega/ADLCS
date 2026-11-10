@@ -41,6 +41,7 @@ import GeoFilterBar from '../components/GeoFilterBar'
 import YearMonthFilter from '../components/YearMonthFilter'
 import ChangePasswordModal from '../modals/ChangePasswordModal'
 import NewRegistrationModal from '../modals/NewRegistrationModal'
+import AlertModal from '../components/AlertModal'
 import ConfirmModal from '../components/ConfirmModal' // PATCH-ADMINREG-2026
 
 // ── Shared UI primitives ─────────────────────────────────────────────────────
@@ -457,7 +458,7 @@ function DistrictAdminsSection() {
           onCancel={() => setConfirmTarget(null)}
         />
       )}
-      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
+      {notice && <AlertModal title="Notice" message={notice} onClose={() => setNotice('')} />}
     </div>
   )
 }
@@ -565,7 +566,7 @@ function OfficersSection({ kind, role, onRegister }) {
           onCancel={() => setConfirmTarget(null)}
         />
       )}
-      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
+      {notice && <AlertModal title="Notice" message={notice} onClose={() => setNotice('')} />}
     </div>
   )
 }
@@ -721,7 +722,7 @@ function ManageUsersSection({ currentUserId, onRegister }) {
           onCancel={() => setConfirmTarget(null)}
         />
       )}
-      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
+      {notice && <AlertModal title="Notice" message={notice} onClose={() => setNotice('')} />}
     </div>
   )
 }
@@ -831,69 +832,10 @@ function SystemPerformanceSection() {
 // and District Admin dashboards). /api/admin/migrations and
 // apiGetMigrations() are left untouched in case they're needed again.
 
-// ── Section: Marriages ───────────────────────────────────────────────────────
-
-function MarriagesSection() {
-  const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(0)
-  const [statusCounts, setStatusCounts] = useState([])
-  const [page, setPage] = useState(1)
-  const [status, setStatus] = useState('all')
-  const [loading, setLoading] = useState(true)
-  const limit = 10
-
-  const load = useCallback(() => {
-    setLoading(true)
-    api.apiGetMarriages({ page, limit, ...(status !== 'all' ? { status } : {}) })
-      .then(r => { setRows(r.data || []); setTotal(r.total || 0); setStatusCounts(r.statusCounts || []) })
-      .catch(err => console.error('[marriages]', err))
-      .finally(() => setLoading(false))
-  }, [page, status])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load() }, [load])
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Heart size={14} className="text-pink-400" />
-        <StatusSelect value={status} options={['all', 'active', 'dissolved', 'pending_dissolution', 'unregistered']} onChange={v => { setPage(1); setStatus(v) }} />
-        {statusCounts.map(s => (
-          <span key={s.status} className="text-[10px] text-gray-400 border border-[#1a3060] rounded-full px-2 py-0.5">
-            {s.status}: {s._count._all}
-          </span>
-        ))}
-      </div>
-
-      <Card className="p-0 overflow-x-auto">
-        <table className="w-full">
-          <thead><tr className="border-b border-[#1a3060]">
-            <Th>Cert No</Th><Th>Husband</Th><Th>Wife</Th><Th>Place</Th><Th>Date</Th><Th>Status</Th>
-          </tr></thead>
-          <tbody>
-            {loading && <LoadingState colSpan={6} />}
-            {!loading && rows.length === 0 && <EmptyState colSpan={6} />}
-            {!loading && rows.map(m => (
-              <tr key={m.id} className="border-b border-[#1a3060]/50 hover:bg-white/[0.02]">
-                <Td className="font-mono text-[10px]">{m.marriageCertNo}</Td>
-                <Td className="text-white">{m.husband?.firstName} {m.husband?.surname}</Td>
-                <Td className="text-white">{m.wife?.firstName} {m.wife?.surname}</Td>
-                <Td>{m.marriagePlace}</Td>
-                <Td>{new Date(m.marriageDate).toLocaleDateString('en-TZ')}</Td>
-                <Td><StatusPill status={m.status === 'active' ? 'active' : 'suspended'} /></Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <PagerFooter page={page} total={total} limit={limit} onPage={setPage} />
-      </Card>
-    </div>
-  )
-}
 // ── Navigation config ────────────────────────────────────────────────────────
 
 
-// ── PATCH-4: Section: RITA — Births / Deaths / Marriages trends ──────────────
+// ── PATCH-4: Section: RITA — Births / Deaths trends ──────────────
 function RITASection({ role }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
@@ -927,7 +869,7 @@ function RITASection({ role }) {
 
   return (
     <div className="space-y-4">
-      {notice && <ConfirmModal title="Notice" message={notice} confirmLabel="OK" onConfirm={() => setNotice('')} />}
+      {notice && <AlertModal title="Notice" message={notice} onClose={() => setNotice('')} />}
       <div className="flex items-center justify-between">
         <h2 className="text-white font-bold text-lg">RITA — Registration Trends</h2>
       </div>
@@ -939,10 +881,9 @@ function RITASection({ role }) {
       ) : (
         <>
           {/* Totals */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <StatCard Icon={Users}  label="Total Births"    value={(data?.totals?.births    ?? 0).toLocaleString()} accent="text-[#3b82f6]" />
             <StatCard Icon={AlertTriangle} label="Total Deaths" value={(data?.totals?.deaths ?? 0).toLocaleString()} accent="text-red-400" />
-            <StatCard Icon={Heart}  label="Total Marriages" value={(data?.totals?.marriages ?? 0).toLocaleString()} accent="text-pink-400" />
           </div>
 
           {/* Births trend */}
@@ -969,20 +910,6 @@ function RITASection({ role }) {
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
                 <Bar dataKey="count" fill="#ef4444" name="Deaths" radius={[3,3,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-
-          {/* Marriages trend */}
-          <Card>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Marriage Registrations — Weekly Trend ({MONTH_NAMES[period.month - 1]} {period.year})</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data?.marriages || []}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1a3060" />
-                <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#0a1628', border: '1px solid #1a3060', fontSize: 11 }} />
-                <Bar dataKey="count" fill="#ec4899" name="Marriages" radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </Card>
@@ -1102,7 +1029,7 @@ const NAV = [
 const SECTION_TITLE = {
   dashboard: 'Dashboard', demographics: 'Demographics View', district_admins: 'District Admins',
   village_officers: 'Village Officers', health_officers: 'Health Officers', manage_users: 'Manage Users',
-  marriages: 'Marriage Records', audit_logs: 'System Log Reports',
+  audit_logs: 'System Log Reports',
   security_alerts: 'Security Alerts', system_performance: 'System Performance',
   migrations: 'Migration Trends',
 }
@@ -1135,7 +1062,6 @@ export default function AdminDashboard({ role }) {
       case 'village_officers':    return <OfficersSection kind="village" role={role} onRegister={() => setShowNewReg(true)} />
       case 'health_officers':     return <OfficersSection kind="health" role={role} onRegister={() => setShowNewReg(true)} />
       case 'manage_users':        return <ManageUsersSection currentUserId={user?.id} onRegister={() => setShowNewReg(true)} />
-      case 'marriages':           return <MarriagesSection />
       case 'audit_logs':          return <AuditLogsSection />
       case 'security_alerts':     return <AuditLogsSection securityOnly />
       case 'system_performance':  return <SystemPerformanceSection />
