@@ -55,6 +55,7 @@ interface DisplayRecord {
   certIssued: boolean
   birthId?: string | null
   source: 'local' | 'remote'
+  ts?: number // PATCH-C-2026-11: real timestamp, used to sort newest first
 }
 
 export default function ViewRecordsScreen({ navigation }: Props) {
@@ -118,6 +119,14 @@ export default function ViewRecordsScreen({ navigation }: Props) {
         })),
       ]
 
+      // PATCH-C-2026-11: timestamps for newest-first ordering of queued records
+      const queuedTs = new Map<string, number>()
+      pendingBirths.forEach((b) => queuedTs.set(`local-birth-${b.localId}`, new Date(b.queuedAt).getTime()))
+      pendingDeaths.forEach((d) => queuedTs.set(`local-death-${d.localId}`, new Date(d.queuedAt).getTime()))
+      localRows.forEach((r) => {
+        r.ts = queuedTs.get(r.id) ?? Date.now()
+      })
+
       // 2. Try remote if online
       if (isOnline()) {
         setOffline(false)
@@ -133,6 +142,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
             synced: true,
             certIssued: r.certIssued,
             source: 'remote' as const,
+            ts: r.registeredAt ? new Date(r.registeredAt).getTime() : 0,
           }))
           // Merge: remote first, then any local records NOT in remote (cert numbers differ)
           const remoteCerts = new Set(remoteRows.map((r) => r.certNo))
@@ -173,7 +183,7 @@ export default function ViewRecordsScreen({ navigation }: Props) {
     return rows
       .filter((r) => f === 'all' || r.type === f)
       .filter((r) => !q || r.name.toLowerCase().includes(q) || r.certNo.toLowerCase().includes(q))
-      .sort((a, b) => b.date.localeCompare(a.date))
+      .sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
   }
 
   const births = records.filter((r) => r.type === 'birth').length

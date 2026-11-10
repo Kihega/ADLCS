@@ -166,6 +166,11 @@ router.post('/death/sync', async (req, res) => {
       select: { id: true, deathCertNo: true },
     })
 
+    // PATCH-C-2026-11: the citizen is now deceased
+    if (citizenId) {
+      await prisma.citizen.update({ where: { id: citizenId }, data: { vitalStatus: 'deceased' } })
+        .catch((e) => console.warn('[death/sync] vitalStatus', e && e.message))
+    }
     return res.json({ success: true, serverId: death.id, deathCertNo: death.deathCertNo })
   } catch (err) {
     if (err.code === 'P2002') {

@@ -57,6 +57,7 @@ import {
   WifiLow,
   IdCard,
   Repeat,
+  FileText,
 } from 'lucide-react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -722,6 +723,13 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       label: 'Migrate',
       sub: 'Citizen',
       bg: '#7c3aed',
+    },
+    {
+      id: 'records',
+      icon: <FileText size={18} color="#fff" />,
+      label: 'View',
+      sub: 'Records',
+      bg: '#0e7490',
     },
   ]
 

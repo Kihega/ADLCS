@@ -459,8 +459,8 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
   }
 
   const handleSubmit = async () => {
-    if (!cause.trim() || !dod.trim() || !informant.trim()) {
-      Alert.alert('Incomplete', 'Cause of death, date of death, and informant name are required.')
+    if (!cause.trim() || !dod.trim()) {
+      Alert.alert('Incomplete', 'Cause of death and date of death are required.')
       return
     }
     setSubmitting(true)
@@ -845,11 +845,10 @@ export default function VillageRecordDeathScreen({ navigation }: Props) {
                 </View>
               </View>
               <SField
-                label="Informant Name"
+                label="Informant / Reporter Name (optional)"
                 value={informant}
                 onChange={setInformant}
-                placeholder="Full name of reporting person"
-                required
+                placeholder="Full name of reporting person (optional)"
                 bg={T.card2}
                 bc={T.border}
                 tc={T.text}
