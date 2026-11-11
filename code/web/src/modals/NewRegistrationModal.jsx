@@ -71,6 +71,7 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
   const [villages, setVillages]   = useState([])
   const [addingVillage, setAddingVillage] = useState(false)
   const [newVillageName, setNewVillageName] = useState('')
+  const [newVillageType, setNewVillageType] = useState('village') // PATCH-D-2026-11
 
   const needsGeo = target === 'district_admin' || target === 'village_officer'
 
@@ -105,10 +106,14 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
   async function handleAddVillage() {
     if (!newVillageName.trim() || !form.wardId) return
     try {
-      const r = await apiCreateVillage(form.wardId, newVillageName.trim())
-      setVillages(v => [...v, r.data])
+      // PATCH-D-2026-11: saved once under this ward (get-or-create) with its village/street type;
+      // if the name already existed the server returns that row - never list it twice.
+      const r = await apiCreateVillage(form.wardId, newVillageName.trim(), newVillageType)
+      setVillages(v => (v.some(x => String(x.id) === String(r.data.id))
+        ? v
+        : [...v, r.data].sort((a, b) => a.name.localeCompare(b.name))))
       set('villageId', r.data.id)
-      setAddingVillage(false); setNewVillageName('')
+      setAddingVillage(false); setNewVillageName(''); setNewVillageType('village')
     } catch (err) {
       setError(err.response?.data?.message || 'Could not add village')
     }
@@ -326,7 +331,7 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
                         <label className={lbl}>Village / Street</label>
                         <select className={inp} value={form.villageId} disabled={!form.wardId} onChange={e => set('villageId', e.target.value)}>
                           <option value="">Select village…</option>
-                          {villages.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                          {villages.map(v => <option key={v.id} value={v.id}>{v.name}{v.type === 'street' ? ' (Street)' : ''}</option>)}
                         </select>
                       </div>
                     </div>
@@ -337,6 +342,10 @@ export default function NewRegistrationModal({ defaultTarget, onClose }) {
                     )}
                     {addingVillage && (
                       <div className="flex gap-2">
+                        <select className={`${inp} w-28`} value={newVillageType} onChange={e => setNewVillageType(e.target.value)}>
+                          <option value="village">Village</option>
+                          <option value="street">Street</option>
+                        </select>
                         <input className={`${inp} flex-1`} value={newVillageName} onChange={e => setNewVillageName(e.target.value)} placeholder="New village/street name" />
                         <button type="button" onClick={handleAddVillage} className="px-3 py-2 rounded-lg bg-[#00d4ff]/10 border border-[#00d4ff]/30 text-[#00d4ff] text-xs font-bold">Add</button>
                       </div>

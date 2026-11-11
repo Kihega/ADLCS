@@ -184,7 +184,7 @@ function SelectSheet({
               style={{ maxHeight: 320 }}
               ListEmptyComponent={
                 <Text style={{ textAlign: 'center', color: T.textDim, fontSize: 12, paddingVertical: 20 }}>
-                  No matches found.
+                  {allowManualEntry ? 'No matches found. Tap “+ Add new” below to add it once.' : 'No matches found.'}
                 </Text>
               }
               renderItem={({ item }) => (
@@ -214,7 +214,10 @@ function SelectSheet({
             <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: T.border, paddingTop: 12 }}>
               {!showManual ? (
                 <TouchableOpacity
-                  onPress={() => setShowManual(true)}
+                  onPress={() => {
+                    setManualName((n) => n || query.trim())
+                    setShowManual(true)
+                  }}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -345,9 +348,9 @@ export default function GeoCascadePicker({
   value: GeoSelection
   onChange: (geo: GeoSelection) => void
   villageLabel?: string
-  // PATCH-MIGRATION-2026: the migration destination picker must be a
-  // strict dropdown of villages/streets that already exist in the DB — no
-  // "+ Add new" affordance, unlike every other use of this component.
+  // PATCH-D-2026-11: EVERY village/street field offers both ways - pick an existing one
+  // (linked to its ward/district/region) or add a new name once (saved under the chosen
+  // ward, so it is listed next time). Only pass false for a read-only picker.
   allowManualVillage?: boolean
 }) {
   const [openSheet, setOpenSheet] = useState<'region' | 'district' | 'ward' | 'village' | null>(
