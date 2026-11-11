@@ -42,7 +42,6 @@ import {
   Cross,
   Sun,
   Moon,
-  Bell,
   LogOut,
   MapPin,
   ChevronRight,
@@ -559,16 +558,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
   const [loggingOut, setLoggingOut] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [unread, setUnread] = useState(0)
-  const [_bellDismissed, _setBellDismissed] = useState(false)
-  const _todayKey = () => {
-    const d = new Date()
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-  }
-  const _dismissBell = () => {
-    _setBellDismissed(true)
-    AsyncStorage.setItem('tzcrvs_bell_dismissed_date', _todayKey()).catch(() => {})
-  }
   const [connQuality, setConnQuality] = useState<ConnQuality>('Offline')
   const [activity, setActivity] = useState<any[]>([])
   const [stats, setStats] = useState({
@@ -605,20 +594,8 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
       // Fetch live data from Supabase (via backend)
       const [remote, acts] = await Promise.all([fetchRemoteDashboard(), fetchRemoteActivity()])
 
-      if (acts.length > 0) {
-      const _now = new Date()
-      const _isSameLocalDay = (iso: string) => {
-        const d = new Date(iso)
-        return (
-          d.getFullYear() === _now.getFullYear() &&
-          d.getMonth() === _now.getMonth() &&
-          d.getDate() === _now.getDate()
-        )
-      }
-      setActivity(acts.filter((a) => !a.registeredAt || _isSameLocalDay(a.registeredAt)))
-    } else {
-      setActivity([])
-    }
+      // PATCH-D-2026-11: Recent Activity shows only the last 5 records; older ones are in View Records
+      setActivity(acts.slice(0, 5))
       if (remote) {
         setOfficer({
           officerName: remote.officerName ?? 'Village Officer',
@@ -637,13 +614,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           totalBirths: 0,
           totalDeaths: 0,
         })
-        // PATCH-MIGRATION-2026: badge now also reflects incoming migration
-        // requests awaiting this officer's approval, not just the ID-card
-        // backlog.
-        setUnread((remote.pendingCases ?? 0) + (remote.incomingMigrationsPending ?? 0))
-      AsyncStorage.getItem('tzcrvs_bell_dismissed_date')
-        .then((d) => _setBellDismissed(d === _todayKey()))
-        .catch(() => {})
       }
       setLoading(false)
       setRefreshing(false)
@@ -909,14 +879,6 @@ export default function VillageHomeScreen({ navigation: _navigation }: Props) {
           </View>
           <TouchableOpacity style={s.iconBtn} onPress={toggleTheme}>
             {isDark ? <Sun size={14} color={TZ.yellow} /> : <Moon size={14} color={TZ.yellow} />}
-          </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn} onPress={() => { _navigation.navigate('MigrationRequests'); _dismissBell() }}>
-            <Bell size={15} color="rgba(255,255,255,0.80)" />
-            {unread > 0 && !_bellDismissed && (
-              <View style={s.badge}>
-                <Text style={{ fontSize: 8, fontWeight: '800', color: '#fff' }}>{unread}</Text>
-              </View>
-            )}
           </TouchableOpacity>
           <View style={s.avatarRing}>
             <View style={[s.avatar, { backgroundColor: '#34d399' }]}>

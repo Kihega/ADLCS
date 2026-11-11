@@ -212,76 +212,84 @@ router.get('/dashboard', async (req, res) => {
 
 // ── GET /api/officer/activity ─────────────────────────────────────────────────
 router.get('/activity', async (req, res) => {
+  // PATCH-D-2026-11: "Recent Activity" = the officer's LAST 5 records (any day), the same
+  // kinds of records the View Records screen lists. Everything older lives in View Records.
+  //   hospital officer -> births + deaths      village officer -> deaths + migrations
   const { id, role } = req.user
-  const limit = Math.min(parseInt(req.query.limit) || 5, 20)
+  const limit = 5
+  const whenLabel = (v) => {
+    const d = new Date(v ?? new Date())
+    return d.toDateString() === new Date().toDateString()
+      ? d.toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString('en-TZ')
+  }
   try {
     const items = []
     if (role === 'hospital_officer') {
-      const births = await prisma.birth.findMany({
-        where:   { officerId: id, registeredAt: { gte: startOfDay(), lte: endOfDay() } },
-        orderBy: { registeredAt: 'desc' },
-        take:    limit,
-        select:  { id: true, birthId: true, childFirstName: true, childSurname: true, gender: true, registeredAt: true },
-      })
+      const [births, deaths] = await Promise.all([
+        prisma.birth.findMany({
+          where: { officerId: id },
+          orderBy: { registeredAt: 'desc' }, take: limit,
+          select: { id: true, birthId: true, childFirstName: true, childSurname: true, registeredAt: true },
+        }),
+        prisma.death.findMany({
+          where: { hospitalOfficerId: id },
+          orderBy: { registeredAt: 'desc' }, take: limit,
+          select: { id: true, deathCertNo: true, citizenId: true, nationalId: true, registeredAt: true },
+        }).catch(() => []),
+      ])
       for (const b of births) {
         items.push({
-          id:           `birth-${b.id}`,
-          icon:         '👤',
-          label:        'New citizen registered',
-          name:         [`${b.childFirstName} ${b.childSurname}`.trim(), b.birthId].filter(Boolean).join(' · '),
-          time:         new Date(b.registeredAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
-          registeredAt: b.registeredAt,
-          color:        '#1eb53a',
+          id: `birth-${b.id}`, icon: '👤', label: 'New citizen registered',
+          name: [`${b.childFirstName} ${b.childSurname}`.trim(), b.birthId].filter(Boolean).join(' · '),
+          time: whenLabel(b.registeredAt), registeredAt: b.registeredAt, color: '#1eb53a',
+        })
+      }
+      const info = await resolveDeceasedDisplay(deaths).catch(() => new Map())
+      for (const d of deaths) {
+        items.push({
+          id: `death-${d.id}`, icon: '✝', label: 'Death recorded',
+          name: [info.get(d.id)?.name || d.nationalId || 'Unknown', info.get(d.id)?.birthId].filter(Boolean).join(' · '),
+          time: whenLabel(d.registeredAt), registeredAt: d.registeredAt, color: '#dc2626',
         })
       }
     }
     if (role === 'village_officer') {
-      const [citizens, deaths] = await Promise.all([
-        prisma.citizen.findMany({
-          where: { registeredById: id, registeredAt: { gte: startOfDay(), lte: endOfDay() } },
-          orderBy: { registeredAt: 'desc' }, take: limit,
-          select: { id: true, firstName: true, surname: true, registeredAt: true },
-        }),
+      const [deaths, migrations] = await Promise.all([
         prisma.death.findMany({
-          where: { villageOfficerId: id, registeredAt: { gte: startOfDay(), lte: endOfDay() } },
+          where: { villageOfficerId: id },
           orderBy: { registeredAt: 'desc' }, take: limit,
-          select: { id: true, deathCertNo: true, causeOfDeath: true, registeredAt: true },
+          select: { id: true, deathCertNo: true, citizenId: true, nationalId: true, registeredAt: true },
+        }).catch(() => []),
+        prisma.migration.findMany({
+          where: { OR: [{ sourceOfficerId: id }, { targetOfficerId: id }] },
+          orderBy: { requestDate: 'desc' }, take: limit,
+          select: {
+            id: true, requestDate: true, sourceOfficerId: true,
+            citizen: { select: { firstName: true, middleName: true, surname: true } },
+            toVillage: { select: { name: true } },
+          },
         }).catch(() => []),
       ])
-      for (const c of citizens) {
-        items.push({ id: `citizen-${c.id}`, icon: '👤', label: 'Citizen registered',
-          name: `${c.firstName} ${c.surname}`,
-          time: new Date(c.registeredAt ?? new Date()).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
-          registeredAt: c.registeredAt,
-          color: '#00a3dd' })
-      }
+      const info = await resolveDeceasedDisplay(deaths).catch(() => new Map())
       for (const d of deaths) {
-        items.push({ id: `death-${d.id}`, icon: '✝', label: 'Death recorded',
-          name: d.causeOfDeath ?? 'Cause unknown',
-          time: new Date(d.registeredAt ?? new Date()).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
-          registeredAt: d.registeredAt,
-          color: '#dc2626' })
+        items.push({
+          id: `death-${d.id}`, icon: '✝', label: 'Death recorded',
+          name: [info.get(d.id)?.name || d.nationalId || 'Unknown', info.get(d.id)?.birthId].filter(Boolean).join(' · '),
+          time: whenLabel(d.registeredAt), registeredAt: d.registeredAt, color: '#dc2626',
+        })
       }
-      try {
-        const vo = await prisma.villageOfficer.findUnique({ where: { id }, select: { villageId: true } })
-        const scope = vo?.villageId ? await getScope(vo.villageId) : null
-        if (scope) {
-          const births = await prisma.birth.findMany({
-            where: { childCitizenId: null, registeredAt: { gte: startOfDay(), lte: endOfDay() }, ...birthScopeWhere(scope) },
-            orderBy: { registeredAt: 'desc' }, take: limit,
-            select: { id: true, childFirstName: true, childSurname: true, registeredAt: true },
-          })
-          for (const b of births) {
-            items.push({ id: `birth-${b.id}`, icon: '👤', label: 'Citizen registered',
-              name: `${b.childFirstName} ${b.childSurname}`.trim(),
-              time: new Date(b.registeredAt).toLocaleTimeString('en-TZ', { hour: '2-digit', minute: '2-digit' }),
-              registeredAt: b.registeredAt, color: '#00a3dd' })
-          }
-        }
-      } catch (e) { console.warn('[activity] births in area', e && e.message) }
-      // Sort by actual timestamp desc (today-only, so this is a same-day sort)
-      items.sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime())
+      for (const m of migrations) {
+        const nm = [m.citizen?.firstName, m.citizen?.middleName, m.citizen?.surname].filter(Boolean).join(' ')
+        items.push({
+          id: `migration-${m.id}`, icon: '🔁',
+          label: m.sourceOfficerId === id ? 'Migration requested' : 'Migration received',
+          name: `${nm || 'Unknown'} → ${m.toVillage?.name ?? '—'}`,
+          time: whenLabel(m.requestDate), registeredAt: m.requestDate, color: '#7c3aed',
+        })
+      }
     }
+    items.sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime())
     return res.json({ success: true, data: items.slice(0, limit) })
   } catch (err) {
     console.error('[activity]', err)

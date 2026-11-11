@@ -307,15 +307,15 @@ export default function TrackMigrationScreen({ navigation }: Props) {
                 Step 2 — Destination
               </Text>
               <Text style={{ fontSize: 11, color: T.textSub, marginTop: -6 }}>
-                Where is {citizen.fullName.split(' ')[0]} moving TO? Only villages/streets already
-                in the system can be selected here.
+                Where is {citizen.fullName.split(' ')[0]} moving TO? Pick the village/street from the
+                list — if it is not listed yet, tap “+ Add new” once and it is saved under its ward
+                for next time.
               </Text>
 
               <GeoCascadePicker
                 value={destination}
                 onChange={setDestination}
                 villageLabel="Destination Village / Street"
-                allowManualVillage={false}
               />
 
               <View>
